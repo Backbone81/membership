@@ -1,6 +1,7 @@
 package encryption_test
 
 import (
+	"bytes"
 	"crypto/rand"
 	"fmt"
 	"testing"
@@ -67,6 +68,17 @@ var _ = Describe("Encryption", func() {
 
 		plaintext, err = encryption.Decrypt(key, ciphertext)
 		Expect(err).To(HaveOccurred())
+	})
+
+	It("should correctly respect the overhead", func() {
+		key := encryption.NewRandomKey()
+		for plaintextLength := range 1024 {
+			plaintext := bytes.Repeat([]byte{0}, plaintextLength)
+			ciphertext, err := encryption.Encrypt(key, plaintext)
+			Expect(err).ToNot(HaveOccurred())
+
+			Expect(ciphertext).To(HaveLen(plaintextLength + encryption.Overhead))
+		}
 	})
 })
 

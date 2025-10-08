@@ -19,6 +19,10 @@ func (e Endpoint) String() string {
 	return net.JoinHostPort(e.IP.String(), strconv.Itoa(e.Port))
 }
 
+func (e Endpoint) IsEmpty() bool {
+	return e.Port == 0
+}
+
 func AppendEndpointToBuffer(buffer []byte, endpoint Endpoint) ([]byte, int, error) {
 	ipBuffer, ipN, err := AppendIPToBuffer(buffer, endpoint.IP)
 	if err != nil {

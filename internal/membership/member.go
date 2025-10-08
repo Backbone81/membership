@@ -5,10 +5,11 @@ type MemberState int
 const (
 	MemberStateAlive MemberState = iota
 	MemberStateSuspect
-	MemberStateFailed
+	MemberStateFaulty
 )
 
 type Member struct {
-	Endpoint Endpoint
-	State    MemberState
+	Endpoint          Endpoint
+	State             MemberState
+	IncarnationNumber int
 }

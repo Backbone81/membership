@@ -62,79 +62,8 @@ func (t *ServerTransport) backgroundTask() {
 		if n < 1 {
 			continue
 		}
-		if err := t.dispatchMessages(buffer[:n]); err != nil {
+		if err := t.config.List.DispatchDatagram(buffer[:n]); err != nil {
 			log.Printf("ERROR: %v\n", err)
 		}
 	}
-}
-
-func (t *ServerTransport) dispatchMessages(buffer []byte) error {
-	for len(buffer) > 0 {
-		messageType, messageTypeN, err := MessageTypeFromBuffer(buffer)
-		if err != nil {
-			return err
-		}
-
-		switch messageType {
-		case MessageTypeDirectPing:
-			var message MessageDirectPing
-			n, err := message.FromBuffer(buffer[messageTypeN:])
-			if err != nil {
-				return err
-			}
-			buffer = buffer[messageTypeN+n:]
-			t.config.List.HandleDirectPing(message)
-		case MessageTypeDirectAck:
-			var message MessageDirectAck
-			n, err := message.FromBuffer(buffer[messageTypeN:])
-			if err != nil {
-				return err
-			}
-			buffer = buffer[messageTypeN+n:]
-			t.config.List.HandleDirectAck(message)
-		case MessageTypeIndirectPing:
-			var message MessageIndirectPing
-			n, err := message.FromBuffer(buffer[messageTypeN:])
-			if err != nil {
-				return err
-			}
-			buffer = buffer[messageTypeN+n:]
-			t.config.List.HandleIndirectPing(message)
-		case MessageTypeIndirectAck:
-			var message MessageIndirectAck
-			n, err := message.FromBuffer(buffer[messageTypeN:])
-			if err != nil {
-				return err
-			}
-			buffer = buffer[messageTypeN+n:]
-			t.config.List.HandleIndirectAck(message)
-		case MessageTypeSuspect:
-			var message MessageSuspect
-			n, err := message.FromBuffer(buffer[messageTypeN:])
-			if err != nil {
-				return err
-			}
-			buffer = buffer[messageTypeN+n:]
-			t.config.List.HandleSuspect(message)
-		case MessageTypeAlive:
-			var message MessageAlive
-			n, err := message.FromBuffer(buffer[messageTypeN:])
-			if err != nil {
-				return err
-			}
-			buffer = buffer[messageTypeN+n:]
-			t.config.List.HandleAlive(message)
-		case MessageTypeFaulty:
-			var message MessageFaulty
-			n, err := message.FromBuffer(buffer[messageTypeN:])
-			if err != nil {
-				return err
-			}
-			buffer = buffer[messageTypeN+n:]
-			t.config.List.HandleFaulty(message)
-		default:
-			log.Printf("ERROR: Unknown message type %d.", messageType)
-		}
-	}
-	return nil
 }

@@ -49,7 +49,9 @@ func (q *GossipQueue) MarkGossiped(index int) {
 }
 
 func (q *GossipQueue) Add(message Message) {
-	// TODO: Do we need to replace messages regarding the same endpoint?
+
+	// TODO: We need to replace messages targeting the same member with a message priority guided by the incarnation
+	// number.
 
 	q.queue = append(q.queue, GossipQueueEntry{
 		Message: message,

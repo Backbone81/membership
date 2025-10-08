@@ -126,6 +126,10 @@ type MessageIndirectPing struct {
 	SequenceNumber int
 }
 
+func (m *MessageIndirectPing) IsEmpty() bool {
+	return m.Source.IsEmpty()
+}
+
 func (m *MessageIndirectPing) AppendToBuffer(buffer []byte) ([]byte, int, error) {
 	messageTypeBuffer, messageTypeN, err := AppendMessageTypeToBuffer(buffer, MessageTypeIndirectPing)
 	if err != nil {
@@ -283,7 +287,6 @@ func (m *MessageSuspect) FromBuffer(buffer []byte) (int, error) {
 // This is the `Alive` message of SWIM chapter 4.2. Suspicion Mechanism: Reducing the Frequency of False Positives.
 type MessageAlive struct {
 	Source            Endpoint
-	Destination       Endpoint
 	IncarnationNumber int
 }
 
@@ -298,17 +301,12 @@ func (m *MessageAlive) AppendToBuffer(buffer []byte) ([]byte, int, error) {
 		return buffer, 0, err
 	}
 
-	destinationBuffer, destinationN, err := AppendEndpointToBuffer(sourceBuffer, m.Destination)
+	incarnationNumberBuffer, incarnationNumberN, err := AppendIncarnationNumberToBuffer(sourceBuffer, m.IncarnationNumber)
 	if err != nil {
 		return buffer, 0, err
 	}
 
-	incarnationNumberBuffer, incarnationNumberN, err := AppendIncarnationNumberToBuffer(destinationBuffer, m.IncarnationNumber)
-	if err != nil {
-		return buffer, 0, err
-	}
-
-	return incarnationNumberBuffer, messageTypeN + sourceN + destinationN + incarnationNumberN, nil
+	return incarnationNumberBuffer, messageTypeN + sourceN + incarnationNumberN, nil
 }
 
 func (m *MessageAlive) FromBuffer(buffer []byte) (int, error) {
@@ -317,23 +315,18 @@ func (m *MessageAlive) FromBuffer(buffer []byte) (int, error) {
 		return 0, errors.New("invalid message type")
 	}
 
-	var sourceN, destinationN, incarnationNumberN int
+	var sourceN, incarnationNumberN int
 	m.Source, sourceN, err = EndpointFromBuffer(buffer[messageTypeN:])
 	if err != nil {
 		return 0, err
 	}
 
-	m.Destination, destinationN, err = EndpointFromBuffer(buffer[messageTypeN+sourceN:])
+	m.IncarnationNumber, incarnationNumberN, err = IncarnationNumberFromBuffer(buffer[messageTypeN+sourceN:])
 	if err != nil {
 		return 0, err
 	}
 
-	m.IncarnationNumber, incarnationNumberN, err = IncarnationNumberFromBuffer(buffer[messageTypeN+sourceN+destinationN:])
-	if err != nil {
-		return 0, err
-	}
-
-	return messageTypeN + sourceN + destinationN + incarnationNumberN, nil
+	return messageTypeN + sourceN + incarnationNumberN, nil
 }
 
 // MessageFaulty declares the destination as being faulty by the source.

@@ -1,26 +1,60 @@
 package membership
 
 import (
-	"fmt"
+	"errors"
+	"log"
 	"math/rand"
 	"slices"
 	"time"
 )
 
 type List struct {
-	sequenceNumber               int
+	nextSequenceNumber           int
+	incarnationNumber            int
 	failureDetectionSubgroupSize int
 
-	members         []Member
+	directPingTimeout time.Duration
+	protocolPeriod    time.Duration
+
+	members       []Member
+	faultyMembers []Member
+
 	randomIndexes   []int
 	nextRandomIndex int
-	clientTransport ClientTransport
+	udpTransport    ClientTransport
 	gossipQueue     *GossipQueue
 	datagramBuilder DatagramBuilder
 	self            Endpoint
 
-	datagramBuffer      []byte
-	pendingDirectProbes map[string]time.Time
+	datagramBuffer []byte
+
+	pendingDirectProbes   []DirectProbeRecord
+	pendingIndirectProbes []IndirectProbeRecord
+}
+
+// DirectProbeRecord provides bookkeeping for a direct probe which is still active.
+type DirectProbeRecord struct {
+	// Timestamp is the point in time the direct probe was initiated.
+	Timestamp time.Time
+
+	// Destination is the endpoint which the direct probe was sent to.
+	Destination Endpoint
+
+	// MessageDirectPing is a copy of the message which was sent for the direct probe.
+	MessageDirectPing MessageDirectPing
+
+	// MessageIndirectPing is a copy of a received indirect probe request. It is the zero value in case the direct
+	// probe was not initiated in response to an indirect probe request.
+	MessageIndirectPing MessageIndirectPing
+}
+
+// IndirectProbeRecord provides bookkeeping for an indirect probe which is still active.
+type IndirectProbeRecord struct {
+	// Timestamp is the point in time the indirect probe was initiated.
+	Timestamp time.Time
+
+	// MessageIndirectPing is a copy of the message which was sent for an indirect probe.
+	MessageIndirectPing MessageIndirectPing
 }
 
 func NewList() *List {
@@ -33,71 +67,576 @@ func (l *List) DirectProbe() error {
 		return nil
 	}
 
-	l.sequenceNumber++
-	message := MessageDirectPing{
+	// Remove all pending probes which have timed out.
+	timeout := time.Now().Add(-l.protocolPeriod)
+	l.pendingDirectProbes = slices.DeleteFunc(l.pendingDirectProbes, func(record DirectProbeRecord) bool {
+
+		// TODO: We have to update the member state and add gossip about this timeout.
+
+		return record.Timestamp.Before(timeout)
+	})
+	l.pendingIndirectProbes = slices.DeleteFunc(l.pendingIndirectProbes, func(record IndirectProbeRecord) bool {
+
+		// TODO: We have to update the member state and add gossip about this timeout.
+
+		return record.Timestamp.Before(timeout)
+	})
+
+	l.nextSequenceNumber++
+	directPing := MessageDirectPing{
 		Source:         l.self,
-		SequenceNumber: l.sequenceNumber,
+		SequenceNumber: l.nextSequenceNumber,
 	}
 
-	var err error
-	l.datagramBuffer, _, err = l.datagramBuilder.AppendToBuffer(l.datagramBuffer, &message, l.gossipQueue)
-	if err != nil {
+	destination := l.getNextMember().Endpoint
+	l.pendingDirectProbes = append(l.pendingDirectProbes, DirectProbeRecord{
+		Timestamp:         time.Now(),
+		Destination:       destination,
+		MessageDirectPing: directPing,
+	})
+	if err := l.sendWithGossip(destination, &directPing); err != nil {
 		return err
 	}
-
-	member := l.getNextMember()
-	l.pendingDirectProbes[member.Endpoint.String()] = time.Now()
-	if err := l.clientTransport.Send(member.Endpoint, l.datagramBuffer); err != nil {
-		return err
-	}
-
 	return nil
 }
 
 func (l *List) IndirectProbe() error {
-	_, err := l.pickIndirectProbes(l.failureDetectionSubgroupSize)
-	if err != nil {
-		return fmt.Errorf("picking indirect probe members: %w", err)
+	// An indirect probe only makes sense whe we have at least two members.
+	if len(l.members) < 2 {
+		return nil
 	}
 
-	// Do an indirect ping to the member
+	var joinedErr error
+	for _, directProbe := range l.pendingDirectProbes {
+		if !directProbe.MessageIndirectPing.IsEmpty() {
+			// We are not interested in direct probes which we do as a request for an indirect probe. We only do
+			// indirect probes for direct probes we initiated on our own.
+			continue
+		}
 
+		indirectPing := MessageIndirectPing{
+			Source:      l.self,
+			Destination: directProbe.Destination,
+
+			// We use the same sequence number as we did for the corresponding direct probe. That way, logs can
+			// correlate the indirect probe with the direct probe, and we know which indirect probes to discard when
+			// the direct probe succeeds late.
+			SequenceNumber: directProbe.MessageDirectPing.SequenceNumber,
+		}
+
+		// Send the indirect probes to the indirect probe members and join up all errors which might occur.
+		members := l.pickIndirectProbes(l.failureDetectionSubgroupSize, directProbe.Destination)
+		l.pendingIndirectProbes = append(l.pendingIndirectProbes, IndirectProbeRecord{
+			Timestamp:           time.Now(),
+			MessageIndirectPing: indirectPing,
+		})
+		for _, member := range members {
+			if err := l.sendWithGossip(member.Endpoint, &indirectPing); err != nil {
+				joinedErr = errors.Join(joinedErr, err)
+			}
+		}
+	}
+	return joinedErr
+}
+
+func (l *List) pickIndirectProbes(failureDetectionSubgroupSize int, directProbeEndpoint Endpoint) []*Member {
+	candidateIndexes := make([]int, 0, len(l.members))
+	for index := range l.members {
+		if l.members[index].Endpoint.Equal(directProbeEndpoint) {
+			// We do not want to include the direct probe member into our list for indirect probes.
+			continue
+		}
+		candidateIndexes = append(candidateIndexes, index)
+	}
+
+	rand.Shuffle(len(candidateIndexes), func(i, j int) {
+		candidateIndexes[i], candidateIndexes[j] = candidateIndexes[j], candidateIndexes[i]
+	})
+
+	// Pick the first few candidates.
+	candidateIndexes = candidateIndexes[:min(failureDetectionSubgroupSize, len(candidateIndexes))]
+	result := make([]*Member, len(candidateIndexes))
+	for i := range candidateIndexes {
+		result[i] = &l.members[candidateIndexes[i]]
+	}
+	return result
+}
+
+func (l *List) DispatchDatagram(buffer []byte) error {
+	var joinedErr error
+	for len(buffer) > 0 {
+		messageType, messageTypeN, err := MessageTypeFromBuffer(buffer)
+		if err != nil {
+			return err
+		}
+
+		switch messageType {
+		case MessageTypeDirectPing:
+			var message MessageDirectPing
+			n, err := message.FromBuffer(buffer[messageTypeN:])
+			if err != nil {
+				return err
+			}
+			buffer = buffer[messageTypeN+n:]
+			if err := l.handleDirectPing(message); err != nil {
+				joinedErr = errors.Join(joinedErr, err)
+			}
+		case MessageTypeDirectAck:
+			var message MessageDirectAck
+			n, err := message.FromBuffer(buffer[messageTypeN:])
+			if err != nil {
+				return err
+			}
+			buffer = buffer[messageTypeN+n:]
+			if err := l.handleDirectAck(message); err != nil {
+				joinedErr = errors.Join(joinedErr, err)
+			}
+		case MessageTypeIndirectPing:
+			var message MessageIndirectPing
+			n, err := message.FromBuffer(buffer[messageTypeN:])
+			if err != nil {
+				return err
+			}
+			buffer = buffer[messageTypeN+n:]
+			if err := l.handleIndirectPing(message); err != nil {
+				joinedErr = errors.Join(joinedErr, err)
+			}
+		case MessageTypeIndirectAck:
+			var message MessageIndirectAck
+			n, err := message.FromBuffer(buffer[messageTypeN:])
+			if err != nil {
+				return err
+			}
+			buffer = buffer[messageTypeN+n:]
+			l.handleIndirectAck(message)
+		case MessageTypeSuspect:
+			var message MessageSuspect
+			n, err := message.FromBuffer(buffer[messageTypeN:])
+			if err != nil {
+				return err
+			}
+			buffer = buffer[messageTypeN+n:]
+			l.handleSuspect(message)
+		case MessageTypeAlive:
+			var message MessageAlive
+			n, err := message.FromBuffer(buffer[messageTypeN:])
+			if err != nil {
+				return err
+			}
+			buffer = buffer[messageTypeN+n:]
+			l.handleAlive(message)
+		case MessageTypeFaulty:
+			var message MessageFaulty
+			n, err := message.FromBuffer(buffer[messageTypeN:])
+			if err != nil {
+				return err
+			}
+			buffer = buffer[messageTypeN+n:]
+			l.handleFaulty(message)
+		default:
+			log.Printf("ERROR: Unknown message type %d.", messageType)
+		}
+	}
+	return joinedErr
+}
+
+func (l *List) handleDirectPing(directPing MessageDirectPing) error {
+	directAck := MessageDirectAck{
+		Source:         l.self,
+		SequenceNumber: directPing.SequenceNumber,
+	}
+	if err := l.sendWithGossip(directPing.Source, &directAck); err != nil {
+		return err
+	}
 	return nil
 }
 
-func (l *List) IndirectProbeSuccess() bool {
-	return false
+func (l *List) handleDirectAck(directAck MessageDirectAck) error {
+	l.handleDirectAckForPendingIndirectProbes(directAck)
+	if err := l.handleDirectAckForPendingDirectProbes(directAck); err != nil {
+		return err
+	}
+	return nil
 }
 
-func (l *List) pickDirectProbe() (Member, error) {
-	// Select a random member, which is not self.
-	return Member{}, nil
+func (l *List) handleDirectAckForPendingDirectProbes(directAck MessageDirectAck) error {
+	// As we now got an indirect ack, we don't have to wait for a direct ack anymore.
+	pendingDirectProbeIndex := slices.IndexFunc(l.pendingDirectProbes, func(record DirectProbeRecord) bool {
+		return record.MessageDirectPing.SequenceNumber == directAck.SequenceNumber &&
+			record.Destination.Equal(directAck.Source)
+	})
+	if pendingDirectProbeIndex == -1 {
+		return nil
+	}
+
+	pendingDirectProbe := l.pendingDirectProbes[pendingDirectProbeIndex]
+	l.pendingDirectProbes = slices.Delete(l.pendingDirectProbes, pendingDirectProbeIndex, pendingDirectProbeIndex+1)
+
+	if pendingDirectProbe.MessageIndirectPing.IsEmpty() {
+		// The direct probe was NOT done in a response to a request for an indirect probe, so we are done here.
+		return nil
+	}
+
+	indirectAck := MessageIndirectAck{
+		Source:         directAck.Source,
+		SequenceNumber: pendingDirectProbe.MessageIndirectPing.SequenceNumber,
+	}
+	if err := l.sendWithGossip(pendingDirectProbe.MessageIndirectPing.Source, &indirectAck); err != nil {
+		return err
+	}
+	return nil
 }
 
-func (l *List) pickIndirectProbes(count int) ([]Member, error) {
-	// Select count random members which is not self and not member.
-	return nil, nil
+func (l *List) handleDirectAckForPendingIndirectProbes(directAck MessageDirectAck) {
+	// We don't have to wait for the indirect ack anymore.
+	pendingIndirectProbeIndex := slices.IndexFunc(l.pendingIndirectProbes, func(record IndirectProbeRecord) bool {
+		return record.MessageIndirectPing.SequenceNumber == directAck.SequenceNumber &&
+			record.MessageIndirectPing.Destination.Equal(directAck.Source)
+	})
+	if pendingIndirectProbeIndex == -1 {
+		return
+	}
+	l.pendingIndirectProbes = slices.Delete(l.pendingIndirectProbes, pendingIndirectProbeIndex, pendingIndirectProbeIndex+1)
 }
 
-func (l *List) HandleDirectPing(message MessageDirectPing) {
+func (l *List) handleIndirectPing(indirectPing MessageIndirectPing) error {
+	l.nextSequenceNumber++
+	directPing := MessageDirectPing{
+		Source:         l.self,
+		SequenceNumber: l.nextSequenceNumber,
+	}
+
+	l.pendingDirectProbes = append(l.pendingDirectProbes, DirectProbeRecord{
+		Timestamp:           time.Now(),
+		Destination:         indirectPing.Destination,
+		MessageDirectPing:   directPing,
+		MessageIndirectPing: indirectPing,
+	})
+
+	if err := l.sendWithGossip(indirectPing.Destination, &directPing); err != nil {
+		return err
+	}
+	return nil
 }
 
-func (l *List) HandleDirectAck(message MessageDirectAck) {
+func (l *List) handleIndirectAck(indirectAck MessageIndirectAck) {
+	l.handleIndirectAckForPendingDirectProbes(indirectAck)
+	l.handleIndirectAckForPendingIndirectProbes(indirectAck)
 }
 
-func (l *List) HandleIndirectPing(message MessageIndirectPing) {
+func (l *List) handleIndirectAckForPendingDirectProbes(indirectAck MessageIndirectAck) {
+	// As we now got an indirect ack, we don't have to wait for a direct ack anymore.
+	pendingDirectProbeIndex := slices.IndexFunc(l.pendingDirectProbes, func(record DirectProbeRecord) bool {
+		return record.MessageDirectPing.SequenceNumber == indirectAck.SequenceNumber &&
+			record.Destination.Equal(indirectAck.Source)
+	})
+	if pendingDirectProbeIndex == -1 {
+		return
+	}
+
+	l.pendingDirectProbes = slices.Delete(l.pendingDirectProbes, pendingDirectProbeIndex, pendingDirectProbeIndex+1)
 }
 
-func (l *List) HandleIndirectAck(message MessageIndirectAck) {
+func (l *List) handleIndirectAckForPendingIndirectProbes(indirectAck MessageIndirectAck) {
+	// We don't have to wait for the indirect ack anymore.
+	pendingIndirectProbeIndex := slices.IndexFunc(l.pendingIndirectProbes, func(record IndirectProbeRecord) bool {
+		return record.MessageIndirectPing.SequenceNumber == indirectAck.SequenceNumber &&
+			record.MessageIndirectPing.Destination.Equal(indirectAck.Source)
+	})
+	if pendingIndirectProbeIndex == -1 {
+		return
+	}
+	l.pendingIndirectProbes = slices.Delete(l.pendingIndirectProbes, pendingIndirectProbeIndex, pendingIndirectProbeIndex+1)
 }
 
-func (l *List) HandleSuspect(message MessageSuspect) {
+func (l *List) handleSuspect(suspect MessageSuspect) {
+	if l.handleSuspectForSelf(suspect) {
+		return
+	}
+	if l.handleSuspectForFaultyMembers(suspect) {
+		return
+	}
+	if l.handleSuspectForMembers(suspect) {
+		return
+	}
+	if l.handleSuspectForUnknown(suspect) {
+		return
+	}
 }
 
-func (l *List) HandleAlive(message MessageAlive) {
+func (l *List) handleSuspectForSelf(suspect MessageSuspect) bool {
+	if !suspect.Destination.Equal(l.self) {
+		return false
+	}
+
+	if suspect.IncarnationNumber < l.incarnationNumber {
+		// We have a more up-to-date state than the gossip. Nothing to do.
+		return true
+	}
+
+	// We need to refute the suspect about ourselves. Add a new alive message to gossip.
+	// Also make sure that our incarnation number is bigger than before.
+	l.incarnationNumber = max(l.incarnationNumber+1, suspect.IncarnationNumber+1)
+	l.gossipQueue.Add(&MessageAlive{
+		Source:            l.self,
+		IncarnationNumber: l.incarnationNumber,
+	})
+	return true
 }
 
-func (l *List) HandleFaulty(message MessageFaulty) {
+func (l *List) handleSuspectForFaultyMembers(suspect MessageSuspect) bool {
+	faultyMemberIndex := slices.IndexFunc(l.faultyMembers, func(member Member) bool {
+		return member.Endpoint.Equal(suspect.Destination)
+	})
+	if faultyMemberIndex == -1 {
+		// The member is not part of our faulty members list. Nothing to do.
+		return false
+	}
+	faultyMember := &l.faultyMembers[faultyMemberIndex]
+
+	if suspect.IncarnationNumber < faultyMember.IncarnationNumber {
+		// We have more up-to-date information about this member.
+		return true
+	}
+
+	// Move the faulty member over to the member list
+	l.faultyMembers = slices.Delete(l.faultyMembers, faultyMemberIndex, faultyMemberIndex+1)
+	l.addMember(Member{
+		Endpoint:          suspect.Source,
+		State:             MemberStateSuspect,
+		IncarnationNumber: suspect.IncarnationNumber,
+	})
+	l.gossipQueue.Add(&suspect)
+	return true
+}
+
+func (l *List) handleSuspectForMembers(suspect MessageSuspect) bool {
+	memberIndex := slices.IndexFunc(l.members, func(member Member) bool {
+		return member.Endpoint.Equal(suspect.Source)
+	})
+	if memberIndex == -1 {
+		// The member is not part of our members list. Nothing to do.
+		return false
+	}
+	member := &l.members[memberIndex]
+
+	if suspect.IncarnationNumber < member.IncarnationNumber {
+		// We have more up-to-date information about this member.
+		return true
+	}
+
+	member.IncarnationNumber = suspect.IncarnationNumber
+	if member.State == MemberStateSuspect {
+		// We already know about this member being suspect. Nothing to do.
+		return true
+	}
+
+	// This information is new to us, we need to make sure to gossip about it.
+	member.State = MemberStateSuspect
+	l.gossipQueue.Add(&suspect)
+	return true
+}
+
+func (l *List) handleSuspectForUnknown(suspect MessageSuspect) bool {
+	// We don't know about this member yet. Add it to our member list and gossip about it.
+	l.addMember(Member{
+		Endpoint:          suspect.Destination,
+		State:             MemberStateSuspect,
+		IncarnationNumber: suspect.IncarnationNumber,
+	})
+	l.gossipQueue.Add(&suspect)
+	return true
+}
+
+func (l *List) handleAlive(alive MessageAlive) {
+	if l.handleAliveForSelf(alive) {
+		return
+	}
+	if l.handleAliveForFaultyMembers(alive) {
+		return
+	}
+	if l.handleAliveForMembers(alive) {
+		return
+	}
+	if l.handleAliveForUnknown(alive) {
+		return
+	}
+}
+
+func (l *List) handleAliveForSelf(alive MessageAlive) bool {
+	if !alive.Source.Equal(l.self) {
+		return false
+	}
+	return true
+}
+
+func (l *List) handleAliveForFaultyMembers(alive MessageAlive) bool {
+	faultyMemberIndex := slices.IndexFunc(l.faultyMembers, func(member Member) bool {
+		return member.Endpoint.Equal(alive.Source)
+	})
+	if faultyMemberIndex == -1 {
+		// The member is not part of our faulty members list. Nothing to do.
+		return false
+	}
+	faultyMember := &l.faultyMembers[faultyMemberIndex]
+
+	if alive.IncarnationNumber <= faultyMember.IncarnationNumber {
+		// We have more up-to-date information about this member.
+		return true
+	}
+
+	// Move the faulty member over to the member list
+	l.faultyMembers = slices.Delete(l.faultyMembers, faultyMemberIndex, faultyMemberIndex+1)
+	l.addMember(Member{
+		Endpoint:          alive.Source,
+		State:             MemberStateAlive,
+		IncarnationNumber: alive.IncarnationNumber,
+	})
+	l.gossipQueue.Add(&alive)
+	return true
+}
+
+func (l *List) handleAliveForMembers(alive MessageAlive) bool {
+	memberIndex := slices.IndexFunc(l.members, func(member Member) bool {
+		return member.Endpoint.Equal(alive.Source)
+	})
+	if memberIndex == -1 {
+		// The member is not part of our members list. Nothing to do.
+		return false
+	}
+	member := &l.members[memberIndex]
+
+	if alive.IncarnationNumber <= member.IncarnationNumber {
+		// We have more up-to-date information about this member.
+		return true
+	}
+
+	member.IncarnationNumber = alive.IncarnationNumber
+	if member.State == MemberStateAlive {
+		// We already know about this member being alive. Nothing to do.
+		return true
+	}
+
+	// This information is new to us, we need to make sure to gossip about it.
+	member.State = MemberStateAlive
+	l.gossipQueue.Add(&alive)
+	return true
+}
+
+func (l *List) handleAliveForUnknown(alive MessageAlive) bool {
+	// We don't know about this member yet. Add it to our member list and gossip about it.
+	l.addMember(Member{
+		Endpoint:          alive.Source,
+		State:             MemberStateAlive,
+		IncarnationNumber: alive.IncarnationNumber,
+	})
+	l.gossipQueue.Add(&alive)
+	return true
+}
+
+func (l *List) handleFaulty(faulty MessageFaulty) {
+	if l.handleFaultyForSelf(faulty) {
+		return
+	}
+	if l.handleFaultyForFaultyMembers(faulty) {
+		return
+	}
+	if l.handleFaultyForMembers(faulty) {
+		return
+	}
+	if l.handleFaultyForUnknown(faulty) {
+		return
+	}
+}
+
+func (l *List) handleFaultyForSelf(faulty MessageFaulty) bool {
+	if !faulty.Destination.Equal(l.self) {
+		return false
+	}
+
+	if faulty.IncarnationNumber < l.incarnationNumber {
+		// We have a more up-to-date state than the gossip. Nothing to do.
+		return true
+	}
+
+	// We need to re-join. Add a new alive message to gossip.
+	// Also make sure that our incarnation number is bigger than before.
+	l.incarnationNumber = max(l.incarnationNumber+1, faulty.IncarnationNumber+1)
+	l.gossipQueue.Add(&MessageAlive{
+		Source:            l.self,
+		IncarnationNumber: l.incarnationNumber,
+	})
+	return true
+}
+
+func (l *List) handleFaultyForFaultyMembers(faulty MessageFaulty) bool {
+	faultyMemberIndex := slices.IndexFunc(l.faultyMembers, func(member Member) bool {
+		return member.Endpoint.Equal(faulty.Destination)
+	})
+	if faultyMemberIndex == -1 {
+		// The member is not part of our faulty members list. Nothing to do.
+		return false
+	}
+	faultyMember := &l.faultyMembers[faultyMemberIndex]
+
+	if faulty.IncarnationNumber < faultyMember.IncarnationNumber {
+		// We have more up-to-date information about this member.
+		return true
+	}
+
+	// Update the incarnation number to make sure we have the most current incarnation.
+	faultyMember.IncarnationNumber = faulty.IncarnationNumber
+	return true
+}
+
+func (l *List) handleFaultyForMembers(faulty MessageFaulty) bool {
+	memberIndex := slices.IndexFunc(l.members, func(member Member) bool {
+		return member.Endpoint.Equal(faulty.Destination)
+	})
+	if memberIndex == -1 {
+		// The member is not part of our member list. Nothing to do.
+		return false
+	}
+	member := &l.members[memberIndex]
+
+	if faulty.IncarnationNumber < member.IncarnationNumber {
+		// We have more up-to-date information about this member.
+		return true
+	}
+
+	// Remove member from member list and put it on the faulty member list.
+	l.deleteMember(faulty.Destination)
+	l.faultyMembers = append(l.faultyMembers, Member{
+		Endpoint:          faulty.Destination,
+		State:             MemberStateFaulty,
+		IncarnationNumber: faulty.IncarnationNumber,
+	})
+	l.gossipQueue.Add(&faulty)
+	return true
+}
+
+func (l *List) handleFaultyForUnknown(faulty MessageFaulty) bool {
+	// We don't know about this member yet. Add it to our faulty member list and gossip about it.
+	l.faultyMembers = append(l.faultyMembers, Member{
+		Endpoint:          faulty.Destination,
+		State:             MemberStateFaulty,
+		IncarnationNumber: faulty.IncarnationNumber,
+	})
+	l.gossipQueue.Add(&faulty)
+	return true
+}
+
+func (l *List) sendWithGossip(endpoint Endpoint, message Message) error {
+	var err error
+	l.datagramBuffer, _, err = l.datagramBuilder.AppendToBuffer(l.datagramBuffer, message, l.gossipQueue)
+	if err != nil {
+		return err
+	}
+
+	if err := l.udpTransport.Send(endpoint, l.datagramBuffer); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (l *List) getNextMember() *Member {

@@ -5,12 +5,15 @@ import (
 	"log"
 	"math/rand"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/go-logr/logr"
 )
 
 type List struct {
+	mutex sync.Mutex
+
 	config ListConfig
 	logger logr.Logger
 
@@ -23,7 +26,6 @@ type List struct {
 
 	randomIndexes   []int
 	nextRandomIndex int
-	udpTransport    ClientTransport
 	gossipQueue     *GossipQueue
 	datagramBuilder DatagramBuilder
 	self            Endpoint
@@ -38,6 +40,9 @@ type ListConfig struct {
 	Logger            logr.Logger
 	DirectPingTimeout time.Duration
 	ProtocolPeriod    time.Duration
+	InitialMembers    []Endpoint
+	AdvertisedAddress Endpoint
+	UdpTransport      *ClientTransport
 }
 
 var DefaultListConfig = ListConfig{
@@ -71,13 +76,27 @@ type IndirectProbeRecord struct {
 }
 
 func NewList(config ListConfig) *List {
-	return &List{
-		config: config,
-		logger: config.Logger,
+	newList := List{
+		config:      config,
+		logger:      config.Logger,
+		self:        config.AdvertisedAddress,
+		gossipQueue: NewGossipQueue(10), // TODO: The max gossip count needs to be adjusted for the number of members during runtime.
 	}
+	for _, initialMember := range config.InitialMembers {
+		newList.addMember(Member{
+			Endpoint:          initialMember,
+			State:             MemberStateAlive,
+			LastStateChange:   time.Now(),
+			IncarnationNumber: 0,
+		})
+	}
+	return &newList
 }
 
 func (l *List) DirectProbe() error {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
 	if len(l.members) < 1 {
 		// As long as there are no other members, we don't have to probe anyone.
 		return nil
@@ -124,7 +143,7 @@ func (l *List) markSuspectsAsFaulty() {
 			continue
 		}
 
-		l.logger.V(1).Info(
+		l.logger.Info(
 			"Member declared as faulty",
 			"source", l.self,
 			"destination", member.Endpoint,
@@ -168,7 +187,7 @@ func (l *List) processFailedProbes() {
 			continue
 		}
 
-		l.logger.V(1).Info(
+		l.logger.Info(
 			"Member declared as suspect",
 			"source", l.self,
 			"destination", member.Endpoint,
@@ -196,6 +215,9 @@ func (l *List) processFailedProbes() {
 }
 
 func (l *List) IndirectProbe() error {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
 	// An indirect probe only makes sense whe we have at least two members.
 	if len(l.members) < 2 {
 		return nil
@@ -265,9 +287,12 @@ func (l *List) pickIndirectProbes(failureDetectionSubgroupSize int, directProbeE
 }
 
 func (l *List) DispatchDatagram(buffer []byte) error {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
 	var joinedErr error
 	for len(buffer) > 0 {
-		messageType, messageTypeN, err := MessageTypeFromBuffer(buffer)
+		messageType, _, err := MessageTypeFromBuffer(buffer)
 		if err != nil {
 			return err
 		}
@@ -275,65 +300,65 @@ func (l *List) DispatchDatagram(buffer []byte) error {
 		switch messageType {
 		case MessageTypeDirectPing:
 			var message MessageDirectPing
-			n, err := message.FromBuffer(buffer[messageTypeN:])
+			n, err := message.FromBuffer(buffer)
 			if err != nil {
 				return err
 			}
-			buffer = buffer[messageTypeN+n:]
+			buffer = buffer[n:]
 			if err := l.handleDirectPing(message); err != nil {
 				joinedErr = errors.Join(joinedErr, err)
 			}
 		case MessageTypeDirectAck:
 			var message MessageDirectAck
-			n, err := message.FromBuffer(buffer[messageTypeN:])
+			n, err := message.FromBuffer(buffer)
 			if err != nil {
 				return err
 			}
-			buffer = buffer[messageTypeN+n:]
+			buffer = buffer[n:]
 			if err := l.handleDirectAck(message); err != nil {
 				joinedErr = errors.Join(joinedErr, err)
 			}
 		case MessageTypeIndirectPing:
 			var message MessageIndirectPing
-			n, err := message.FromBuffer(buffer[messageTypeN:])
+			n, err := message.FromBuffer(buffer)
 			if err != nil {
 				return err
 			}
-			buffer = buffer[messageTypeN+n:]
+			buffer = buffer[n:]
 			if err := l.handleIndirectPing(message); err != nil {
 				joinedErr = errors.Join(joinedErr, err)
 			}
 		case MessageTypeIndirectAck:
 			var message MessageIndirectAck
-			n, err := message.FromBuffer(buffer[messageTypeN:])
+			n, err := message.FromBuffer(buffer)
 			if err != nil {
 				return err
 			}
-			buffer = buffer[messageTypeN+n:]
+			buffer = buffer[n:]
 			l.handleIndirectAck(message)
 		case MessageTypeSuspect:
 			var message MessageSuspect
-			n, err := message.FromBuffer(buffer[messageTypeN:])
+			n, err := message.FromBuffer(buffer)
 			if err != nil {
 				return err
 			}
-			buffer = buffer[messageTypeN+n:]
+			buffer = buffer[n:]
 			l.handleSuspect(message)
 		case MessageTypeAlive:
 			var message MessageAlive
-			n, err := message.FromBuffer(buffer[messageTypeN:])
+			n, err := message.FromBuffer(buffer)
 			if err != nil {
 				return err
 			}
-			buffer = buffer[messageTypeN+n:]
+			buffer = buffer[n:]
 			l.handleAlive(message)
 		case MessageTypeFaulty:
 			var message MessageFaulty
-			n, err := message.FromBuffer(buffer[messageTypeN:])
+			n, err := message.FromBuffer(buffer)
 			if err != nil {
 				return err
 			}
-			buffer = buffer[messageTypeN+n:]
+			buffer = buffer[n:]
 			l.handleFaulty(message)
 		default:
 			log.Printf("ERROR: Unknown message type %d.", messageType)
@@ -343,6 +368,11 @@ func (l *List) DispatchDatagram(buffer []byte) error {
 }
 
 func (l *List) handleDirectPing(directPing MessageDirectPing) error {
+	l.logger.V(2).Info(
+		"Received direct ping",
+		"source", directPing.Source,
+		"sequence-number", directPing.SequenceNumber,
+	)
 	directAck := MessageDirectAck{
 		Source:         l.self,
 		SequenceNumber: directPing.SequenceNumber,
@@ -354,6 +384,11 @@ func (l *List) handleDirectPing(directPing MessageDirectPing) error {
 }
 
 func (l *List) handleDirectAck(directAck MessageDirectAck) error {
+	l.logger.V(2).Info(
+		"Received direct ack",
+		"source", directAck.Source,
+		"sequence-number", directAck.SequenceNumber,
+	)
 	l.handleDirectAckForPendingIndirectProbes(directAck)
 	if err := l.handleDirectAckForPendingDirectProbes(directAck); err != nil {
 		return err
@@ -402,6 +437,12 @@ func (l *List) handleDirectAckForPendingIndirectProbes(directAck MessageDirectAc
 }
 
 func (l *List) handleIndirectPing(indirectPing MessageIndirectPing) error {
+	l.logger.V(2).Info(
+		"Received indirect ping",
+		"source", indirectPing.Source,
+		"destination", indirectPing.Destination,
+		"sequence-number", indirectPing.SequenceNumber,
+	)
 	directPing := MessageDirectPing{
 		Source:         l.self,
 		SequenceNumber: l.nextSequenceNumber,
@@ -422,6 +463,11 @@ func (l *List) handleIndirectPing(indirectPing MessageIndirectPing) error {
 }
 
 func (l *List) handleIndirectAck(indirectAck MessageIndirectAck) {
+	l.logger.V(2).Info(
+		"Received indirect ack",
+		"source", indirectAck.Source,
+		"sequence-number", indirectAck.SequenceNumber,
+	)
 	l.handleIndirectAckForPendingDirectProbes(indirectAck)
 	l.handleIndirectAckForPendingIndirectProbes(indirectAck)
 }
@@ -452,6 +498,12 @@ func (l *List) handleIndirectAckForPendingIndirectProbes(indirectAck MessageIndi
 }
 
 func (l *List) handleSuspect(suspect MessageSuspect) {
+	l.logger.V(3).Info(
+		"Received gossip about suspect",
+		"source", suspect.Source,
+		"destination", suspect.Destination,
+		"incarnation-number", suspect.IncarnationNumber,
+	)
 	if l.handleSuspectForSelf(suspect) {
 		return
 	}
@@ -554,6 +606,11 @@ func (l *List) handleSuspectForUnknown(suspect MessageSuspect) bool {
 }
 
 func (l *List) handleAlive(alive MessageAlive) {
+	l.logger.V(3).Info(
+		"Received gossip about alive",
+		"source", alive.Source,
+		"incarnation-number", alive.IncarnationNumber,
+	)
 	if l.handleAliveForSelf(alive) {
 		return
 	}
@@ -643,6 +700,12 @@ func (l *List) handleAliveForUnknown(alive MessageAlive) bool {
 }
 
 func (l *List) handleFaulty(faulty MessageFaulty) {
+	l.logger.V(3).Info(
+		"Received gossip about faulty",
+		"source", faulty.Source,
+		"destination", faulty.Destination,
+		"incarnation-number", faulty.IncarnationNumber,
+	)
 	if l.handleFaultyForSelf(faulty) {
 		return
 	}
@@ -743,7 +806,7 @@ func (l *List) sendWithGossip(endpoint Endpoint, message Message) error {
 		return err
 	}
 
-	if err := l.udpTransport.Send(endpoint, l.datagramBuffer); err != nil {
+	if err := l.config.UdpTransport.Send(endpoint, l.datagramBuffer); err != nil {
 		return err
 	}
 	return nil

@@ -2,8 +2,12 @@ package cmd
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"net"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -16,12 +20,14 @@ import (
 )
 
 var (
-	verbosity       int
-	maxDatagramSize int
-	bindAddress     string
+	verbosity        int
+	maxDatagramSize  int
+	bindAddress      string
+	advertiseAddress string
 
 	protocolPeriod    time.Duration
 	directPingTimeout time.Duration
+	members           []string
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -42,10 +48,74 @@ var rootCmd = &cobra.Command{
 
 		logger.Info("Application startup")
 
+		var advertiseEndpoint membership.Endpoint
+		if advertiseAddress != "" {
+			addr, err := net.ResolveUDPAddr("udp", advertiseAddress)
+			if err != nil {
+				return fmt.Errorf("resolving advertise address: %w", err)
+			}
+			advertiseEndpoint = membership.Endpoint{
+				IP:   addr.IP,
+				Port: addr.Port,
+			}
+		} else {
+			_, port, err := net.SplitHostPort(bindAddress)
+			if err != nil {
+				return err
+			}
+			typedPort, err := strconv.Atoi(port)
+			if err != nil {
+				return err
+			}
+
+			localIp, err := getLocalIPAddress()
+			if err != nil {
+				return err
+			}
+			advertiseEndpoint = membership.Endpoint{
+				IP:   localIp,
+				Port: typedPort,
+			}
+		}
+		logger.Info(
+			"Advertised address",
+			"address", advertiseAddress,
+			"ip", advertiseEndpoint.IP,
+			"port", advertiseEndpoint.Port,
+		)
+
+		var initialMembers []membership.Endpoint
+		for _, member := range members {
+			addr, err := net.ResolveUDPAddr("udp", member)
+			if err != nil {
+				logger.Error(err, "Resolving member", "address", member)
+				continue
+			}
+			endpoint := membership.Endpoint{
+				IP:   addr.IP,
+				Port: addr.Port,
+			}
+			logger.Info(
+				"Resolved member",
+				"member", member,
+				"ip", endpoint.IP,
+				"port", endpoint.Port,
+			)
+			initialMembers = append(initialMembers, endpoint)
+		}
+		if len(members) > 0 && len(initialMembers) == 0 {
+			return errors.New("members were provided but none could be resolved")
+		}
+
+		clientTransport := membership.NewClientTransport(nil)
+
 		membershipList := membership.NewList(membership.ListConfig{
 			Logger:            logger,
 			DirectPingTimeout: directPingTimeout,
 			ProtocolPeriod:    protocolPeriod,
+			InitialMembers:    initialMembers,
+			AdvertisedAddress: advertiseEndpoint,
+			UdpTransport:      clientTransport,
 		})
 
 		serverTransport := membership.NewServerTransport(membershipList, membership.ServerTransportConfig{
@@ -56,6 +126,7 @@ var rootCmd = &cobra.Command{
 		if err := serverTransport.Startup(); err != nil {
 			return err
 		}
+		clientTransport.UpdateConnection(serverTransport.GetConnection())
 
 		scheduler := membership.NewScheduler(membershipList, membership.SchedulerConfig{
 			Logger:            logger,
@@ -78,6 +149,17 @@ var rootCmd = &cobra.Command{
 		}
 		return nil
 	},
+}
+
+func getLocalIPAddress() (net.IP, error) {
+	connection, err := net.Dial("udp", "8.8.8.8:80")
+	if err != nil {
+		return nil, err
+	}
+	defer connection.Close()
+
+	localAddr := connection.LocalAddr().(*net.UDPAddr)
+	return localAddr.IP, nil
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -113,6 +195,15 @@ A progressive size for an internal ethernet based network is (1500 bytes etherne
 		":3000",
 		`The local address to bind to and accept incoming network messages.`,
 	)
+	rootCmd.PersistentFlags().StringVar(
+		&advertiseAddress,
+		"advertise-address",
+		"",
+		`The address which is used to advertise to other members.
+This can be ip:port or host:port. The host will be resolved on startup. 
+The port should match the port used for bind-address.
+If left empty, the ip address of the host will be auto-detected.`,
+	)
 
 	rootCmd.PersistentFlags().DurationVar(
 		&protocolPeriod,
@@ -128,6 +219,15 @@ This should be at least three times the usual round-trip time between members.`,
 		100*time.Millisecond,
 		`The duration after which an indirect probe is initiated.
 This should be the usual round-trip time between members.`,
+	)
+
+	rootCmd.PersistentFlags().StringArrayVar(
+		&members,
+		"member",
+		nil,
+		`Other known member to connect to. Should be ip:port or host:port.
+Hostname will be resolved to ip address on startup.
+Can be specified multiple times to configure several members.`,
 	)
 }
 
@@ -146,7 +246,7 @@ func createLogger(verbosity int) (logr.Logger, *zap.Logger, error) {
 			StacktraceKey:  "S",
 			LineEnding:     zapcore.DefaultLineEnding,
 			EncodeLevel:    zapcore.CapitalLevelEncoder,
-			EncodeTime:     zapcore.TimeEncoderOfLayout("15:04:05.999"),
+			EncodeTime:     zapcore.TimeEncoderOfLayout("15:04:05"),
 			EncodeDuration: zapcore.StringDurationEncoder,
 			EncodeCaller:   zapcore.ShortCallerEncoder,
 		},

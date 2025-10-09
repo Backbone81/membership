@@ -10,6 +10,12 @@ type GossipQueue struct {
 	maxGossipCount int
 }
 
+func NewGossipQueue(maxGossipCount int) *GossipQueue {
+	return &GossipQueue{
+		maxGossipCount: maxGossipCount,
+	}
+}
+
 type GossipQueueEntry struct {
 	Message Message
 	Count   int

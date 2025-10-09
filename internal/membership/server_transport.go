@@ -31,6 +31,10 @@ func NewServerTransport(list *List, config ServerTransportConfig) *ServerTranspo
 	}
 }
 
+func (t *ServerTransport) GetConnection() *net.UDPConn {
+	return t.connection
+}
+
 func (t *ServerTransport) Startup() error {
 	t.logger.Info("Server transport startup")
 	addr, err := net.ResolveUDPAddr("udp", t.config.Host)

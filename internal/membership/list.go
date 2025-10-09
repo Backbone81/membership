@@ -6,15 +6,17 @@ import (
 	"math/rand"
 	"slices"
 	"time"
+
+	"github.com/go-logr/logr"
 )
 
 type List struct {
+	config ListConfig
+	logger logr.Logger
+
 	nextSequenceNumber           int
 	incarnationNumber            int
 	failureDetectionSubgroupSize int
-
-	directPingTimeout time.Duration
-	protocolPeriod    time.Duration
 
 	members       []Member
 	faultyMembers []Member
@@ -30,6 +32,17 @@ type List struct {
 
 	pendingDirectProbes   []DirectProbeRecord
 	pendingIndirectProbes []IndirectProbeRecord
+}
+
+type ListConfig struct {
+	Logger            logr.Logger
+	DirectPingTimeout time.Duration
+	ProtocolPeriod    time.Duration
+}
+
+var DefaultListConfig = ListConfig{
+	DirectPingTimeout: 100 * time.Millisecond,
+	ProtocolPeriod:    1 * time.Second,
 }
 
 // DirectProbeRecord provides bookkeeping for a direct probe which is still active.
@@ -57,8 +70,11 @@ type IndirectProbeRecord struct {
 	MessageIndirectPing MessageIndirectPing
 }
 
-func NewList() *List {
-	return &List{}
+func NewList(config ListConfig) *List {
+	return &List{
+		config: config,
+		logger: config.Logger,
+	}
 }
 
 func (l *List) DirectProbe() error {
@@ -67,28 +83,22 @@ func (l *List) DirectProbe() error {
 		return nil
 	}
 
-	// Remove all pending probes which have timed out.
-	timeout := time.Now().Add(-l.protocolPeriod)
-	l.pendingDirectProbes = slices.DeleteFunc(l.pendingDirectProbes, func(record DirectProbeRecord) bool {
+	l.markSuspectsAsFaulty()
+	l.processFailedProbes()
 
-		// TODO: We have to update the member state and add gossip about this timeout.
-
-		return record.Timestamp.Before(timeout)
-	})
-	l.pendingIndirectProbes = slices.DeleteFunc(l.pendingIndirectProbes, func(record IndirectProbeRecord) bool {
-
-		// TODO: We have to update the member state and add gossip about this timeout.
-
-		return record.Timestamp.Before(timeout)
-	})
-
-	l.nextSequenceNumber++
 	directPing := MessageDirectPing{
 		Source:         l.self,
 		SequenceNumber: l.nextSequenceNumber,
 	}
+	l.nextSequenceNumber++
 
 	destination := l.getNextMember().Endpoint
+	l.logger.V(1).Info(
+		"Direct probe",
+		"source", l.self,
+		"destination", destination,
+		"sequence-number", directPing.SequenceNumber,
+	)
 	l.pendingDirectProbes = append(l.pendingDirectProbes, DirectProbeRecord{
 		Timestamp:         time.Now(),
 		Destination:       destination,
@@ -98,6 +108,91 @@ func (l *List) DirectProbe() error {
 		return err
 	}
 	return nil
+}
+
+func (l *List) markSuspectsAsFaulty() {
+	suspicionThreshold := time.Now().Add(-SuspicionTimeout(l.config.ProtocolPeriod, 3, len(l.members)))
+
+	// As we are potentially removing elements from the member list, we need to iterate from the back to the front in
+	// order to not skip a member when the content changes.
+	for i := len(l.members) - 1; i >= 0; i-- {
+		member := &l.members[i]
+		if member.State != MemberStateSuspect {
+			continue
+		}
+		if !member.LastStateChange.Before(suspicionThreshold) {
+			continue
+		}
+
+		l.logger.V(1).Info(
+			"Member declared as faulty",
+			"source", l.self,
+			"destination", member.Endpoint,
+			"incarnation-number", member.IncarnationNumber,
+		)
+		l.faultyMembers = append(l.faultyMembers, Member{
+			Endpoint:          member.Endpoint,
+			State:             MemberStateFaulty,
+			LastStateChange:   time.Now(),
+			IncarnationNumber: member.IncarnationNumber,
+		})
+		l.gossipQueue.Add(&MessageFaulty{
+			Source:            l.self,
+			Destination:       member.Endpoint,
+			IncarnationNumber: member.IncarnationNumber,
+		})
+		l.removeMemberByIndex(i)
+	}
+}
+
+func (l *List) processFailedProbes() {
+	timeout := time.Now().Add(-l.config.ProtocolPeriod)
+	for _, pendingDirectProbe := range l.pendingDirectProbes {
+		if !pendingDirectProbe.MessageIndirectPing.IsEmpty() && !pendingDirectProbe.Timestamp.Before(timeout) {
+			// This is a direct probe which we need to keep around. Those are always requests for indirect probes.
+			continue
+		}
+
+		memberIndex := slices.IndexFunc(l.members, func(record Member) bool {
+			return record.Endpoint.Equal(pendingDirectProbe.Destination)
+		})
+		if memberIndex == -1 {
+			// We probably got a faulty message by some other member while we were waiting for our probe to succeed.
+			// Nothing to do here.
+			continue
+		}
+
+		member := &l.members[memberIndex]
+		if member.State == MemberStateSuspect {
+			// The member is already suspect. Nothing to do.
+			continue
+		}
+
+		l.logger.V(1).Info(
+			"Member declared as suspect",
+			"source", l.self,
+			"destination", member.Endpoint,
+			"incarnation-number", member.IncarnationNumber,
+		)
+
+		// We need to mark the member as suspect and gossip about it.
+		member.State = MemberStateSuspect
+		member.LastStateChange = time.Now()
+		l.gossipQueue.Add(&MessageSuspect{
+			Source:            l.self,
+			Destination:       member.Endpoint,
+			IncarnationNumber: member.IncarnationNumber,
+		})
+	}
+
+	// Remove all pending probes which have timed out.
+	l.pendingDirectProbes = slices.DeleteFunc(l.pendingDirectProbes, func(record DirectProbeRecord) bool {
+		return record.MessageIndirectPing.IsEmpty() || record.Timestamp.Before(timeout)
+	})
+
+	// As indirect probes always happen with a direct probe not being satisfied before, we can clear the indirect probes
+	// without any further actions, as those actions have already been taken on the pending direct probes.
+	l.pendingIndirectProbes = l.pendingIndirectProbes[:0]
 }
 
 func (l *List) IndirectProbe() error {
@@ -131,6 +226,13 @@ func (l *List) IndirectProbe() error {
 			MessageIndirectPing: indirectPing,
 		})
 		for _, member := range members {
+			l.logger.V(1).Info(
+				"Indirect probe",
+				"source", l.self,
+				"destination", indirectPing.Destination,
+				"sequence-number", indirectPing.SequenceNumber,
+				"through", member.Endpoint,
+			)
 			if err := l.sendWithGossip(member.Endpoint, &indirectPing); err != nil {
 				joinedErr = errors.Join(joinedErr, err)
 			}
@@ -300,11 +402,11 @@ func (l *List) handleDirectAckForPendingIndirectProbes(directAck MessageDirectAc
 }
 
 func (l *List) handleIndirectPing(indirectPing MessageIndirectPing) error {
-	l.nextSequenceNumber++
 	directPing := MessageDirectPing{
 		Source:         l.self,
 		SequenceNumber: l.nextSequenceNumber,
 	}
+	l.nextSequenceNumber++
 
 	l.pendingDirectProbes = append(l.pendingDirectProbes, DirectProbeRecord{
 		Timestamp:           time.Now(),
@@ -404,6 +506,7 @@ func (l *List) handleSuspectForFaultyMembers(suspect MessageSuspect) bool {
 	l.addMember(Member{
 		Endpoint:          suspect.Source,
 		State:             MemberStateSuspect,
+		LastStateChange:   time.Now(),
 		IncarnationNumber: suspect.IncarnationNumber,
 	})
 	l.gossipQueue.Add(&suspect)
@@ -433,6 +536,7 @@ func (l *List) handleSuspectForMembers(suspect MessageSuspect) bool {
 
 	// This information is new to us, we need to make sure to gossip about it.
 	member.State = MemberStateSuspect
+	member.LastStateChange = time.Now()
 	l.gossipQueue.Add(&suspect)
 	return true
 }
@@ -442,6 +546,7 @@ func (l *List) handleSuspectForUnknown(suspect MessageSuspect) bool {
 	l.addMember(Member{
 		Endpoint:          suspect.Destination,
 		State:             MemberStateSuspect,
+		LastStateChange:   time.Now(),
 		IncarnationNumber: suspect.IncarnationNumber,
 	})
 	l.gossipQueue.Add(&suspect)
@@ -490,6 +595,7 @@ func (l *List) handleAliveForFaultyMembers(alive MessageAlive) bool {
 	l.addMember(Member{
 		Endpoint:          alive.Source,
 		State:             MemberStateAlive,
+		LastStateChange:   time.Now(),
 		IncarnationNumber: alive.IncarnationNumber,
 	})
 	l.gossipQueue.Add(&alive)
@@ -519,6 +625,7 @@ func (l *List) handleAliveForMembers(alive MessageAlive) bool {
 
 	// This information is new to us, we need to make sure to gossip about it.
 	member.State = MemberStateAlive
+	member.LastStateChange = time.Now()
 	l.gossipQueue.Add(&alive)
 	return true
 }
@@ -528,6 +635,7 @@ func (l *List) handleAliveForUnknown(alive MessageAlive) bool {
 	l.addMember(Member{
 		Endpoint:          alive.Source,
 		State:             MemberStateAlive,
+		LastStateChange:   time.Now(),
 		IncarnationNumber: alive.IncarnationNumber,
 	})
 	l.gossipQueue.Add(&alive)
@@ -605,10 +713,11 @@ func (l *List) handleFaultyForMembers(faulty MessageFaulty) bool {
 	}
 
 	// Remove member from member list and put it on the faulty member list.
-	l.deleteMember(faulty.Destination)
+	l.removeMemberByEndpoint(faulty.Destination)
 	l.faultyMembers = append(l.faultyMembers, Member{
 		Endpoint:          faulty.Destination,
 		State:             MemberStateFaulty,
+		LastStateChange:   time.Now(),
 		IncarnationNumber: faulty.IncarnationNumber,
 	})
 	l.gossipQueue.Add(&faulty)
@@ -620,6 +729,7 @@ func (l *List) handleFaultyForUnknown(faulty MessageFaulty) bool {
 	l.faultyMembers = append(l.faultyMembers, Member{
 		Endpoint:          faulty.Destination,
 		State:             MemberStateFaulty,
+		LastStateChange:   time.Now(),
 		IncarnationNumber: faulty.IncarnationNumber,
 	})
 	l.gossipQueue.Add(&faulty)
@@ -675,6 +785,12 @@ func (l *List) getMember(endpoint Endpoint) *Member {
 }
 
 func (l *List) addMember(member Member) {
+	l.logger.Info(
+		"Member added",
+		"endpoint", member.Endpoint,
+		"incarnation-number", member.IncarnationNumber,
+	)
+
 	// We append the new member always at the end of the member list. Remember the index for later.
 	memberIndex := len(l.members)
 	l.members = append(l.members, member)
@@ -690,13 +806,22 @@ func (l *List) addMember(member Member) {
 	}
 }
 
-func (l *List) deleteMember(endpoint Endpoint) {
+func (l *List) removeMemberByEndpoint(endpoint Endpoint) {
 	index := slices.IndexFunc(l.members, func(member Member) bool {
 		return endpoint.Equal(member.Endpoint)
 	})
 	if index == -1 {
 		return
 	}
+	l.removeMemberByIndex(index)
+}
+
+func (l *List) removeMemberByIndex(index int) {
+	l.logger.Info(
+		"Member removed",
+		"endpoint", l.members[index].Endpoint,
+		"incarnation-number", l.members[index].IncarnationNumber,
+	)
 
 	// If we remove the element from the slice, all indexes after that element need to be decremented by one.
 	var randomIndex int

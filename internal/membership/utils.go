@@ -53,3 +53,8 @@ func FailureDetectionFalsePositiveProbability(networkReliability float64, member
 		(1.0 - memberReliability*math.Pow(networkReliability, 4.0)) *
 		math.Exp(memberReliability) / (math.Exp(memberReliability) - 1.0)
 }
+
+func SuspicionTimeout(protocolPeriod time.Duration, suspicionMultiplier float64, memberCount int) time.Duration {
+	timeoutSeconds := protocolPeriod.Seconds() * suspicionMultiplier * math.Log(float64(memberCount))
+	return time.Duration(timeoutSeconds * float64(time.Second))
+}

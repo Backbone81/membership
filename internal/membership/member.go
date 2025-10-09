@@ -1,5 +1,7 @@
 package membership
 
+import "time"
+
 type MemberState int
 
 const (
@@ -11,5 +13,6 @@ const (
 type Member struct {
 	Endpoint          Endpoint
 	State             MemberState
+	LastStateChange   time.Time
 	IncarnationNumber int
 }

@@ -37,13 +37,14 @@ type List struct {
 }
 
 type ListConfig struct {
-	Logger            logr.Logger
-	DirectPingTimeout time.Duration
-	ProtocolPeriod    time.Duration
-	InitialMembers    []Endpoint
-	AdvertisedAddress Endpoint
-	UdpTransport      *ClientTransport
-	MaxDatagramSize   int
+	Logger             logr.Logger
+	DirectPingTimeout  time.Duration
+	ProtocolPeriod     time.Duration
+	InitialMembers     []Endpoint
+	AdvertisedAddress  Endpoint
+	UDPClientTransport *UDPClientTransport
+	TCPClientTransport *TCPClientTransport
+	MaxDatagramSize    int
 }
 
 var DefaultListConfig = ListConfig{
@@ -811,7 +812,7 @@ func (l *List) sendWithGossip(endpoint Endpoint, message Message) error {
 		return err
 	}
 
-	if err := l.config.UdpTransport.Send(endpoint, l.datagramBuffer); err != nil {
+	if err := l.config.UDPClientTransport.Send(endpoint, l.datagramBuffer); err != nil {
 		return err
 	}
 	return nil

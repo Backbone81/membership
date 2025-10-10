@@ -9,34 +9,30 @@ import (
 	"github.com/go-logr/logr"
 )
 
-type ServerTransport struct {
-	config     ServerTransportConfig
-	list       *List
+type UDPServerTransport struct {
 	logger     logr.Logger
+	config     UDPServerTransportConfig
+	list       *List
 	connection *net.UDPConn
 	waitGroup  sync.WaitGroup
 }
 
-type ServerTransportConfig struct {
+type UDPServerTransportConfig struct {
+	Logger              logr.Logger
 	Host                string
 	ReceiveBufferLength int
-	Logger              logr.Logger
 }
 
-func NewServerTransport(list *List, config ServerTransportConfig) *ServerTransport {
-	return &ServerTransport{
+func NewUDPServerTransport(list *List, config UDPServerTransportConfig) *UDPServerTransport {
+	return &UDPServerTransport{
+		logger: config.Logger,
 		config: config,
 		list:   list,
-		logger: config.Logger,
 	}
 }
 
-func (t *ServerTransport) GetConnection() *net.UDPConn {
-	return t.connection
-}
-
-func (t *ServerTransport) Startup() error {
-	t.logger.Info("Server transport startup")
+func (t *UDPServerTransport) Startup() error {
+	t.logger.Info("UDP server transport startup")
 	addr, err := net.ResolveUDPAddr("udp", t.config.Host)
 	if err != nil {
 		return fmt.Errorf("resolving host: %w", err)
@@ -53,8 +49,8 @@ func (t *ServerTransport) Startup() error {
 	return nil
 }
 
-func (t *ServerTransport) Shutdown() error {
-	t.logger.Info("Server transport shutdown")
+func (t *UDPServerTransport) Shutdown() error {
+	t.logger.Info("UDP server transport shutdown")
 	if err := t.connection.Close(); err != nil {
 		return err
 	}
@@ -62,9 +58,9 @@ func (t *ServerTransport) Shutdown() error {
 	return nil
 }
 
-func (t *ServerTransport) backgroundTask() {
-	t.logger.Info("Server transport background task started")
-	defer t.logger.Info("Server transport background task finished")
+func (t *UDPServerTransport) backgroundTask() {
+	t.logger.Info("UDP server transport background task started")
+	defer t.logger.Info("UDP server transport background task finished")
 
 	defer t.waitGroup.Done()
 	buffer := make([]byte, t.config.ReceiveBufferLength)

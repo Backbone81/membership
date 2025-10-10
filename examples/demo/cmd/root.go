@@ -107,27 +107,32 @@ var rootCmd = &cobra.Command{
 			return errors.New("members were provided but none could be resolved")
 		}
 
-		clientTransport := membership.NewClientTransport(nil)
-
 		membershipList := membership.NewList(membership.ListConfig{
-			Logger:            logger,
-			DirectPingTimeout: directPingTimeout,
-			ProtocolPeriod:    protocolPeriod,
-			InitialMembers:    initialMembers,
-			AdvertisedAddress: advertiseEndpoint,
-			UdpTransport:      clientTransport,
-			MaxDatagramSize:   maxDatagramSize,
+			Logger:             logger,
+			DirectPingTimeout:  directPingTimeout,
+			ProtocolPeriod:     protocolPeriod,
+			InitialMembers:     initialMembers,
+			AdvertisedAddress:  advertiseEndpoint,
+			UDPClientTransport: membership.NewUDPClientTransport(maxDatagramSize),
+			MaxDatagramSize:    maxDatagramSize,
 		})
 
-		serverTransport := membership.NewServerTransport(membershipList, membership.ServerTransportConfig{
+		udpServerTransport := membership.NewUDPServerTransport(membershipList, membership.UDPServerTransportConfig{
 			Logger:              logger,
 			Host:                bindAddress,
 			ReceiveBufferLength: maxDatagramSize,
 		})
-		if err := serverTransport.Startup(); err != nil {
+		if err := udpServerTransport.Startup(); err != nil {
 			return err
 		}
-		clientTransport.UpdateConnection(serverTransport.GetConnection())
+
+		tcpServerTransport := membership.NewTCPServerTransport(membershipList, membership.TCPServerTransportConfig{
+			Logger: logger,
+			Host:   bindAddress,
+		})
+		if err := tcpServerTransport.Startup(); err != nil {
+			return err
+		}
 
 		scheduler := membership.NewScheduler(membershipList, membership.SchedulerConfig{
 			Logger:            logger,
@@ -145,7 +150,10 @@ var rootCmd = &cobra.Command{
 		if err := scheduler.Shutdown(); err != nil {
 			return err
 		}
-		if err := serverTransport.Shutdown(); err != nil {
+		if err := tcpServerTransport.Shutdown(); err != nil {
+			return err
+		}
+		if err := udpServerTransport.Shutdown(); err != nil {
 			return err
 		}
 		return nil

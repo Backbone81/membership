@@ -2,6 +2,7 @@ package membership
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"math/rand"
 	"slices"
@@ -34,6 +35,9 @@ type List struct {
 
 	pendingDirectProbes   []DirectProbeRecord
 	pendingIndirectProbes []IndirectProbeRecord
+
+	listRequestInterval time.Duration
+	lastListRequest     time.Time
 }
 
 type ListConfig struct {
@@ -80,13 +84,19 @@ type IndirectProbeRecord struct {
 
 func NewList(config ListConfig) *List {
 	newList := List{
-		config:          config,
-		logger:          config.Logger,
-		self:            config.AdvertisedAddress,
-		gossipQueue:     NewGossipQueue(10), // TODO: The max gossip count needs to be adjusted for the number of members during runtime.
-		datagramBuffer:  make([]byte, 0, config.MaxDatagramSize),
-		datagramBuilder: NewDatagramBuilder(config.MaxDatagramSize),
+		config:              config,
+		logger:              config.Logger,
+		self:                config.AdvertisedAddress,
+		gossipQueue:         NewGossipQueue(10), // TODO: The max gossip count needs to be adjusted for the number of members during runtime.
+		datagramBuffer:      make([]byte, 0, config.MaxDatagramSize),
+		datagramBuilder:     NewDatagramBuilder(config.MaxDatagramSize),
+		listRequestInterval: 1 * time.Minute,
 	}
+	// We need to gossip our own alive. Otherwise, nobody will pick us up into their own member list.
+	newList.gossipQueue.Add(&MessageAlive{
+		Source:            config.AdvertisedAddress,
+		IncarnationNumber: 0,
+	})
 	for _, initialMember := range config.InitialMembers {
 		newList.addMember(Member{
 			Endpoint:          initialMember,
@@ -104,6 +114,9 @@ func (l *List) DirectProbe() error {
 
 	l.markSuspectsAsFaulty()
 	l.processFailedProbes()
+	if err := l.requestList(); err != nil {
+		return err
+	}
 
 	if len(l.members) < 1 {
 		// As long as there are no other members, we don't have to probe anyone.
@@ -217,6 +230,34 @@ func (l *List) processFailedProbes() {
 	// As indirect probes always happen with a direct probe not being satisfied before, we can clear the indirect probes
 	// without any further actions, as those actions have already been taken on the pending direct probes.
 	l.pendingIndirectProbes = l.pendingIndirectProbes[:0]
+}
+
+func (l *List) requestList() error {
+	// Disabled for now.
+	return nil
+
+	//if time.Since(l.lastListRequest) <= l.listRequestInterval {
+	//	// No need to request another member list, as we already have a quite up-to-date list from somebody else.
+	//	return nil
+	//}
+	//
+	//l.lastListRequest = time.Now()
+	//listRequest := MessageListRequest{
+	//	Source: l.self,
+	//}
+	//
+	//members := l.pickIndirectProbes(1, Endpoint{})
+	//var joinedErr error
+	//for _, member := range members {
+	//	l.logger.V(1).Info(
+	//		"Requesting member list",
+	//		"destination", member.Endpoint,
+	//	)
+	//	if err := l.sendWithGossip(member.Endpoint, &listRequest); err != nil {
+	//		joinedErr = errors.Join(joinedErr, err)
+	//	}
+	//}
+	//return joinedErr
 }
 
 func (l *List) IndirectProbe() error {
@@ -365,6 +406,26 @@ func (l *List) DispatchDatagram(buffer []byte) error {
 			}
 			buffer = buffer[n:]
 			l.handleFaulty(message)
+		case MessageTypeListRequest:
+			var message MessageListRequest
+			n, err := message.FromBuffer(buffer)
+			if err != nil {
+				return err
+			}
+			buffer = buffer[n:]
+			if err := l.handleListRequest(message); err != nil {
+				joinedErr = errors.Join(joinedErr, err)
+			}
+		case MessageTypeListResponse:
+			var message MessageListResponse
+			n, err := message.FromBuffer(buffer)
+			if err != nil {
+				return err
+			}
+			buffer = buffer[n:]
+			if err := l.handleListResponse(message); err != nil {
+				joinedErr = errors.Join(joinedErr, err)
+			}
 		default:
 			log.Printf("ERROR: Unknown message type %d.", messageType)
 		}
@@ -518,9 +579,7 @@ func (l *List) handleSuspect(suspect MessageSuspect) {
 	if l.handleSuspectForMembers(suspect) {
 		return
 	}
-	if l.handleSuspectForUnknown(suspect) {
-		return
-	}
+	l.handleSuspectForUnknown(suspect)
 }
 
 func (l *List) handleSuspectForSelf(suspect MessageSuspect) bool {
@@ -598,7 +657,7 @@ func (l *List) handleSuspectForMembers(suspect MessageSuspect) bool {
 	return true
 }
 
-func (l *List) handleSuspectForUnknown(suspect MessageSuspect) bool {
+func (l *List) handleSuspectForUnknown(suspect MessageSuspect) {
 	// We don't know about this member yet. Add it to our member list and gossip about it.
 	l.addMember(Member{
 		Endpoint:          suspect.Destination,
@@ -607,7 +666,6 @@ func (l *List) handleSuspectForUnknown(suspect MessageSuspect) bool {
 		IncarnationNumber: suspect.IncarnationNumber,
 	})
 	l.gossipQueue.Add(&suspect)
-	return true
 }
 
 func (l *List) handleAlive(alive MessageAlive) {
@@ -625,9 +683,7 @@ func (l *List) handleAlive(alive MessageAlive) {
 	if l.handleAliveForMembers(alive) {
 		return
 	}
-	if l.handleAliveForUnknown(alive) {
-		return
-	}
+	l.handleAliveForUnknown(alive)
 }
 
 func (l *List) handleAliveForSelf(alive MessageAlive) bool {
@@ -692,7 +748,7 @@ func (l *List) handleAliveForMembers(alive MessageAlive) bool {
 	return true
 }
 
-func (l *List) handleAliveForUnknown(alive MessageAlive) bool {
+func (l *List) handleAliveForUnknown(alive MessageAlive) {
 	// We don't know about this member yet. Add it to our member list and gossip about it.
 	l.addMember(Member{
 		Endpoint:          alive.Source,
@@ -701,7 +757,6 @@ func (l *List) handleAliveForUnknown(alive MessageAlive) bool {
 		IncarnationNumber: alive.IncarnationNumber,
 	})
 	l.gossipQueue.Add(&alive)
-	return true
 }
 
 func (l *List) handleFaulty(faulty MessageFaulty) {
@@ -720,9 +775,7 @@ func (l *List) handleFaulty(faulty MessageFaulty) {
 	if l.handleFaultyForMembers(faulty) {
 		return
 	}
-	if l.handleFaultyForUnknown(faulty) {
-		return
-	}
+	l.handleFaultyForUnknown(faulty)
 }
 
 func (l *List) handleFaultyForSelf(faulty MessageFaulty) bool {
@@ -792,7 +845,7 @@ func (l *List) handleFaultyForMembers(faulty MessageFaulty) bool {
 	return true
 }
 
-func (l *List) handleFaultyForUnknown(faulty MessageFaulty) bool {
+func (l *List) handleFaultyForUnknown(faulty MessageFaulty) {
 	// We don't know about this member yet. Add it to our faulty member list and gossip about it.
 	l.faultyMembers = append(l.faultyMembers, Member{
 		Endpoint:          faulty.Destination,
@@ -801,7 +854,58 @@ func (l *List) handleFaultyForUnknown(faulty MessageFaulty) bool {
 		IncarnationNumber: faulty.IncarnationNumber,
 	})
 	l.gossipQueue.Add(&faulty)
-	return true
+}
+
+func (l *List) handleListRequest(listRequest MessageListRequest) error {
+	l.logger.V(2).Info(
+		"Received list request",
+		"source", listRequest.Source,
+	)
+
+	listResponse := MessageListResponse{
+		Source:  l.self,
+		Members: append(l.members, l.faultyMembers...),
+	}
+	buffer, _, err := listResponse.AppendToBuffer(l.datagramBuffer[:0])
+	if err != nil {
+		return err
+	}
+
+	if err := l.config.TCPClientTransport.Send(listRequest.Source, buffer); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (l *List) handleListResponse(listResponse MessageListResponse) error {
+	l.logger.V(2).Info(
+		"Received list response",
+		"source", listResponse.Source,
+	)
+	for _, member := range listResponse.Members {
+		switch member.State {
+		case MemberStateAlive:
+			l.handleAlive(MessageAlive{
+				Source:            listResponse.Source,
+				IncarnationNumber: member.IncarnationNumber,
+			})
+		case MemberStateSuspect:
+			l.handleSuspect(MessageSuspect{
+				Source:            listResponse.Source,
+				Destination:       member.Endpoint,
+				IncarnationNumber: member.IncarnationNumber,
+			})
+		case MemberStateFaulty:
+			l.handleFaulty(MessageFaulty{
+				Source:            listResponse.Source,
+				Destination:       member.Endpoint,
+				IncarnationNumber: member.IncarnationNumber,
+			})
+		default:
+			return fmt.Errorf("unknown member state: %v", member.State)
+		}
+	}
+	return nil
 }
 
 func (l *List) sendWithGossip(endpoint Endpoint, message Message) error {

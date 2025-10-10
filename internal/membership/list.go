@@ -27,7 +27,7 @@ type List struct {
 	randomIndexes   []int
 	nextRandomIndex int
 	gossipQueue     *GossipQueue
-	datagramBuilder DatagramBuilder
+	datagramBuilder *DatagramBuilder
 	self            Endpoint
 
 	datagramBuffer []byte
@@ -43,11 +43,13 @@ type ListConfig struct {
 	InitialMembers    []Endpoint
 	AdvertisedAddress Endpoint
 	UdpTransport      *ClientTransport
+	MaxDatagramSize   int
 }
 
 var DefaultListConfig = ListConfig{
 	DirectPingTimeout: 100 * time.Millisecond,
 	ProtocolPeriod:    1 * time.Second,
+	MaxDatagramSize:   512,
 }
 
 // DirectProbeRecord provides bookkeeping for a direct probe which is still active.
@@ -77,10 +79,12 @@ type IndirectProbeRecord struct {
 
 func NewList(config ListConfig) *List {
 	newList := List{
-		config:      config,
-		logger:      config.Logger,
-		self:        config.AdvertisedAddress,
-		gossipQueue: NewGossipQueue(10), // TODO: The max gossip count needs to be adjusted for the number of members during runtime.
+		config:          config,
+		logger:          config.Logger,
+		self:            config.AdvertisedAddress,
+		gossipQueue:     NewGossipQueue(10), // TODO: The max gossip count needs to be adjusted for the number of members during runtime.
+		datagramBuffer:  make([]byte, 0, config.MaxDatagramSize),
+		datagramBuilder: NewDatagramBuilder(config.MaxDatagramSize),
 	}
 	for _, initialMember := range config.InitialMembers {
 		newList.addMember(Member{
@@ -97,13 +101,13 @@ func (l *List) DirectProbe() error {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
 
+	l.markSuspectsAsFaulty()
+	l.processFailedProbes()
+
 	if len(l.members) < 1 {
 		// As long as there are no other members, we don't have to probe anyone.
 		return nil
 	}
-
-	l.markSuspectsAsFaulty()
-	l.processFailedProbes()
 
 	directPing := MessageDirectPing{
 		Source:         l.self,
@@ -800,6 +804,7 @@ func (l *List) handleFaultyForUnknown(faulty MessageFaulty) bool {
 }
 
 func (l *List) sendWithGossip(endpoint Endpoint, message Message) error {
+	l.datagramBuffer = l.datagramBuffer[:0]
 	var err error
 	l.datagramBuffer, _, err = l.datagramBuilder.AppendToBuffer(l.datagramBuffer, message, l.gossipQueue)
 	if err != nil {

@@ -116,6 +116,7 @@ var rootCmd = &cobra.Command{
 			InitialMembers:    initialMembers,
 			AdvertisedAddress: advertiseEndpoint,
 			UdpTransport:      clientTransport,
+			MaxDatagramSize:   maxDatagramSize,
 		})
 
 		serverTransport := membership.NewServerTransport(membershipList, membership.ServerTransportConfig{

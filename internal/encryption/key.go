@@ -6,11 +6,11 @@ import (
 	"fmt"
 )
 
-// KeySize is the size for keys for encryption and decryption in bytes.
-const KeySize = 32
+// KeyLength is the length for keys for encryption and decryption in bytes.
+const KeyLength = 32
 
 // Key is a key for encrypting and decrypting data.
-type Key [KeySize]byte
+type Key [KeyLength]byte
 
 // Key implements fmt.Stringer.
 var _ fmt.Stringer = (*Key)(nil)
@@ -29,7 +29,7 @@ func (k *Key) Data() []byte {
 func NewRandomKey() Key {
 	var result Key
 	n, err := rand.Read(result.Data())
-	if err != nil || n != KeySize {
+	if err != nil || n != KeyLength {
 		panic("failed to create a new random encryption key")
 	}
 	return result
@@ -42,8 +42,8 @@ func ParseKeyFromHexString(hexString string) (Key, error) {
 	if err != nil {
 		return Key{}, fmt.Errorf("decoding encryption key from hex string: %w", err)
 	}
-	if n != KeySize {
-		return Key{}, fmt.Errorf("invalid encryption key size: expected %d, got %d", KeySize, n)
+	if n != KeyLength {
+		return Key{}, fmt.Errorf("invalid encryption key length: expected %d, got %d", KeyLength, n)
 	}
 	return result, nil
 }

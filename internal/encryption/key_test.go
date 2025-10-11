@@ -13,7 +13,7 @@ var _ = Describe("Key", func() {
 	It("should create random keys", func() {
 		key := encryption.NewRandomKey()
 		Expect(key.Data()).ToNot(BeNil())
-		Expect(key.Data()).To(HaveLen(encryption.KeySize))
+		Expect(key.Data()).To(HaveLen(encryption.KeyLength))
 
 		for range 1000 {
 			otherKey := encryption.NewRandomKey()
@@ -37,7 +37,7 @@ var _ = Describe("Key", func() {
 		},
 		Entry("an empty string", ""),
 		Entry("an invalid hex string", "foo"),
-		Entry("a key which is too short", encryption.NewRandomKey().String()[:encryption.KeySize*2-1]),
+		Entry("a key which is too short", encryption.NewRandomKey().String()[:encryption.KeyLength*2-1]),
 		Entry("a key which is too long", encryption.NewRandomKey().String()+"x"),
 	)
 })

@@ -11,36 +11,36 @@ const (
 )
 
 type Member struct {
-	Endpoint          Address
+	Address           Address
 	State             MemberState
 	LastStateChange   time.Time
 	IncarnationNumber int
 }
 
 func AppendMemberToBuffer(buffer []byte, member Member) ([]byte, int, error) {
-	endpointBuffer, endpointN, err := AppendAddressToBuffer(buffer, member.Endpoint)
+	addressBuffer, addressN, err := AppendAddressToBuffer(buffer, member.Address)
 	if err != nil {
 		return buffer, 0, err
 	}
 
-	stateBuffer := append(endpointBuffer, byte(member.State))
+	stateBuffer := append(addressBuffer, byte(member.State))
 
 	incarnationNumberBuffer := Endian.AppendUint16(stateBuffer, uint16(member.IncarnationNumber))
 
-	return incarnationNumberBuffer, endpointN + 1 + 2, nil
+	return incarnationNumberBuffer, addressN + 1 + 2, nil
 }
 
 func MemberFromBuffer(buffer []byte) (Member, int, error) {
-	endpoint, endpointN, err := AddressFromBuffer(buffer)
+	address, addressN, err := AddressFromBuffer(buffer)
 	if err != nil {
 		return Member{}, 0, err
 	}
 
-	memberState := MemberState(buffer[endpointN])
+	memberState := MemberState(buffer[addressN])
 
-	incarnationNumber := int(Endian.Uint16(buffer[endpointN+1:]))
+	incarnationNumber := int(Endian.Uint16(buffer[addressN+1:]))
 	return Member{
-		Endpoint:          endpoint,
+		Address:           address,
 		State:             memberState,
 		IncarnationNumber: incarnationNumber,
 	}, 0, nil

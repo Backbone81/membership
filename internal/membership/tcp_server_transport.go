@@ -92,7 +92,7 @@ func (t *TCPServerTransport) handleConnectionImpl(connection net.Conn) error {
 
 	// Let's read the datagram payload.
 	if len(buffer) < 4+datagramLength {
-		// TODO: Simply growing the buffer to the size given in the first four bytes makes us prone to denial of service
+		// TODO: Simply growing the buffer to the length given in the first four bytes makes us prone to denial of service
 		// attacks, when the port is exposed on the internet. Arbitrary payload might cause memory allocations of up
 		// to 4 GB which might lead to an out of memory kill. We should only grow the buffer if we know that the message
 		// was sent by a trustworthy member. Find a way to incorporate encryption/signing here, to prevent such an

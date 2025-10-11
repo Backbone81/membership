@@ -20,10 +20,10 @@ import (
 )
 
 var (
-	verbosity        int
-	maxDatagramSize  int
-	bindAddress      string
-	advertiseAddress string
+	verbosity         int
+	maxDatagramLength int
+	bindAddress       string
+	advertiseAddress  string
 
 	protocolPeriod    time.Duration
 	directPingTimeout time.Duration
@@ -48,13 +48,13 @@ var rootCmd = &cobra.Command{
 
 		logger.Info("Application startup")
 
-		var advertiseEndpoint membership.Address
+		var typedAdvertiseAddress membership.Address
 		if advertiseAddress != "" {
 			addr, err := net.ResolveUDPAddr("udp", advertiseAddress)
 			if err != nil {
 				return fmt.Errorf("resolving advertise address: %w", err)
 			}
-			advertiseEndpoint = membership.NewAddress(
+			typedAdvertiseAddress = membership.NewAddress(
 				addr.IP,
 				addr.Port,
 			)
@@ -72,7 +72,7 @@ var rootCmd = &cobra.Command{
 			if err != nil {
 				return err
 			}
-			advertiseEndpoint = membership.NewAddress(
+			typedAdvertiseAddress = membership.NewAddress(
 				localIp,
 				typedPort,
 			)
@@ -80,8 +80,8 @@ var rootCmd = &cobra.Command{
 		logger.Info(
 			"Advertised address",
 			"address", advertiseAddress,
-			"ip", advertiseEndpoint.IP,
-			"port", advertiseEndpoint.Port,
+			"ip", typedAdvertiseAddress.IP,
+			"port", typedAdvertiseAddress.Port,
 		)
 
 		var initialMembers []membership.Address
@@ -91,17 +91,17 @@ var rootCmd = &cobra.Command{
 				logger.Error(err, "Resolving member", "address", member)
 				continue
 			}
-			endpoint := membership.NewAddress(
+			address := membership.NewAddress(
 				addr.IP,
 				addr.Port,
 			)
 			logger.Info(
 				"Resolved member",
 				"member", member,
-				"ip", endpoint.IP,
-				"port", endpoint.Port,
+				"ip", address.IP,
+				"port", address.Port,
 			)
-			initialMembers = append(initialMembers, endpoint)
+			initialMembers = append(initialMembers, address)
 		}
 		if len(members) > 0 && len(initialMembers) == 0 {
 			return errors.New("members were provided but none could be resolved")
@@ -112,15 +112,15 @@ var rootCmd = &cobra.Command{
 			DirectPingTimeout:  directPingTimeout,
 			ProtocolPeriod:     protocolPeriod,
 			InitialMembers:     initialMembers,
-			AdvertisedAddress:  advertiseEndpoint,
-			UDPClientTransport: membership.NewUDPClientTransport(maxDatagramSize),
-			MaxDatagramSize:    maxDatagramSize,
+			AdvertisedAddress:  typedAdvertiseAddress,
+			UDPClientTransport: membership.NewUDPClientTransport(maxDatagramLength),
+			MaxDatagramLength:  maxDatagramLength,
 		})
 
 		udpServerTransport := membership.NewUDPServerTransport(membershipList, membership.UDPServerTransportConfig{
 			Logger:              logger,
 			Host:                bindAddress,
-			ReceiveBufferLength: maxDatagramSize,
+			ReceiveBufferLength: maxDatagramLength,
 		})
 		if err := udpServerTransport.Startup(); err != nil {
 			return err
@@ -189,13 +189,13 @@ func init() {
 		"Sets the verbosity for log output. 0 reports info and error messages, while 1 and up report more detailed logs.",
 	)
 	rootCmd.PersistentFlags().IntVar(
-		&maxDatagramSize,
-		"max-datagram-size",
+		&maxDatagramLength,
+		"max-datagram-length",
 		512,
-		`The maximum size of network messages in bytes. This should be set to a value which does not cause fragmentation.
+		`The maximum length of network messages in bytes. This should be set to a value which does not cause fragmentation.
 All members must use the same value, otherwise data loss and malformed messages might occur.
-A conservative size with most compatibility is (576 bytes IP datagram size) - (20 to 60 bytes IP header) - (8 bytes UDP header).
-A progressive size for an internal ethernet based network is (1500 bytes ethernet MTU) - (20 to 60 bytes IP header) - (8 bytes UDP header).`,
+A conservative length with most compatibility is (576 bytes IP datagram length) - (20 to 60 bytes IP header) - (8 bytes UDP header).
+A progressive length for an internal ethernet based network is (1500 bytes ethernet MTU) - (20 to 60 bytes IP header) - (8 bytes UDP header).`,
 	)
 
 	rootCmd.PersistentFlags().StringVar(

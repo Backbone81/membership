@@ -48,13 +48,13 @@ type ListConfig struct {
 	AdvertisedAddress  Address
 	UDPClientTransport *UDPClientTransport
 	TCPClientTransport *TCPClientTransport
-	MaxDatagramSize    int
+	MaxDatagramLength  int
 }
 
 var DefaultListConfig = ListConfig{
 	DirectPingTimeout: 100 * time.Millisecond,
 	ProtocolPeriod:    1 * time.Second,
-	MaxDatagramSize:   512,
+	MaxDatagramLength: 512,
 }
 
 // DirectProbeRecord provides bookkeeping for a direct probe which is still active.
@@ -62,7 +62,7 @@ type DirectProbeRecord struct {
 	// Timestamp is the point in time the direct probe was initiated.
 	Timestamp time.Time
 
-	// Destination is the endpoint which the direct probe was sent to.
+	// Destination is the address which the direct probe was sent to.
 	Destination Address
 
 	// MessageDirectPing is a copy of the message which was sent for the direct probe.
@@ -88,8 +88,8 @@ func NewList(config ListConfig) *List {
 		logger:              config.Logger,
 		self:                config.AdvertisedAddress,
 		gossipQueue:         NewGossipQueue(10), // TODO: The max gossip count needs to be adjusted for the number of members during runtime.
-		datagramBuffer:      make([]byte, 0, config.MaxDatagramSize),
-		datagramBuilder:     NewDatagramBuilder(config.MaxDatagramSize),
+		datagramBuffer:      make([]byte, 0, config.MaxDatagramLength),
+		datagramBuilder:     NewDatagramBuilder(config.MaxDatagramLength),
 		listRequestInterval: 1 * time.Minute,
 	}
 	// We need to gossip our own alive. Otherwise, nobody will pick us up into their own member list.
@@ -99,7 +99,7 @@ func NewList(config ListConfig) *List {
 	})
 	for _, initialMember := range config.InitialMembers {
 		newList.addMember(Member{
-			Endpoint:          initialMember,
+			Address:           initialMember,
 			State:             MemberStateAlive,
 			LastStateChange:   time.Now(),
 			IncarnationNumber: 0,
@@ -129,7 +129,7 @@ func (l *List) DirectProbe() error {
 	}
 	l.nextSequenceNumber++
 
-	destination := l.getNextMember().Endpoint
+	destination := l.getNextMember().Address
 	l.logger.V(1).Info(
 		"Direct probe",
 		"source", l.self,
@@ -164,18 +164,18 @@ func (l *List) markSuspectsAsFaulty() {
 		l.logger.Info(
 			"Member declared as faulty",
 			"source", l.self,
-			"destination", member.Endpoint,
+			"destination", member.Address,
 			"incarnation-number", member.IncarnationNumber,
 		)
 		l.faultyMembers = append(l.faultyMembers, Member{
-			Endpoint:          member.Endpoint,
+			Address:           member.Address,
 			State:             MemberStateFaulty,
 			LastStateChange:   time.Now(),
 			IncarnationNumber: member.IncarnationNumber,
 		})
 		l.gossipQueue.Add(&MessageFaulty{
 			Source:            l.self,
-			Destination:       member.Endpoint,
+			Destination:       member.Address,
 			IncarnationNumber: member.IncarnationNumber,
 		})
 		l.removeMemberByIndex(i)
@@ -191,7 +191,7 @@ func (l *List) processFailedProbes() {
 		}
 
 		memberIndex := slices.IndexFunc(l.members, func(record Member) bool {
-			return record.Endpoint.Equal(pendingDirectProbe.Destination)
+			return record.Address.Equal(pendingDirectProbe.Destination)
 		})
 		if memberIndex == -1 {
 			// We probably got a faulty message by some other member while we were waiting for our probe to succeed.
@@ -208,7 +208,7 @@ func (l *List) processFailedProbes() {
 		l.logger.Info(
 			"Member declared as suspect",
 			"source", l.self,
-			"destination", member.Endpoint,
+			"destination", member.Address,
 			"incarnation-number", member.IncarnationNumber,
 		)
 
@@ -217,7 +217,7 @@ func (l *List) processFailedProbes() {
 		member.LastStateChange = time.Now()
 		l.gossipQueue.Add(&MessageSuspect{
 			Source:            l.self,
-			Destination:       member.Endpoint,
+			Destination:       member.Address,
 			IncarnationNumber: member.IncarnationNumber,
 		})
 	}
@@ -299,9 +299,9 @@ func (l *List) IndirectProbe() error {
 				"source", l.self,
 				"destination", indirectPing.Destination,
 				"sequence-number", indirectPing.SequenceNumber,
-				"through", member.Endpoint,
+				"through", member.Address,
 			)
-			if err := l.sendWithGossip(member.Endpoint, &indirectPing); err != nil {
+			if err := l.sendWithGossip(member.Address, &indirectPing); err != nil {
 				joinedErr = errors.Join(joinedErr, err)
 			}
 		}
@@ -309,10 +309,10 @@ func (l *List) IndirectProbe() error {
 	return joinedErr
 }
 
-func (l *List) pickIndirectProbes(failureDetectionSubgroupSize int, directProbeEndpoint Address) []*Member {
+func (l *List) pickIndirectProbes(failureDetectionSubgroupSize int, directProbeAddress Address) []*Member {
 	candidateIndexes := make([]int, 0, len(l.members))
 	for index := range l.members {
-		if l.members[index].Endpoint.Equal(directProbeEndpoint) {
+		if l.members[index].Address.Equal(directProbeAddress) {
 			// We do not want to include the direct probe member into our list for indirect probes.
 			continue
 		}
@@ -604,7 +604,7 @@ func (l *List) handleSuspectForSelf(suspect MessageSuspect) bool {
 
 func (l *List) handleSuspectForFaultyMembers(suspect MessageSuspect) bool {
 	faultyMemberIndex := slices.IndexFunc(l.faultyMembers, func(member Member) bool {
-		return member.Endpoint.Equal(suspect.Destination)
+		return member.Address.Equal(suspect.Destination)
 	})
 	if faultyMemberIndex == -1 {
 		// The member is not part of our faulty members list. Nothing to do.
@@ -620,7 +620,7 @@ func (l *List) handleSuspectForFaultyMembers(suspect MessageSuspect) bool {
 	// Move the faulty member over to the member list
 	l.faultyMembers = slices.Delete(l.faultyMembers, faultyMemberIndex, faultyMemberIndex+1)
 	l.addMember(Member{
-		Endpoint:          suspect.Source,
+		Address:           suspect.Source,
 		State:             MemberStateSuspect,
 		LastStateChange:   time.Now(),
 		IncarnationNumber: suspect.IncarnationNumber,
@@ -631,7 +631,7 @@ func (l *List) handleSuspectForFaultyMembers(suspect MessageSuspect) bool {
 
 func (l *List) handleSuspectForMembers(suspect MessageSuspect) bool {
 	memberIndex := slices.IndexFunc(l.members, func(member Member) bool {
-		return member.Endpoint.Equal(suspect.Source)
+		return member.Address.Equal(suspect.Source)
 	})
 	if memberIndex == -1 {
 		// The member is not part of our members list. Nothing to do.
@@ -660,7 +660,7 @@ func (l *List) handleSuspectForMembers(suspect MessageSuspect) bool {
 func (l *List) handleSuspectForUnknown(suspect MessageSuspect) {
 	// We don't know about this member yet. Add it to our member list and gossip about it.
 	l.addMember(Member{
-		Endpoint:          suspect.Destination,
+		Address:           suspect.Destination,
 		State:             MemberStateSuspect,
 		LastStateChange:   time.Now(),
 		IncarnationNumber: suspect.IncarnationNumber,
@@ -695,7 +695,7 @@ func (l *List) handleAliveForSelf(alive MessageAlive) bool {
 
 func (l *List) handleAliveForFaultyMembers(alive MessageAlive) bool {
 	faultyMemberIndex := slices.IndexFunc(l.faultyMembers, func(member Member) bool {
-		return member.Endpoint.Equal(alive.Source)
+		return member.Address.Equal(alive.Source)
 	})
 	if faultyMemberIndex == -1 {
 		// The member is not part of our faulty members list. Nothing to do.
@@ -711,7 +711,7 @@ func (l *List) handleAliveForFaultyMembers(alive MessageAlive) bool {
 	// Move the faulty member over to the member list
 	l.faultyMembers = slices.Delete(l.faultyMembers, faultyMemberIndex, faultyMemberIndex+1)
 	l.addMember(Member{
-		Endpoint:          alive.Source,
+		Address:           alive.Source,
 		State:             MemberStateAlive,
 		LastStateChange:   time.Now(),
 		IncarnationNumber: alive.IncarnationNumber,
@@ -722,7 +722,7 @@ func (l *List) handleAliveForFaultyMembers(alive MessageAlive) bool {
 
 func (l *List) handleAliveForMembers(alive MessageAlive) bool {
 	memberIndex := slices.IndexFunc(l.members, func(member Member) bool {
-		return member.Endpoint.Equal(alive.Source)
+		return member.Address.Equal(alive.Source)
 	})
 	if memberIndex == -1 {
 		// The member is not part of our members list. Nothing to do.
@@ -751,7 +751,7 @@ func (l *List) handleAliveForMembers(alive MessageAlive) bool {
 func (l *List) handleAliveForUnknown(alive MessageAlive) {
 	// We don't know about this member yet. Add it to our member list and gossip about it.
 	l.addMember(Member{
-		Endpoint:          alive.Source,
+		Address:           alive.Source,
 		State:             MemberStateAlive,
 		LastStateChange:   time.Now(),
 		IncarnationNumber: alive.IncarnationNumber,
@@ -800,7 +800,7 @@ func (l *List) handleFaultyForSelf(faulty MessageFaulty) bool {
 
 func (l *List) handleFaultyForFaultyMembers(faulty MessageFaulty) bool {
 	faultyMemberIndex := slices.IndexFunc(l.faultyMembers, func(member Member) bool {
-		return member.Endpoint.Equal(faulty.Destination)
+		return member.Address.Equal(faulty.Destination)
 	})
 	if faultyMemberIndex == -1 {
 		// The member is not part of our faulty members list. Nothing to do.
@@ -820,7 +820,7 @@ func (l *List) handleFaultyForFaultyMembers(faulty MessageFaulty) bool {
 
 func (l *List) handleFaultyForMembers(faulty MessageFaulty) bool {
 	memberIndex := slices.IndexFunc(l.members, func(member Member) bool {
-		return member.Endpoint.Equal(faulty.Destination)
+		return member.Address.Equal(faulty.Destination)
 	})
 	if memberIndex == -1 {
 		// The member is not part of our member list. Nothing to do.
@@ -834,9 +834,9 @@ func (l *List) handleFaultyForMembers(faulty MessageFaulty) bool {
 	}
 
 	// Remove member from member list and put it on the faulty member list.
-	l.removeMemberByEndpoint(faulty.Destination)
+	l.removeMemberByAddress(faulty.Destination)
 	l.faultyMembers = append(l.faultyMembers, Member{
-		Endpoint:          faulty.Destination,
+		Address:           faulty.Destination,
 		State:             MemberStateFaulty,
 		LastStateChange:   time.Now(),
 		IncarnationNumber: faulty.IncarnationNumber,
@@ -848,7 +848,7 @@ func (l *List) handleFaultyForMembers(faulty MessageFaulty) bool {
 func (l *List) handleFaultyForUnknown(faulty MessageFaulty) {
 	// We don't know about this member yet. Add it to our faulty member list and gossip about it.
 	l.faultyMembers = append(l.faultyMembers, Member{
-		Endpoint:          faulty.Destination,
+		Address:           faulty.Destination,
 		State:             MemberStateFaulty,
 		LastStateChange:   time.Now(),
 		IncarnationNumber: faulty.IncarnationNumber,
@@ -892,13 +892,13 @@ func (l *List) handleListResponse(listResponse MessageListResponse) error {
 		case MemberStateSuspect:
 			l.handleSuspect(MessageSuspect{
 				Source:            listResponse.Source,
-				Destination:       member.Endpoint,
+				Destination:       member.Address,
 				IncarnationNumber: member.IncarnationNumber,
 			})
 		case MemberStateFaulty:
 			l.handleFaulty(MessageFaulty{
 				Source:            listResponse.Source,
-				Destination:       member.Endpoint,
+				Destination:       member.Address,
 				IncarnationNumber: member.IncarnationNumber,
 			})
 		default:
@@ -908,7 +908,7 @@ func (l *List) handleListResponse(listResponse MessageListResponse) error {
 	return nil
 }
 
-func (l *List) sendWithGossip(endpoint Address, message Message) error {
+func (l *List) sendWithGossip(address Address, message Message) error {
 	l.datagramBuffer = l.datagramBuffer[:0]
 	var err error
 	l.datagramBuffer, _, err = l.datagramBuilder.AppendToBuffer(l.datagramBuffer, message, l.gossipQueue)
@@ -916,7 +916,7 @@ func (l *List) sendWithGossip(endpoint Address, message Message) error {
 		return err
 	}
 
-	if err := l.config.UDPClientTransport.Send(endpoint, l.datagramBuffer); err != nil {
+	if err := l.config.UDPClientTransport.Send(address, l.datagramBuffer); err != nil {
 		return err
 	}
 	return nil
@@ -941,15 +941,15 @@ func (l *List) getRandomMember() *Member {
 	return &l.members[randomIndex]
 }
 
-func (l *List) isMember(endpoint Address) bool {
+func (l *List) isMember(address Address) bool {
 	return slices.ContainsFunc(l.members, func(member Member) bool {
-		return endpoint.Equal(member.Endpoint)
+		return address.Equal(member.Address)
 	})
 }
 
-func (l *List) getMember(endpoint Address) *Member {
+func (l *List) getMember(address Address) *Member {
 	index := slices.IndexFunc(l.members, func(member Member) bool {
-		return endpoint.Equal(member.Endpoint)
+		return address.Equal(member.Address)
 	})
 	if index == -1 {
 		return nil
@@ -960,7 +960,7 @@ func (l *List) getMember(endpoint Address) *Member {
 func (l *List) addMember(member Member) {
 	l.logger.Info(
 		"Member added",
-		"endpoint", member.Endpoint,
+		"address", member.Address,
 		"incarnation-number", member.IncarnationNumber,
 	)
 
@@ -979,9 +979,9 @@ func (l *List) addMember(member Member) {
 	}
 }
 
-func (l *List) removeMemberByEndpoint(endpoint Address) {
+func (l *List) removeMemberByAddress(address Address) {
 	index := slices.IndexFunc(l.members, func(member Member) bool {
-		return endpoint.Equal(member.Endpoint)
+		return address.Equal(member.Address)
 	})
 	if index == -1 {
 		return
@@ -992,7 +992,7 @@ func (l *List) removeMemberByEndpoint(endpoint Address) {
 func (l *List) removeMemberByIndex(index int) {
 	l.logger.Info(
 		"Member removed",
-		"endpoint", l.members[index].Endpoint,
+		"address", l.members[index].Address,
 		"incarnation-number", l.members[index].IncarnationNumber,
 	)
 

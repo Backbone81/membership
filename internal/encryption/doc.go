@@ -4,7 +4,7 @@
 //
 // This package implements encryption with AES-256 in Galois Counter Mode.
 //
-// Note that the default nonce size of 96 bits is used. This might have an impact on large setups where collisions on
+// Note that the default nonce length of 96 bits is used. This might have an impact on large setups where collisions on
 // nonces might be more likely to happen. This topic should be re-evaluated when such setups are actually happening.
 // A configurable nonce sice might be the solution for this issue.
 package encryption

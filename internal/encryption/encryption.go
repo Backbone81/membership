@@ -6,11 +6,11 @@ import (
 )
 
 const (
-	// BlockSize is the number of bytes encrypted and decrypted as one block.
-	BlockSize = aes.BlockSize
+	// BlockLength is the number of bytes encrypted and decrypted as one block.
+	BlockLength = aes.BlockSize
 
 	// Overhead is the number of bytes the ciphertext is longer than the plaintext.
-	Overhead = 12 + 16 // nonce size + tag size taken from gcmWithRandomNonce.Overhead()
+	Overhead = 12 + 16 // nonce length + tag length taken from gcmWithRandomNonce.Overhead()
 )
 
 // Encrypt encrypts the given plaintext with the given key.

@@ -85,13 +85,13 @@ var _ = Describe("Encryption", func() {
 func BenchmarkEncrypt(b *testing.B) {
 	key := encryption.NewRandomKey()
 	buffer := make([]byte, 0, 10*1024)
-	for dataSize := 8; dataSize <= 1024; dataSize *= 2 {
-		data := make([]byte, dataSize)
+	for dataLength := 8; dataLength <= 1024; dataLength *= 2 {
+		data := make([]byte, dataLength)
 		if _, err := rand.Read(data); err != nil {
 			b.Fatal(err)
 		}
 
-		b.Run(fmt.Sprintf("%d bytes", dataSize), func(b *testing.B) {
+		b.Run(fmt.Sprintf("%d bytes", dataLength), func(b *testing.B) {
 			for b.Loop() {
 				buffer = append(buffer[:0], data...)
 				_, err := encryption.Encrypt(key, buffer)
@@ -106,8 +106,8 @@ func BenchmarkEncrypt(b *testing.B) {
 func BenchmarkDecrypt(b *testing.B) {
 	key := encryption.NewRandomKey()
 	buffer := make([]byte, 0, 10*1024)
-	for dataSize := 8; dataSize <= 1024; dataSize *= 2 {
-		data := make([]byte, dataSize)
+	for dataLength := 8; dataLength <= 1024; dataLength *= 2 {
+		data := make([]byte, dataLength)
 		if _, err := rand.Read(data); err != nil {
 			b.Fatal(err)
 		}
@@ -116,7 +116,7 @@ func BenchmarkDecrypt(b *testing.B) {
 			b.Fatal(err)
 		}
 
-		b.Run(fmt.Sprintf("%d bytes", dataSize), func(b *testing.B) {
+		b.Run(fmt.Sprintf("%d bytes", dataLength), func(b *testing.B) {
 			for b.Loop() {
 				buffer = append(buffer[:0], ciphertext...)
 				_, err := encryption.Decrypt(key, buffer)

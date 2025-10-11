@@ -40,8 +40,8 @@ func MemberFromBuffer(buffer []byte) (Member, int, error) {
 
 	incarnationNumber := int(Endian.Uint16(buffer[endpointN+1:]))
 	return Member{
-		Endpoint: endpoint,
-		State: memberState,
+		Endpoint:          endpoint,
+		State:             memberState,
 		IncarnationNumber: incarnationNumber,
 	}, 0, nil
 }

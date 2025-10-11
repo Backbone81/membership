@@ -5,5 +5,9 @@ This Go library provides a peer-to-peer gossip based membership implementation. 
 
 ## TODOs
 
+- Should the FromBuffer functions return the remaining buffer to make it easier and less error-prone to work with?
+- How should we deal with sequence number wrap-around?
+- How should we deal with incarnation number wrap-around?
+
 - Provide a fixed round-trip timeout
 - Provide an auto round-trip timeout which is derived from the 99th percentile of past network messages and use +10%

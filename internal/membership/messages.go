@@ -426,7 +426,7 @@ func (m *MessageListRequest) FromBuffer(buffer []byte) (int, error) {
 // MessageListResponse provides a list of all known members. This message can become quite big and should always be
 // transmitted over TCP and not UDP.
 type MessageListResponse struct {
-	Source Endpoint
+	Source  Endpoint
 	Members []Member
 }
 
@@ -469,11 +469,11 @@ func (m *MessageListResponse) FromBuffer(buffer []byte) (int, error) {
 		return 0, err
 	}
 
-	count := int(Endian.Uint32(buffer[messageTypeN + sourceN:]))
+	count := int(Endian.Uint32(buffer[messageTypeN+sourceN:]))
 
 	var memberN int
 	for i := 0; i < count; i++ {
-		member, n, err := MemberFromBuffer(buffer[messageTypeN + sourceN + 4 + memberN:])
+		member, n, err := MemberFromBuffer(buffer[messageTypeN+sourceN+4+memberN:])
 		if err != nil {
 			return 0, err
 		}

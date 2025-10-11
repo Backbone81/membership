@@ -7,7 +7,7 @@ import (
 	"net"
 )
 
-type TCPClientTransport struct {}
+type TCPClientTransport struct{}
 
 func NewTCPClientTransport() *TCPClientTransport {
 	return &TCPClientTransport{}

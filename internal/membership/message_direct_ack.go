@@ -5,7 +5,11 @@ import "errors"
 // MessageDirectAck is a response message sent back in answer to receiving a MessageDirectPing.
 // This is the `ack` message of SWIM chapter 3.1. SWIM Failure Detector.
 type MessageDirectAck struct {
-	Source         Address
+	// Source is the member sending the direct ack. This is the same member which received the direct ping before.
+	Source Address
+
+	// SequenceNumber is the same sequence which the member received with the direct ping. This makes sure that direct
+	// acks which arrive too late are ignored.
 	SequenceNumber int
 }
 

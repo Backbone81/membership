@@ -5,13 +5,20 @@ import "errors"
 // MessageIndirectPing is a request of the recipient to send a MessageDirectPing to the destination.
 // This is the `ping-req` message of SWIM chapter 3.1. SWIM Failure Detector.
 type MessageIndirectPing struct {
-	Source         Address
-	Destination    Address
+	// Source is the member requesting the indirect ping.
+	Source Address
+
+	// Destination is the member which should be directly pinged by the member receiving this message.
+	Destination Address
+
+	// SequenceNumber is the sequence which should be unique for every direct ping. This sequence number should
+	// match the sequence number of the previous direct ping to allow correlation of direct and indirect pings.
 	SequenceNumber int
 }
 
-func (m *MessageIndirectPing) IsEmpty() bool {
-	return m.Source.IsZero()
+// IsZero reports if this message is the zero value.
+func (m *MessageIndirectPing) IsZero() bool {
+	return m.SequenceNumber == 0 && m.Source.IsZero() && m.Destination.IsZero()
 }
 
 // AppendToBuffer appends the message to the provided buffer encoded for network transfer.

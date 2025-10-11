@@ -29,3 +29,6 @@ This Go library provides a peer-to-peer gossip based membership implementation. 
 - Can we drop the interface for Message and collapse all message types into a single message which has all fields any
   message could have? That way we could be able to drop the interface and prevent memory allocations due to interface
   conversion.
+- The tests for messages are very repeating. Look into re-using code.
+- Check if we are actually discarding indirect probes when we receive a direct ack late?
+- The message setup in the message tests are quite repetitive. We should consolidate them.

@@ -5,8 +5,14 @@ import "errors"
 // MessageFaulty declares the destination as being faulty by the source.
 // This is the `Confirm` message of SWIM chapter 4.2. Suspicion Mechanism: Reducing the Frequency of False Positives.
 type MessageFaulty struct {
-	Source            Address
-	Destination       Address
+	// Source is the member which declared the destination as faulty.
+	Source Address
+
+	// Destination is the member which was declared as faulty by source.
+	Destination Address
+
+	// IncarnationNumber is the incarnation which source saw and based its decision on. This helps in identifying
+	// outdated messages.
 	IncarnationNumber int
 }
 

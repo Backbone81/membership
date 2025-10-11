@@ -5,8 +5,14 @@ import "errors"
 // MessageSuspect declares the destination as being suspected for failure by the source.
 // This is the `Suspect` message of SWIM chapter 4.2. Suspicion Mechanism: Reducing the Frequency of False Positives.
 type MessageSuspect struct {
-	Source            Address
-	Destination       Address
+	// Source is the member which declared the destination as suspect.
+	Source Address
+
+	// Destination is the member which was declared as suspect by source.
+	Destination Address
+
+	// IncarnationNumber is the incarnation which source saw and based its decision on. This helps in identifying
+	// outdated messages.
 	IncarnationNumber int
 }
 

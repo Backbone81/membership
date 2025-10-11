@@ -185,7 +185,7 @@ func (l *List) markSuspectsAsFaulty() {
 func (l *List) processFailedProbes() {
 	timeout := time.Now().Add(-l.config.ProtocolPeriod)
 	for _, pendingDirectProbe := range l.pendingDirectProbes {
-		if !pendingDirectProbe.MessageIndirectPing.IsEmpty() && !pendingDirectProbe.Timestamp.Before(timeout) {
+		if !pendingDirectProbe.MessageIndirectPing.IsZero() && !pendingDirectProbe.Timestamp.Before(timeout) {
 			// This is a direct probe which we need to keep around. Those are always requests for indirect probes.
 			continue
 		}
@@ -224,7 +224,7 @@ func (l *List) processFailedProbes() {
 
 	// Remove all pending probes which have timed out.
 	l.pendingDirectProbes = slices.DeleteFunc(l.pendingDirectProbes, func(record DirectProbeRecord) bool {
-		return record.MessageIndirectPing.IsEmpty() || record.Timestamp.Before(timeout)
+		return record.MessageIndirectPing.IsZero() || record.Timestamp.Before(timeout)
 	})
 
 	// As indirect probes always happen with a direct probe not being satisfied before, we can clear the indirect probes
@@ -271,7 +271,7 @@ func (l *List) IndirectProbe() error {
 
 	var joinedErr error
 	for _, directProbe := range l.pendingDirectProbes {
-		if !directProbe.MessageIndirectPing.IsEmpty() {
+		if !directProbe.MessageIndirectPing.IsZero() {
 			// We are not interested in direct probes which we do as a request for an indirect probe. We only do
 			// indirect probes for direct probes we initiated on our own.
 			continue
@@ -475,7 +475,7 @@ func (l *List) handleDirectAckForPendingDirectProbes(directAck MessageDirectAck)
 	pendingDirectProbe := l.pendingDirectProbes[pendingDirectProbeIndex]
 	l.pendingDirectProbes = slices.Delete(l.pendingDirectProbes, pendingDirectProbeIndex, pendingDirectProbeIndex+1)
 
-	if pendingDirectProbe.MessageIndirectPing.IsEmpty() {
+	if pendingDirectProbe.MessageIndirectPing.IsZero() {
 		// The direct probe was NOT done in a response to a request for an indirect probe, so we are done here.
 		return nil
 	}

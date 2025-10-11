@@ -6,7 +6,11 @@ import "errors"
 // a MessageDirectAck from the destination. The message is identical to MessageDirectAck but allows us to differentiate
 // those messages when calculating round trip times later.
 type MessageIndirectAck struct {
-	Source         Address
+	// Source is the member sending the indirect ack.
+	Source Address
+
+	// SequenceNumber is the same sequence which was initially sent with the indirect ping. This enables us to ignore
+	// indirect acks which arrive late.
 	SequenceNumber int
 }
 

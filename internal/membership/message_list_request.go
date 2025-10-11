@@ -5,6 +5,7 @@ import "errors"
 // MessageListRequest asks the recipient to send its current full member list to the source. This helps in making sure
 // new-joiners quickly get an overview over all members.
 type MessageListRequest struct {
+	// Source is the member sending this message
 	Source Address
 }
 

@@ -5,7 +5,10 @@ import "errors"
 // MessageAlive declares the destination as being alive by the source.
 // This is the `Alive` message of SWIM chapter 4.2. Suspicion Mechanism: Reducing the Frequency of False Positives.
 type MessageAlive struct {
-	Source            Address
+	// Source is the member declaring itself as alive.
+	Source Address
+
+	// IncarnationNumber is the incarnation to distinguish an outdated alive message from a new one.
 	IncarnationNumber int
 }
 

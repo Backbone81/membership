@@ -22,7 +22,10 @@ func (m *MessageListResponse) AppendToBuffer(buffer []byte) ([]byte, int, error)
 		return buffer, 0, err
 	}
 
-	countBuffer := Endian.AppendUint32(sourceBuffer, uint32(len(m.Members)))
+	countBuffer, countN, err := AppendMemberCountToBuffer(sourceBuffer, len(m.Members))
+	if err != nil {
+		return buffer, 0, err
+	}
 
 	memberBuffer := countBuffer
 	var memberN int
@@ -35,7 +38,7 @@ func (m *MessageListResponse) AppendToBuffer(buffer []byte) ([]byte, int, error)
 		memberN += n
 	}
 
-	return memberBuffer, messageTypeN + sourceN + 4 + memberN, nil
+	return memberBuffer, messageTypeN + sourceN + countN + memberN, nil
 }
 
 // FromBuffer reads the message from the provided buffer.
@@ -52,11 +55,23 @@ func (m *MessageListResponse) FromBuffer(buffer []byte) (int, error) {
 		return 0, err
 	}
 
-	count := int(Endian.Uint32(buffer[messageTypeN+sourceN:]))
+	count, countN, err := MemberCountFromBuffer(buffer[messageTypeN+sourceN:])
+	if err != nil {
+		return 0, err
+	}
+
+	if cap(m.Members) < count {
+		m.Members = make([]Member, 0, count)
+	}
+	if len(m.Members) != 0 {
+		// We reset the members slice after the check for capacity. In case the capacity is not enough, we save the
+		// reset because the length after the capacity increase already is 0.
+		m.Members = m.Members[:0]
+	}
 
 	var memberN int
 	for i := 0; i < count; i++ {
-		member, n, err := MemberFromBuffer(buffer[messageTypeN+sourceN+4+memberN:])
+		member, n, err := MemberFromBuffer(buffer[messageTypeN+sourceN+countN+memberN:])
 		if err != nil {
 			return 0, err
 		}
@@ -64,5 +79,5 @@ func (m *MessageListResponse) FromBuffer(buffer []byte) (int, error) {
 		m.Members = append(m.Members, member)
 	}
 
-	return messageTypeN + sourceN + 4 + memberN, nil
+	return messageTypeN + sourceN + countN + memberN, nil
 }

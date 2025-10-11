@@ -5,7 +5,11 @@ import "errors"
 // MessageDirectPing is a ping message directly sent to the recipient.
 // This is the `ping` message of SWIM chapter 3.1. SWIM Failure Detector.
 type MessageDirectPing struct {
-	Source         Address
+	// Source is the member sending the ping.
+	Source Address
+
+	// SequenceNumber is the sequence we expect to get back in the direct ack. The sequence number should be different
+	// for every direct ping we send out.
 	SequenceNumber int
 }
 

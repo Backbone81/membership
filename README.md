@@ -26,3 +26,6 @@ This Go library provides a peer-to-peer gossip based membership implementation. 
 - Check if we really need to use panic anywhere.
 - Add metrics to expose what is happening.
 - Support more than one direct probes during the protocol period
+- Can we drop the interface for Message and collapse all message types into a single message which has all fields any
+  message could have? That way we could be able to drop the interface and prevent memory allocations due to interface
+  conversion.

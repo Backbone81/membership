@@ -21,11 +21,6 @@ type GossipQueueEntry struct {
 	Count   int
 }
 
-type Message interface {
-	AppendToBuffer(buffer []byte) ([]byte, int, error)
-	FromBuffer(buffer []byte) (int, error)
-}
-
 func (q *GossipQueue) Prepare() {
 	// Let's first make sure that our gossip is ordered with the least gossiped first.
 	slices.SortFunc(q.queue, func(a, b GossipQueueEntry) int {

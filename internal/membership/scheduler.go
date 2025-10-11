@@ -24,7 +24,7 @@ type SchedulerConfig struct {
 	DirectPingTimeout time.Duration
 
 	// ProtocolPeriod is the time for a full cycle of direct ping followed by indirect pings. If there is no response
-	// from the target node within that time, we have to assume the node to have failed.
+	// from the target member within that time, we have to assume the member to have failed.
 	// Note that the protocol period must be at least three times the round-trip time.
 	ProtocolPeriod time.Duration
 

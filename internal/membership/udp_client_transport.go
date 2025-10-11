@@ -16,14 +16,14 @@ func NewUDPClientTransport(maxDatagramLength int) *UDPClientTransport {
 	}
 }
 
-func (t *UDPClientTransport) Send(endpoint Endpoint, buffer []byte) error {
+func (t *UDPClientTransport) Send(endpoint Address, buffer []byte) error {
 	if err := t.send(endpoint, buffer); err != nil {
 		return fmt.Errorf("UDP client transport send: %w", err)
 	}
 	return nil
 }
 
-func (t *UDPClientTransport) send(endpoint Endpoint, buffer []byte) error {
+func (t *UDPClientTransport) send(endpoint Address, buffer []byte) error {
 	if len(buffer) > t.maxDatagramLength {
 		return errors.New("buffer length exceeds maximum datagram length")
 	}

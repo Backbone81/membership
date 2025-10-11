@@ -11,14 +11,14 @@ const (
 )
 
 type Member struct {
-	Endpoint          Endpoint
+	Endpoint          Address
 	State             MemberState
 	LastStateChange   time.Time
 	IncarnationNumber int
 }
 
 func AppendMemberToBuffer(buffer []byte, member Member) ([]byte, int, error) {
-	endpointBuffer, endpointN, err := AppendEndpointToBuffer(buffer, member.Endpoint)
+	endpointBuffer, endpointN, err := AppendAddressToBuffer(buffer, member.Endpoint)
 	if err != nil {
 		return buffer, 0, err
 	}
@@ -31,7 +31,7 @@ func AppendMemberToBuffer(buffer []byte, member Member) ([]byte, int, error) {
 }
 
 func MemberFromBuffer(buffer []byte) (Member, int, error) {
-	endpoint, endpointN, err := EndpointFromBuffer(buffer)
+	endpoint, endpointN, err := AddressFromBuffer(buffer)
 	if err != nil {
 		return Member{}, 0, err
 	}

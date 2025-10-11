@@ -8,6 +8,9 @@ This Go library provides a peer-to-peer gossip based membership implementation. 
 - Should the FromBuffer functions return the remaining buffer to make it easier and less error-prone to work with?
 - How should we deal with sequence number wrap-around?
 - How should we deal with incarnation number wrap-around?
+- Make sure we are talking about addresses everywhere instead of endpoints.
+- Make sure we are talking about lengths everywhere instead of sizes.
+- Address should be serialized to buffer with variable length instead of ipv6 length all the time.
 
 - Provide a fixed round-trip timeout
 - Provide an auto round-trip timeout which is derived from the 99th percentile of past network messages and use +10%

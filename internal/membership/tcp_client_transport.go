@@ -13,14 +13,14 @@ func NewTCPClientTransport() *TCPClientTransport {
 	return &TCPClientTransport{}
 }
 
-func (t *TCPClientTransport) Send(endpoint Endpoint, buffer []byte) error {
+func (t *TCPClientTransport) Send(endpoint Address, buffer []byte) error {
 	if err := t.send(endpoint, buffer); err != nil {
 		return fmt.Errorf("TCP client transport send: %w", err)
 	}
 	return nil
 }
 
-func (t *TCPClientTransport) send(endpoint Endpoint, buffer []byte) error {
+func (t *TCPClientTransport) send(endpoint Address, buffer []byte) error {
 	// Make sure we are not exceeding the maximum datagram size with the given buffer.
 	if len(buffer) > math.MaxUint32 {
 		return errors.New("buffer length exceeds maximum datagram length")

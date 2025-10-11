@@ -48,16 +48,16 @@ var rootCmd = &cobra.Command{
 
 		logger.Info("Application startup")
 
-		var advertiseEndpoint membership.Endpoint
+		var advertiseEndpoint membership.Address
 		if advertiseAddress != "" {
 			addr, err := net.ResolveUDPAddr("udp", advertiseAddress)
 			if err != nil {
 				return fmt.Errorf("resolving advertise address: %w", err)
 			}
-			advertiseEndpoint = membership.Endpoint{
-				IP:   addr.IP,
-				Port: addr.Port,
-			}
+			advertiseEndpoint = membership.NewAddress(
+				addr.IP,
+				addr.Port,
+			)
 		} else {
 			_, port, err := net.SplitHostPort(bindAddress)
 			if err != nil {
@@ -72,10 +72,10 @@ var rootCmd = &cobra.Command{
 			if err != nil {
 				return err
 			}
-			advertiseEndpoint = membership.Endpoint{
-				IP:   localIp,
-				Port: typedPort,
-			}
+			advertiseEndpoint = membership.NewAddress(
+				localIp,
+				typedPort,
+			)
 		}
 		logger.Info(
 			"Advertised address",
@@ -84,17 +84,17 @@ var rootCmd = &cobra.Command{
 			"port", advertiseEndpoint.Port,
 		)
 
-		var initialMembers []membership.Endpoint
+		var initialMembers []membership.Address
 		for _, member := range members {
 			addr, err := net.ResolveUDPAddr("udp", member)
 			if err != nil {
 				logger.Error(err, "Resolving member", "address", member)
 				continue
 			}
-			endpoint := membership.Endpoint{
-				IP:   addr.IP,
-				Port: addr.Port,
-			}
+			endpoint := membership.NewAddress(
+				addr.IP,
+				addr.Port,
+			)
 			logger.Info(
 				"Resolved member",
 				"member", member,

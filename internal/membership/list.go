@@ -29,7 +29,7 @@ type List struct {
 	nextRandomIndex int
 	gossipQueue     *GossipQueue
 	datagramBuilder *DatagramBuilder
-	self            Endpoint
+	self            Address
 
 	datagramBuffer []byte
 
@@ -44,8 +44,8 @@ type ListConfig struct {
 	Logger             logr.Logger
 	DirectPingTimeout  time.Duration
 	ProtocolPeriod     time.Duration
-	InitialMembers     []Endpoint
-	AdvertisedAddress  Endpoint
+	InitialMembers     []Address
+	AdvertisedAddress  Address
 	UDPClientTransport *UDPClientTransport
 	TCPClientTransport *TCPClientTransport
 	MaxDatagramSize    int
@@ -63,7 +63,7 @@ type DirectProbeRecord struct {
 	Timestamp time.Time
 
 	// Destination is the endpoint which the direct probe was sent to.
-	Destination Endpoint
+	Destination Address
 
 	// MessageDirectPing is a copy of the message which was sent for the direct probe.
 	MessageDirectPing MessageDirectPing
@@ -246,14 +246,14 @@ func (l *List) requestList() error {
 	//	Source: l.self,
 	//}
 	//
-	//members := l.pickIndirectProbes(1, Endpoint{})
+	//members := l.pickIndirectProbes(1, Address{})
 	//var joinedErr error
 	//for _, member := range members {
 	//	l.logger.V(1).Info(
 	//		"Requesting member list",
-	//		"destination", member.Endpoint,
+	//		"destination", member.Address,
 	//	)
-	//	if err := l.sendWithGossip(member.Endpoint, &listRequest); err != nil {
+	//	if err := l.sendWithGossip(member.Address, &listRequest); err != nil {
 	//		joinedErr = errors.Join(joinedErr, err)
 	//	}
 	//}
@@ -309,7 +309,7 @@ func (l *List) IndirectProbe() error {
 	return joinedErr
 }
 
-func (l *List) pickIndirectProbes(failureDetectionSubgroupSize int, directProbeEndpoint Endpoint) []*Member {
+func (l *List) pickIndirectProbes(failureDetectionSubgroupSize int, directProbeEndpoint Address) []*Member {
 	candidateIndexes := make([]int, 0, len(l.members))
 	for index := range l.members {
 		if l.members[index].Endpoint.Equal(directProbeEndpoint) {
@@ -908,7 +908,7 @@ func (l *List) handleListResponse(listResponse MessageListResponse) error {
 	return nil
 }
 
-func (l *List) sendWithGossip(endpoint Endpoint, message Message) error {
+func (l *List) sendWithGossip(endpoint Address, message Message) error {
 	l.datagramBuffer = l.datagramBuffer[:0]
 	var err error
 	l.datagramBuffer, _, err = l.datagramBuilder.AppendToBuffer(l.datagramBuffer, message, l.gossipQueue)
@@ -941,13 +941,13 @@ func (l *List) getRandomMember() *Member {
 	return &l.members[randomIndex]
 }
 
-func (l *List) isMember(endpoint Endpoint) bool {
+func (l *List) isMember(endpoint Address) bool {
 	return slices.ContainsFunc(l.members, func(member Member) bool {
 		return endpoint.Equal(member.Endpoint)
 	})
 }
 
-func (l *List) getMember(endpoint Endpoint) *Member {
+func (l *List) getMember(endpoint Address) *Member {
 	index := slices.IndexFunc(l.members, func(member Member) bool {
 		return endpoint.Equal(member.Endpoint)
 	})
@@ -979,7 +979,7 @@ func (l *List) addMember(member Member) {
 	}
 }
 
-func (l *List) removeMemberByEndpoint(endpoint Endpoint) {
+func (l *List) removeMemberByEndpoint(endpoint Address) {
 	index := slices.IndexFunc(l.members, func(member Member) bool {
 		return endpoint.Equal(member.Endpoint)
 	})

@@ -2,32 +2,6 @@ package membership
 
 import "errors"
 
-type MessageType int
-
-const (
-	MessageTypeNone MessageType = iota // We start with a placeholder message type to detect missing types.
-	MessageTypeDirectPing
-	MessageTypeDirectAck
-	MessageTypeIndirectPing
-	MessageTypeIndirectAck
-	MessageTypeSuspect
-	MessageTypeAlive
-	MessageTypeFaulty
-	MessageTypeListRequest
-	MessageTypeListResponse
-)
-
-func AppendMessageTypeToBuffer(buffer []byte, messageType MessageType) ([]byte, int, error) {
-	return append(buffer, byte(messageType)), 1, nil
-}
-
-func MessageTypeFromBuffer(buffer []byte) (MessageType, int, error) {
-	if len(buffer) < 1 {
-		return 0, 0, errors.New("message type buffer too small")
-	}
-	return MessageType(buffer[0]), 1, nil
-}
-
 // MessageDirectPing is a ping message directly sent to the recipient.
 // This is the `ping` message of SWIM chapter 3.1. SWIM Failure Detector.
 type MessageDirectPing struct {

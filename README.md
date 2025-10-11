@@ -24,3 +24,5 @@ This Go library provides a peer-to-peer gossip based membership implementation. 
 - How should we deal with sequence number wrap-around?
 - How should we deal with incarnation number wrap-around?
 - Check if we really need to use panic anywhere.
+- Add metrics to expose what is happening.
+- Support more than one direct probes during the protocol period

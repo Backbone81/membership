@@ -28,27 +28,23 @@ type List struct {
 	randomIndexes   []int
 	nextRandomIndex int
 	gossipQueue     *GossipQueue
-	datagramBuilder *DatagramBuilder
 	self            Address
 
 	datagramBuffer []byte
 
 	pendingDirectProbes   []DirectProbeRecord
 	pendingIndirectProbes []IndirectProbeRecord
-
-	listRequestInterval time.Duration
-	lastListRequest     time.Time
 }
 
 type ListConfig struct {
-	Logger             logr.Logger
-	DirectPingTimeout  time.Duration
-	ProtocolPeriod     time.Duration
-	InitialMembers     []Address
-	AdvertisedAddress  Address
-	UDPClientTransport Transport
-	TCPClientTransport Transport
-	MaxDatagramLength  int
+	Logger            logr.Logger
+	DirectPingTimeout time.Duration
+	ProtocolPeriod    time.Duration
+	InitialMembers    []Address
+	AdvertisedAddress Address
+	UDPClient         Transport
+	TCPClient         Transport
+	MaxDatagramLength int
 }
 
 var DefaultListConfig = ListConfig{
@@ -84,13 +80,11 @@ type IndirectProbeRecord struct {
 
 func NewList(config ListConfig) *List {
 	newList := List{
-		config:              config,
-		logger:              config.Logger,
-		self:                config.AdvertisedAddress,
-		gossipQueue:         NewGossipQueue(10), // TODO: The max gossip count needs to be adjusted for the number of members during runtime.
-		datagramBuffer:      make([]byte, 0, config.MaxDatagramLength),
-		datagramBuilder:     NewDatagramBuilder(config.MaxDatagramLength),
-		listRequestInterval: 1 * time.Minute,
+		config:         config,
+		logger:         config.Logger,
+		self:           config.AdvertisedAddress,
+		gossipQueue:    NewGossipQueue(10), // TODO: The max gossip count needs to be adjusted for the number of members during runtime.
+		datagramBuffer: make([]byte, 0, config.MaxDatagramLength),
 	}
 	// We need to gossip our own alive. Otherwise, nobody will pick us up into their own member list.
 	newList.gossipQueue.Add(&MessageAlive{
@@ -877,7 +871,7 @@ func (l *List) handleListRequest(listRequest MessageListRequest) error {
 		return err
 	}
 
-	if err := l.config.TCPClientTransport.Send(listRequest.Source, buffer); err != nil {
+	if err := l.config.TCPClient.Send(listRequest.Source, buffer); err != nil {
 		return err
 	}
 	return nil
@@ -916,13 +910,32 @@ func (l *List) handleListResponse(listResponse MessageListResponse) error {
 
 func (l *List) sendWithGossip(address Address, message Message) error {
 	l.datagramBuffer = l.datagramBuffer[:0]
+
 	var err error
-	l.datagramBuffer, _, err = l.datagramBuilder.AppendToBuffer(l.datagramBuffer, message, l.gossipQueue)
+	var datagramN int
+	l.datagramBuffer, datagramN, err = message.AppendToBuffer(l.datagramBuffer)
 	if err != nil {
 		return err
 	}
 
-	if err := l.config.UDPClientTransport.Send(address, l.datagramBuffer); err != nil {
+	l.gossipQueue.Prepare()
+	for i := 0; i < l.gossipQueue.Len(); i++ {
+		var gossipN int
+		l.datagramBuffer, gossipN, err = l.gossipQueue.Get(i).AppendToBuffer(l.datagramBuffer)
+		if err != nil {
+			return err
+		}
+
+		if len(l.datagramBuffer) > l.config.MaxDatagramLength {
+			l.datagramBuffer = l.datagramBuffer[:len(l.datagramBuffer)-gossipN]
+			break
+		}
+
+		l.gossipQueue.MarkGossiped(i)
+		datagramN += gossipN
+	}
+
+	if err := l.config.UDPClient.Send(address, l.datagramBuffer); err != nil {
 		return err
 	}
 	return nil

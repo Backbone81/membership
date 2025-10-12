@@ -110,13 +110,13 @@ var rootCmd = &cobra.Command{
 		}
 
 		membershipList := membership.NewList(membership.ListConfig{
-			Logger:             logger,
-			DirectPingTimeout:  directPingTimeout,
-			ProtocolPeriod:     protocolPeriod,
-			InitialMembers:     initialMembers,
-			AdvertisedAddress:  typedAdvertiseAddress,
-			UDPClientTransport: transport.NewUDPClient(maxDatagramLength),
-			MaxDatagramLength:  maxDatagramLength,
+			Logger:            logger,
+			DirectPingTimeout: directPingTimeout,
+			ProtocolPeriod:    protocolPeriod,
+			InitialMembers:    initialMembers,
+			AdvertisedAddress: typedAdvertiseAddress,
+			UDPClient:         transport.NewUDPClient(maxDatagramLength),
+			MaxDatagramLength: maxDatagramLength,
 		})
 
 		udpServerTransport := transport.NewUDPServer(logger, membershipList, bindAddress, maxDatagramLength)

@@ -40,3 +40,6 @@ This Go library provides a peer-to-peer gossip based membership implementation. 
 - Shutdown of the membership should send a faulty message to propagate the not existing member.
 - We should find a mechanic which tells a member the last known incarnation number to allow joining members without
   having to remember the incarnation number.
+- The number a gossip is gossiped needs to be dynamically adjusted to the size of the member cluster.
+- Gossip needs to be prioritized for the targeted member (i.e. if we have a gossip about the target member being suspect,
+  this needs to be gossiped first to improve the chance of the member refuting the suspect)

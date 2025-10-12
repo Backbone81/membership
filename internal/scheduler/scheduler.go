@@ -143,6 +143,13 @@ func (s *Scheduler) requestListTask() {
 	defer s.logger.Info("Member list request background task finished")
 	defer s.waitGroup.Done()
 
+	// Let's do a list request right at startup to have the full member list available as soon as possible.
+	s.measure("Request list completed", func() {
+		if err := s.target.RequestList(); err != nil {
+			s.logger.Error(err, "Startup list request.")
+		}
+	})
+
 	for {
 		select {
 		case <-s.shutdown:

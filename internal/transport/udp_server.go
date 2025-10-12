@@ -4,8 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strconv"
 	"sync"
 
+	"github.com/backbone81/membership/internal/membership"
 	"github.com/go-logr/logr"
 )
 
@@ -56,6 +58,25 @@ func (t *UDPServer) Shutdown() error {
 	}
 	t.waitGroup.Wait()
 	return nil
+}
+
+// Addr returns the address the server is listening on.
+func (t *UDPServer) Addr() (membership.Address, error) {
+	host, port, err := net.SplitHostPort(t.connection.LocalAddr().String())
+	if err != nil {
+		return membership.Address{}, err
+	}
+
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return membership.Address{}, errors.New("not an ip address")
+	}
+	typedPort, err := strconv.Atoi(port)
+	if err != nil {
+		return membership.Address{}, err
+	}
+
+	return membership.NewAddress(ip, typedPort), nil
 }
 
 func (t *UDPServer) backgroundTask() {

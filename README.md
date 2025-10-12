@@ -32,3 +32,11 @@ This Go library provides a peer-to-peer gossip based membership implementation. 
 - The tests for messages are very repeating. Look into re-using code.
 - Check if we are actually discarding indirect probes when we receive a direct ack late?
 - The message setup in the message tests are quite repetitive. We should consolidate them.
+- Add encryption and support multiple encryption keys for key rollover. The first key is always used for encryption, all
+  keys are used for decryption.
+- Introduce jitter into the scheduler to avoid spikes in network traffic.
+- Make the scheduler react quicker to shutdown requests and have it warn about intervals getting too short and warn
+  about intervals being missed.
+- Shutdown of the membership should send a faulty message to propagate the not existing member.
+- We should find a mechanic which tells a member the last known incarnation number to allow joining members without
+  having to remember the incarnation number.

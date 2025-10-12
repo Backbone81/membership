@@ -135,9 +135,11 @@ var rootCmd = &cobra.Command{
 		}
 
 		scheduler := membership.NewScheduler(membershipList, membership.SchedulerConfig{
-			Logger:            logger,
-			DirectPingTimeout: directPingTimeout,
-			ProtocolPeriod:    protocolPeriod,
+			Logger:              logger,
+			ProtocolPeriod:      protocolPeriod,
+			DirectPingTimeout:   directPingTimeout,
+			MaxSleepDuration:    100 * time.Millisecond,
+			ListRequestInterval: 1 * time.Minute,
 		})
 		if err := scheduler.Startup(); err != nil {
 			return err

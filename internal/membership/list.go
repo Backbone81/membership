@@ -108,15 +108,9 @@ func NewList(config ListConfig) *List {
 	return &newList
 }
 
-func (l *List) DirectProbe() error {
+func (l *List) DirectPing() error {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
-
-	l.markSuspectsAsFaulty()
-	l.processFailedProbes()
-	if err := l.requestList(); err != nil {
-		return err
-	}
 
 	if len(l.members) < 1 {
 		// As long as there are no other members, we don't have to probe anyone.
@@ -142,6 +136,90 @@ func (l *List) DirectProbe() error {
 		MessageDirectPing: directPing,
 	})
 	if err := l.sendWithGossip(destination, &directPing); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (l *List) IndirectPing() error {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	// An indirect probe only makes sense whe we have at least two members.
+	if len(l.members) < 2 {
+		return nil
+	}
+
+	var joinedErr error
+	for _, directProbe := range l.pendingDirectProbes {
+		if !directProbe.MessageIndirectPing.IsZero() {
+			// We are not interested in direct probes which we do as a request for an indirect probe. We only do
+			// indirect probes for direct probes we initiated on our own.
+			continue
+		}
+
+		indirectPing := MessageIndirectPing{
+			Source:      l.self,
+			Destination: directProbe.Destination,
+
+			// We use the same sequence number as we did for the corresponding direct probe. That way, logs can
+			// correlate the indirect probe with the direct probe, and we know which indirect probes to discard when
+			// the direct probe succeeds late.
+			SequenceNumber: directProbe.MessageDirectPing.SequenceNumber,
+		}
+
+		// Send the indirect probes to the indirect probe members and join up all errors which might occur.
+		members := l.pickIndirectProbes(l.failureDetectionSubgroupSize, directProbe.Destination)
+		l.pendingIndirectProbes = append(l.pendingIndirectProbes, IndirectProbeRecord{
+			Timestamp:           time.Now(),
+			MessageIndirectPing: indirectPing,
+		})
+		for _, member := range members {
+			l.logger.V(1).Info(
+				"Indirect probe",
+				"source", l.self,
+				"destination", indirectPing.Destination,
+				"sequence-number", indirectPing.SequenceNumber,
+				"through", member.Address,
+			)
+			if err := l.sendWithGossip(member.Address, &indirectPing); err != nil {
+				joinedErr = errors.Join(joinedErr, err)
+			}
+		}
+	}
+	return joinedErr
+}
+
+func (l *List) pickIndirectProbes(failureDetectionSubgroupSize int, directProbeAddress Address) []*Member {
+	candidateIndexes := make([]int, 0, len(l.members))
+	for index := range l.members {
+		if l.members[index].Address.Equal(directProbeAddress) {
+			// We do not want to include the direct probe member into our list for indirect probes.
+			continue
+		}
+		candidateIndexes = append(candidateIndexes, index)
+	}
+
+	rand.Shuffle(len(candidateIndexes), func(i, j int) {
+		candidateIndexes[i], candidateIndexes[j] = candidateIndexes[j], candidateIndexes[i]
+	})
+
+	// Pick the first few candidates.
+	candidateIndexes = candidateIndexes[:min(failureDetectionSubgroupSize, len(candidateIndexes))]
+	result := make([]*Member, len(candidateIndexes))
+	for i := range candidateIndexes {
+		result[i] = &l.members[candidateIndexes[i]]
+	}
+	return result
+}
+
+func (l *List) EndOfProtocolPeriod() error {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	l.markSuspectsAsFaulty()
+	l.processFailedProbes()
+	if err := l.RequestList(); err != nil {
 		return err
 	}
 	return nil
@@ -232,7 +310,7 @@ func (l *List) processFailedProbes() {
 	l.pendingIndirectProbes = l.pendingIndirectProbes[:0]
 }
 
-func (l *List) requestList() error {
+func (l *List) RequestList() error {
 	// Disabled for now.
 	return nil
 
@@ -258,78 +336,6 @@ func (l *List) requestList() error {
 	//	}
 	//}
 	//return joinedErr
-}
-
-func (l *List) IndirectProbe() error {
-	l.mutex.Lock()
-	defer l.mutex.Unlock()
-
-	// An indirect probe only makes sense whe we have at least two members.
-	if len(l.members) < 2 {
-		return nil
-	}
-
-	var joinedErr error
-	for _, directProbe := range l.pendingDirectProbes {
-		if !directProbe.MessageIndirectPing.IsZero() {
-			// We are not interested in direct probes which we do as a request for an indirect probe. We only do
-			// indirect probes for direct probes we initiated on our own.
-			continue
-		}
-
-		indirectPing := MessageIndirectPing{
-			Source:      l.self,
-			Destination: directProbe.Destination,
-
-			// We use the same sequence number as we did for the corresponding direct probe. That way, logs can
-			// correlate the indirect probe with the direct probe, and we know which indirect probes to discard when
-			// the direct probe succeeds late.
-			SequenceNumber: directProbe.MessageDirectPing.SequenceNumber,
-		}
-
-		// Send the indirect probes to the indirect probe members and join up all errors which might occur.
-		members := l.pickIndirectProbes(l.failureDetectionSubgroupSize, directProbe.Destination)
-		l.pendingIndirectProbes = append(l.pendingIndirectProbes, IndirectProbeRecord{
-			Timestamp:           time.Now(),
-			MessageIndirectPing: indirectPing,
-		})
-		for _, member := range members {
-			l.logger.V(1).Info(
-				"Indirect probe",
-				"source", l.self,
-				"destination", indirectPing.Destination,
-				"sequence-number", indirectPing.SequenceNumber,
-				"through", member.Address,
-			)
-			if err := l.sendWithGossip(member.Address, &indirectPing); err != nil {
-				joinedErr = errors.Join(joinedErr, err)
-			}
-		}
-	}
-	return joinedErr
-}
-
-func (l *List) pickIndirectProbes(failureDetectionSubgroupSize int, directProbeAddress Address) []*Member {
-	candidateIndexes := make([]int, 0, len(l.members))
-	for index := range l.members {
-		if l.members[index].Address.Equal(directProbeAddress) {
-			// We do not want to include the direct probe member into our list for indirect probes.
-			continue
-		}
-		candidateIndexes = append(candidateIndexes, index)
-	}
-
-	rand.Shuffle(len(candidateIndexes), func(i, j int) {
-		candidateIndexes[i], candidateIndexes[j] = candidateIndexes[j], candidateIndexes[i]
-	})
-
-	// Pick the first few candidates.
-	candidateIndexes = candidateIndexes[:min(failureDetectionSubgroupSize, len(candidateIndexes))]
-	result := make([]*Member, len(candidateIndexes))
-	for i := range candidateIndexes {
-		result[i] = &l.members[candidateIndexes[i]]
-	}
-	return result
 }
 
 func (l *List) DispatchDatagram(buffer []byte) error {

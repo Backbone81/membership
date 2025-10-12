@@ -1,26 +1,31 @@
-package membership
+package transport
 
 import (
 	"errors"
 	"fmt"
 	"math"
 	"net"
+
+	"github.com/backbone81/membership/internal/membership"
 )
 
-type TCPClientTransport struct{}
+// TCPClient provides reliable transport for sending data to a member.
+type TCPClient struct{}
 
-func NewTCPClientTransport() *TCPClientTransport {
-	return &TCPClientTransport{}
+// NewTCPClient creates a new TCPClient transport.
+func NewTCPClient() *TCPClient {
+	return &TCPClient{}
 }
 
-func (t *TCPClientTransport) Send(address Address, buffer []byte) error {
+// Send transmits the given buffer to the member with the given address.
+func (t *TCPClient) Send(address membership.Address, buffer []byte) error {
 	if err := t.send(address, buffer); err != nil {
 		return fmt.Errorf("TCP client transport send: %w", err)
 	}
 	return nil
 }
 
-func (t *TCPClientTransport) send(address Address, buffer []byte) error {
+func (t *TCPClient) send(address membership.Address, buffer []byte) error {
 	// Make sure we are not exceeding the maximum datagram length with the given buffer.
 	if len(buffer) > math.MaxUint32 {
 		return errors.New("buffer length exceeds maximum datagram length")
@@ -33,7 +38,7 @@ func (t *TCPClientTransport) send(address Address, buffer []byte) error {
 	defer connection.Close()
 
 	var lengthBuffer [4]byte
-	Endian.PutUint32(lengthBuffer[:], uint32(len(buffer)))
+	membership.Endian.PutUint32(lengthBuffer[:], uint32(len(buffer)))
 	if _, err := connection.Write(lengthBuffer[:]); err != nil {
 		return fmt.Errorf("sending the datagram length: %w", err)
 	}

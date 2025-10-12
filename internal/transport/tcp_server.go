@@ -1,4 +1,4 @@
-package membership
+package transport
 
 import (
 	"errors"
@@ -6,33 +6,32 @@ import (
 	"net"
 	"sync"
 
+	"github.com/backbone81/membership/internal/membership"
 	"github.com/go-logr/logr"
 )
 
-type TCPServerTransport struct {
-	logger    logr.Logger
-	config    TCPServerTransportConfig
-	list      *List
-	listener  net.Listener
-	waitGroup sync.WaitGroup
+// TCPServer provides reliable transport for receiving data from members.
+type TCPServer struct {
+	logger      logr.Logger
+	target      Target
+	bindAddress string
+	listener    net.Listener
+	waitGroup   sync.WaitGroup
 }
 
-type TCPServerTransportConfig struct {
-	Logger logr.Logger
-	Host   string
-}
-
-func NewTCPServerTransport(list *List, config TCPServerTransportConfig) *TCPServerTransport {
-	return &TCPServerTransport{
-		logger: config.Logger,
-		config: config,
-		list:   list,
+// NewTCPServer creates a new TCPServer transport.
+func NewTCPServer(logger logr.Logger, target Target, bindAddress string) *TCPServer {
+	return &TCPServer{
+		logger:      logger,
+		target:      target,
+		bindAddress: bindAddress,
 	}
 }
 
-func (t *TCPServerTransport) Startup() error {
+// Startup starts the server and listens for incoming connections.
+func (t *TCPServer) Startup() error {
 	t.logger.Info("TCP server transport startup")
-	listener, err := net.Listen("tcp", t.config.Host)
+	listener, err := net.Listen("tcp", t.bindAddress)
 	if err != nil {
 		return err
 	}
@@ -43,7 +42,8 @@ func (t *TCPServerTransport) Startup() error {
 	return nil
 }
 
-func (t *TCPServerTransport) Shutdown() error {
+// Shutdown ends the server and waits for all connections to be closed.
+func (t *TCPServer) Shutdown() error {
 	t.logger.Info("TCP server transport shutdown")
 	if err := t.listener.Close(); err != nil {
 		return err
@@ -52,7 +52,8 @@ func (t *TCPServerTransport) Shutdown() error {
 	return nil
 }
 
-func (t *TCPServerTransport) backgroundTask() {
+// backgroundTask is accepting connections and creating go routines to handle them.
+func (t *TCPServer) backgroundTask() {
 	t.logger.Info("TCP server transport background task started")
 	defer t.logger.Info("TCP server transport background task finished")
 
@@ -71,7 +72,8 @@ func (t *TCPServerTransport) backgroundTask() {
 	}
 }
 
-func (t *TCPServerTransport) handleConnection(connection net.Conn) {
+// handleConnection is handling a single connection.
+func (t *TCPServer) handleConnection(connection net.Conn) {
 	if err := t.handleConnectionImpl(connection); err != nil {
 		t.logger.Error(err, "Handling TCP connection")
 	}
@@ -80,7 +82,7 @@ func (t *TCPServerTransport) handleConnection(connection net.Conn) {
 	}
 }
 
-func (t *TCPServerTransport) handleConnectionImpl(connection net.Conn) error {
+func (t *TCPServer) handleConnectionImpl(connection net.Conn) error {
 	defer t.waitGroup.Done()
 	buffer := make([]byte, 1024)
 
@@ -88,7 +90,7 @@ func (t *TCPServerTransport) handleConnectionImpl(connection net.Conn) error {
 	if _, err := io.ReadFull(connection, buffer[:4]); err != nil {
 		return err
 	}
-	datagramLength := int(Endian.Uint32(buffer[:4]))
+	datagramLength := int(membership.Endian.Uint32(buffer[:4]))
 
 	// Let's read the datagram payload.
 	if len(buffer) < 4+datagramLength {
@@ -105,7 +107,7 @@ func (t *TCPServerTransport) handleConnectionImpl(connection net.Conn) error {
 		return err
 	}
 
-	if err := t.list.DispatchDatagram(buffer[4 : 4+datagramLength]); err != nil {
+	if err := t.target.DispatchDatagram(buffer[4 : 4+datagramLength]); err != nil {
 		t.logger.Error(err, "Dispatching TCP message")
 	}
 	return nil

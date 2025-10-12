@@ -46,8 +46,8 @@ type ListConfig struct {
 	ProtocolPeriod     time.Duration
 	InitialMembers     []Address
 	AdvertisedAddress  Address
-	UDPClientTransport *UDPClientTransport
-	TCPClientTransport *TCPClientTransport
+	UDPClientTransport Transport
+	TCPClientTransport Transport
 	MaxDatagramLength  int
 }
 

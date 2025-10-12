@@ -13,6 +13,7 @@ import (
 
 	"github.com/backbone81/membership/internal/membership"
 	"github.com/backbone81/membership/internal/scheduler"
+	"github.com/backbone81/membership/internal/transport"
 	"github.com/go-logr/logr"
 	"github.com/go-logr/zapr"
 	"github.com/spf13/cobra"
@@ -114,23 +115,16 @@ var rootCmd = &cobra.Command{
 			ProtocolPeriod:     protocolPeriod,
 			InitialMembers:     initialMembers,
 			AdvertisedAddress:  typedAdvertiseAddress,
-			UDPClientTransport: membership.NewUDPClientTransport(maxDatagramLength),
+			UDPClientTransport: transport.NewUDPClient(maxDatagramLength),
 			MaxDatagramLength:  maxDatagramLength,
 		})
 
-		udpServerTransport := membership.NewUDPServerTransport(membershipList, membership.UDPServerTransportConfig{
-			Logger:              logger,
-			Host:                bindAddress,
-			ReceiveBufferLength: maxDatagramLength,
-		})
+		udpServerTransport := transport.NewUDPServer(logger, membershipList, bindAddress, maxDatagramLength)
 		if err := udpServerTransport.Startup(); err != nil {
 			return err
 		}
 
-		tcpServerTransport := membership.NewTCPServerTransport(membershipList, membership.TCPServerTransportConfig{
-			Logger: logger,
-			Host:   bindAddress,
-		})
+		tcpServerTransport := transport.NewTCPServer(logger, membershipList, bindAddress)
 		if err := tcpServerTransport.Startup(); err != nil {
 			return err
 		}

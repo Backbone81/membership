@@ -18,8 +18,8 @@ type Scheduler struct {
 	listRequestTicker *time.Ticker
 }
 
-// NewScheduler creates a new scheduler with the given configuration. Provide options to customize default config.
-func NewScheduler(target Target, options ...Option) *Scheduler {
+// New creates a new scheduler with the given configuration. Provide options to customize default config.
+func New(target Target, options ...Option) *Scheduler {
 	config := DefaultConfig
 	for _, option := range options {
 		option(&config)

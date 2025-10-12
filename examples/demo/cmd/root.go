@@ -135,7 +135,7 @@ var rootCmd = &cobra.Command{
 			return err
 		}
 
-		scheduler := scheduler.NewScheduler(
+		scheduler := scheduler.New(
 			membershipList,
 			scheduler.WithLogger(logger),
 			scheduler.WithProtocolPeriod(protocolPeriod),

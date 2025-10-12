@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/backbone81/membership/internal/membership"
+	"github.com/backbone81/membership/internal/scheduler"
 	"github.com/go-logr/logr"
 	"github.com/go-logr/zapr"
 	"github.com/spf13/cobra"
@@ -80,8 +81,8 @@ var rootCmd = &cobra.Command{
 		logger.Info(
 			"Advertised address",
 			"address", advertiseAddress,
-			"ip", typedAdvertiseAddress.IP,
-			"port", typedAdvertiseAddress.Port,
+			"ip", typedAdvertiseAddress.IP(),
+			"port", typedAdvertiseAddress.Port(),
 		)
 
 		var initialMembers []membership.Address
@@ -98,8 +99,8 @@ var rootCmd = &cobra.Command{
 			logger.Info(
 				"Resolved member",
 				"member", member,
-				"ip", address.IP,
-				"port", address.Port,
+				"ip", address.IP(),
+				"port", address.Port(),
 			)
 			initialMembers = append(initialMembers, address)
 		}
@@ -134,13 +135,12 @@ var rootCmd = &cobra.Command{
 			return err
 		}
 
-		scheduler := membership.NewScheduler(membershipList, membership.SchedulerConfig{
-			Logger:              logger,
-			ProtocolPeriod:      protocolPeriod,
-			DirectPingTimeout:   directPingTimeout,
-			MaxSleepDuration:    100 * time.Millisecond,
-			ListRequestInterval: 1 * time.Minute,
-		})
+		scheduler := scheduler.NewScheduler(
+			membershipList,
+			scheduler.WithLogger(logger),
+			scheduler.WithProtocolPeriod(protocolPeriod),
+			scheduler.WithDirectPingTimeout(directPingTimeout),
+		)
 		if err := scheduler.Startup(); err != nil {
 			return err
 		}

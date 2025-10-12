@@ -59,9 +59,11 @@ func (s *Scheduler) protocolPeriodTask() {
 
 	directPingAt := time.Now()
 	for {
-		if err := s.target.DirectPing(); err != nil {
-			s.logger.Error(err, "Scheduled direct ping.")
-		}
+		s.measure("Direct ping completed", func() {
+			if err := s.target.DirectPing(); err != nil {
+				s.logger.Error(err, "Scheduled direct ping.")
+			}
+		})
 
 		indirectPingAt := directPingAt.Add(s.config.DirectPingTimeout)
 		if indirectPingAt.Sub(time.Now()) < s.config.DirectPingTimeout/2 {
@@ -74,17 +76,21 @@ func (s *Scheduler) protocolPeriodTask() {
 		if !s.waitUntil(indirectPingAt) {
 			return
 		}
-		if err := s.target.IndirectPing(); err != nil {
-			s.logger.Error(err, "Scheduled indirect ping.")
-		}
+		s.measure("Indirect ping completed", func() {
+			if err := s.target.IndirectPing(); err != nil {
+				s.logger.Error(err, "Scheduled indirect ping.")
+			}
+		})
 
 		endOfProtocolPeriodAt := directPingAt.Add(s.config.ProtocolPeriod)
 		if !s.waitUntil(endOfProtocolPeriodAt) {
 			return
 		}
-		if err := s.target.EndOfProtocolPeriod(); err != nil {
-			s.logger.Error(err, "End of protocol period.")
-		}
+		s.measure("End of protocol period completed", func() {
+			if err := s.target.EndOfProtocolPeriod(); err != nil {
+				s.logger.Error(err, "End of protocol period.")
+			}
+		})
 
 		directPingAt = directPingAt.Add(s.config.ProtocolPeriod)
 	}
@@ -142,9 +148,19 @@ func (s *Scheduler) requestListTask() {
 		case <-s.shutdown:
 			return
 		case <-s.listRequestTicker.C:
-			if err := s.target.RequestList(); err != nil {
-				s.logger.Error(err, "Scheduled list request.")
-			}
+			s.measure("Request list completed", func() {
+				if err := s.target.RequestList(); err != nil {
+					s.logger.Error(err, "Scheduled list request.")
+				}
+			})
 		}
 	}
+}
+
+// measure executes the given function and measures the time needed. It will log the given message with the measured
+// duration.
+func (s *Scheduler) measure(message string, f func()) {
+	start := time.Now()
+	f()
+	s.logger.V(4).Info(message, "duration", time.Since(start))
 }

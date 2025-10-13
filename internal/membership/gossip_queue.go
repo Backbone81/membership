@@ -2,6 +2,7 @@ package membership
 
 import (
 	"cmp"
+	"maps"
 	"slices"
 )
 
@@ -9,11 +10,13 @@ import (
 // which helps distribute new gossip quickly.
 type GossipQueue struct {
 	queue          []GossipQueueEntry
+	indexByAddress map[Address]int
 	maxGossipCount int
 }
 
 func NewGossipQueue(maxGossipCount int) *GossipQueue {
 	return &GossipQueue{
+		indexByAddress: make(map[Address]int),
 		maxGossipCount: maxGossipCount,
 	}
 }
@@ -33,15 +36,16 @@ type GossipMessage interface {
 }
 
 func (q *GossipQueue) PrepareFor(address Address) {
+	maps.DeleteFunc(q.indexByAddress, func(address Address, i int) bool {
+		return q.queue[i].Count >= q.maxGossipCount
+	})
 	q.queue = slices.DeleteFunc(q.queue, func(entry GossipQueueEntry) bool {
 		return entry.Count >= q.maxGossipCount
 	})
 
 	localQueue := q.queue
-	index := slices.IndexFunc(q.queue, func(entry GossipQueueEntry) bool {
-		return entry.Message.GetAddress().Equal(address)
-	})
-	if index != -1 {
+	index, ok := q.indexByAddress[address]
+	if ok {
 		if localQueue[index].Message.GetType() == MessageTypeSuspect || localQueue[index].Message.GetType() == MessageTypeFaulty {
 			// We already have a suspect or faulty gossip message for the address we are preparing. Move that gossip to
 			// the start of the queue to gossip it with high priority.
@@ -60,6 +64,10 @@ func (q *GossipQueue) PrepareFor(address Address) {
 	slices.SortFunc(localQueue, func(a, b GossipQueueEntry) int {
 		return cmp.Compare(a.Count, b.Count)
 	})
+
+	for i, entry := range q.queue {
+		q.indexByAddress[entry.Message.GetAddress()] = i
+	}
 }
 
 func (q *GossipQueue) Len() int {
@@ -75,30 +83,29 @@ func (q *GossipQueue) MarkGossiped(index int) {
 }
 
 func (q *GossipQueue) Add(message GossipMessage) {
-	messageIndex := slices.IndexFunc(q.queue, func(entry GossipQueueEntry) bool {
-		return entry.Message.GetAddress().Equal(message.GetAddress())
-	})
-	if messageIndex != -1 {
+	index, ok := q.indexByAddress[message.GetAddress()]
+	if ok {
 		// The queue already contains a message for that address. Let's check if we need to overwrite it.
-		if message.GetIncarnationNumber() < q.queue[messageIndex].Message.GetIncarnationNumber() {
+		if message.GetIncarnationNumber() < q.queue[index].Message.GetIncarnationNumber() {
 			// No need to overwrite when the incarnation number is lower.
 			return
 		}
-		if message.GetIncarnationNumber() == q.queue[messageIndex].Message.GetIncarnationNumber() &&
+		if message.GetIncarnationNumber() == q.queue[index].Message.GetIncarnationNumber() &&
 			(message.GetType() == MessageTypeAlive ||
-				message.GetType() == MessageTypeSuspect && q.queue[messageIndex].Message.GetType() != MessageTypeAlive ||
-				message.GetType() == MessageTypeFaulty && q.queue[messageIndex].Message.GetType() != MessageTypeAlive && q.queue[messageIndex].Message.GetType() != MessageTypeSuspect) {
+				message.GetType() == MessageTypeSuspect && q.queue[index].Message.GetType() != MessageTypeAlive ||
+				message.GetType() == MessageTypeFaulty && q.queue[index].Message.GetType() != MessageTypeAlive && q.queue[index].Message.GetType() != MessageTypeSuspect) {
 			// No need to overwrite with the same incarnation number and the wrong priorities.
 			return
 		}
 
 		// Either we have the same incarnation number with the right priorities, or the incarnation number is bigger.
-		q.queue[messageIndex].Message = message
-		q.queue[messageIndex].Count = 0
+		q.queue[index].Message = message
+		q.queue[index].Count = 0
 		return
 	}
 
 	q.queue = append(q.queue, GossipQueueEntry{
 		Message: message,
 	})
+	q.indexByAddress[message.GetAddress()] = len(q.queue) - 1
 }

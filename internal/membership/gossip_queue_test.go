@@ -542,7 +542,7 @@ var _ = Describe("GossipQueue", func() {
 
 func BenchmarkGossipQueue_Add(b *testing.B) {
 	for gossipCount := 1; gossipCount <= 16*1024; gossipCount *= 2 {
-		var gossipQueue membership.GossipQueue
+		gossipQueue := membership.NewGossipQueue(math.MaxInt)
 		for i := range gossipCount {
 			gossipQueue.Add(&membership.MessageAlive{
 				Source:            membership.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
@@ -551,11 +551,11 @@ func BenchmarkGossipQueue_Add(b *testing.B) {
 		}
 		b.Run(fmt.Sprintf("%d gossip", gossipCount), func(b *testing.B) {
 			for b.Loop() {
-				localGossipQueue := gossipQueue
-				localGossipQueue.Add(&membership.MessageAlive{
+				gossipQueue.Add(&membership.MessageAlive{
 					Source:            membership.NewAddress(net.IPv4(11, 12, 13, 14), 1024),
 					IncarnationNumber: 0,
 				})
+				//gossipQueue.UndoAdd()
 			}
 		})
 	}
@@ -563,17 +563,16 @@ func BenchmarkGossipQueue_Add(b *testing.B) {
 
 func BenchmarkGossipQueue_PrepareFor(b *testing.B) {
 	for gossipCount := 1; gossipCount <= 16*1024; gossipCount *= 2 {
-		var gossipQueue membership.GossipQueue
+		gossipQueue := membership.NewGossipQueue(math.MaxInt)
 		for i := range gossipCount {
 			gossipQueue.Add(&membership.MessageAlive{
-				Source:            membership.NewAddress(net.IPv4(1, 2, 3, 4), math.MaxUint16-i),
+				Source:            membership.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
 				IncarnationNumber: 0,
 			})
 		}
 		b.Run(fmt.Sprintf("%d gossip", gossipCount), func(b *testing.B) {
 			for b.Loop() {
-				localGossipQueue := gossipQueue
-				localGossipQueue.PrepareFor(membership.Address{})
+				gossipQueue.PrepareFor(membership.Address{})
 			}
 		})
 	}

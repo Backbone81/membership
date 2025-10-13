@@ -68,3 +68,16 @@ func (m *MessageSuspect) FromBuffer(buffer []byte) (int, error) {
 
 	return messageTypeN + sourceN + destinationN + incarnationNumberN, nil
 }
+
+// GetAddress returns the address which is relevant for this message. Needed for the gossip queue to check for equality.
+func (m *MessageSuspect) GetAddress() Address {
+	return m.Destination
+}
+
+func (m *MessageSuspect) GetType() MessageType {
+	return MessageTypeSuspect
+}
+
+func (m *MessageSuspect) GetIncarnationNumber() int {
+	return m.IncarnationNumber
+}

@@ -918,7 +918,7 @@ func (l *List) sendWithGossip(address Address, message Message) error {
 		return err
 	}
 
-	l.gossipQueue.Prepare()
+	l.gossipQueue.PrepareFor(address)
 	for i := 0; i < l.gossipQueue.Len(); i++ {
 		var gossipN int
 		l.datagramBuffer, gossipN, err = l.gossipQueue.Get(i).AppendToBuffer(l.datagramBuffer)

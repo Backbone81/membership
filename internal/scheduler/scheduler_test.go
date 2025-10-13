@@ -9,7 +9,7 @@ import (
 )
 
 var _ = Describe("Scheduler", func() {
-	It("should correctly schedule", func() {
+	It("should correctly schedule", Serial, func() {
 		var target TestTarget
 		protocolPeriod := 10 * time.Millisecond
 		directPingTimeout := 3 * time.Millisecond

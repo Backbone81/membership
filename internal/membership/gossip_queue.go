@@ -2,7 +2,6 @@ package membership
 
 import (
 	"cmp"
-	"maps"
 	"slices"
 )
 
@@ -36,11 +35,12 @@ type GossipMessage interface {
 }
 
 func (q *GossipQueue) PrepareFor(address Address) {
-	maps.DeleteFunc(q.indexByAddress, func(address Address, i int) bool {
-		return q.queue[i].Count >= q.maxGossipCount
-	})
 	q.queue = slices.DeleteFunc(q.queue, func(entry GossipQueueEntry) bool {
-		return entry.Count >= q.maxGossipCount
+		result := entry.Count >= q.maxGossipCount
+		if result {
+			delete(q.indexByAddress, entry.Message.GetAddress())
+		}
+		return result
 	})
 
 	localQueue := q.queue

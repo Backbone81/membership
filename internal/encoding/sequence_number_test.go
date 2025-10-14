@@ -43,8 +43,7 @@ var _ = Describe("SequenceNumber", func() {
 	)
 
 	It("should read from buffer", func() {
-		appendSequenceNumber := 1024
-		buffer, appendN, err := encoding.AppendSequenceNumberToBuffer(nil, appendSequenceNumber)
+		buffer, appendN, err := encoding.AppendSequenceNumberToBuffer(nil, 1024)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(buffer).ToNot(BeNil())
 
@@ -52,7 +51,7 @@ var _ = Describe("SequenceNumber", func() {
 		Expect(err).ToNot(HaveOccurred())
 
 		Expect(appendN).To(Equal(readN))
-		Expect(appendSequenceNumber).To(Equal(readSequenceNumber))
+		Expect(1024).To(Equal(readSequenceNumber))
 	})
 
 	It("should fail to read from nil buffer", func() {

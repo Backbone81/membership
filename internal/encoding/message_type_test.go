@@ -23,8 +23,7 @@ var _ = Describe("MessageType", func() {
 	})
 
 	It("should read from buffer", func() {
-		appendMessageType := encoding.MessageTypeDirectPing
-		buffer, appendN, err := encoding.AppendMessageTypeToBuffer(nil, appendMessageType)
+		buffer, appendN, err := encoding.AppendMessageTypeToBuffer(nil, encoding.MessageTypeDirectPing)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(buffer).ToNot(BeNil())
 
@@ -32,7 +31,7 @@ var _ = Describe("MessageType", func() {
 		Expect(err).ToNot(HaveOccurred())
 
 		Expect(appendN).To(Equal(readN))
-		Expect(appendMessageType).To(Equal(readMessageType))
+		Expect(encoding.MessageTypeDirectPing).To(Equal(readMessageType))
 	})
 
 	It("should fail to read from nil buffer", func() {

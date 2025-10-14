@@ -23,8 +23,7 @@ var _ = Describe("MemberState", func() {
 	})
 
 	It("should read from buffer", func() {
-		appendMemberState := encoding.MemberStateAlive
-		buffer, appendN, err := encoding.AppendMemberStateToBuffer(nil, appendMemberState)
+		buffer, appendN, err := encoding.AppendMemberStateToBuffer(nil, encoding.MemberStateAlive)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(buffer).ToNot(BeNil())
 
@@ -32,7 +31,7 @@ var _ = Describe("MemberState", func() {
 		Expect(err).ToNot(HaveOccurred())
 
 		Expect(appendN).To(Equal(readN))
-		Expect(appendMemberState).To(Equal(readMemberState))
+		Expect(encoding.MemberStateAlive).To(Equal(readMemberState))
 	})
 
 	It("should fail to read from nil buffer", func() {

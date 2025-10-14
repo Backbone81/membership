@@ -30,32 +30,28 @@ var _ = Describe("Address", func() {
 
 	It("should correctly report zero values", func() {
 		Expect(encoding.Address{}.IsZero()).To(BeTrue())
-		Expect(encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024).IsZero()).ToNot(BeTrue())
+		Expect(TestAddress.IsZero()).ToNot(BeTrue())
 	})
 
 	It("should correctly return a string", func() {
-		address := encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024)
-		Expect(address.String()).To(Equal("1.2.3.4:1024"))
+		Expect(TestAddress.String()).To(Equal("1.2.3.4:1024"))
 	})
 
 	It("should append to nil buffer", func() {
-		address := encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024)
-		buffer, _, err := encoding.AppendAddressToBuffer(nil, address)
+		buffer, _, err := encoding.AppendAddressToBuffer(nil, TestAddress)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(buffer).ToNot(BeNil())
 	})
 
 	It("should append to buffer", func() {
 		var localBuffer [10]byte
-		address := encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024)
-		buffer, _, err := encoding.AppendAddressToBuffer(localBuffer[:0], address)
+		buffer, _, err := encoding.AppendAddressToBuffer(localBuffer[:0], TestAddress)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(buffer).ToNot(BeNil())
 	})
 
 	It("should read from buffer", func() {
-		appendAddress := encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024)
-		buffer, appendN, err := encoding.AppendAddressToBuffer(nil, appendAddress)
+		buffer, appendN, err := encoding.AppendAddressToBuffer(nil, TestAddress)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(buffer).ToNot(BeNil())
 
@@ -63,7 +59,7 @@ var _ = Describe("Address", func() {
 		Expect(err).ToNot(HaveOccurred())
 
 		Expect(appendN).To(Equal(readN))
-		Expect(appendAddress).To(Equal(readAddress))
+		Expect(TestAddress).To(Equal(readAddress))
 	})
 
 	It("should fail to read from nil buffer", func() {
@@ -71,8 +67,7 @@ var _ = Describe("Address", func() {
 	})
 
 	It("should fail to read from buffer which is too small", func() {
-		address := encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024)
-		buffer, _, err := encoding.AppendAddressToBuffer(nil, address)
+		buffer, _, err := encoding.AppendAddressToBuffer(nil, TestAddress)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(buffer).ToNot(BeNil())
 
@@ -83,18 +78,16 @@ var _ = Describe("Address", func() {
 })
 
 func BenchmarkAppendAddressToBuffer(b *testing.B) {
-	address := encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024)
 	var buffer [1024]byte
 	for b.Loop() {
-		if _, _, err := encoding.AppendAddressToBuffer(buffer[:0], address); err != nil {
+		if _, _, err := encoding.AppendAddressToBuffer(buffer[:0], TestAddress); err != nil {
 			b.Fatal(err)
 		}
 	}
 }
 
 func BenchmarkAddressFromBuffer(b *testing.B) {
-	address := encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024)
-	buffer, _, err := encoding.AppendAddressToBuffer(nil, address)
+	buffer, _, err := encoding.AppendAddressToBuffer(nil, TestAddress)
 	if err != nil {
 		b.Fatal(err)
 	}

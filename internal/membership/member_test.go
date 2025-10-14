@@ -4,6 +4,7 @@ import (
 	"net"
 	"testing"
 
+	"github.com/backbone81/membership/internal/encoding"
 	"github.com/backbone81/membership/internal/membership"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -12,7 +13,7 @@ import (
 var _ = Describe("Member", func() {
 	It("should append to nil buffer", func() {
 		member := membership.Member{
-			Address:           membership.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
+			Address:           encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 			State:             membership.MemberStateAlive,
 			IncarnationNumber: 1,
 		}
@@ -23,7 +24,7 @@ var _ = Describe("Member", func() {
 
 	It("should append to buffer", func() {
 		member := membership.Member{
-			Address:           membership.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
+			Address:           encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 			State:             membership.MemberStateAlive,
 			IncarnationNumber: 1,
 		}
@@ -35,7 +36,7 @@ var _ = Describe("Member", func() {
 
 	It("should read from buffer", func() {
 		appendMember := membership.Member{
-			Address:           membership.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
+			Address:           encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 			State:             membership.MemberStateAlive,
 			IncarnationNumber: 1,
 		}
@@ -56,7 +57,7 @@ var _ = Describe("Member", func() {
 
 	It("should fail to read from buffer which is too small", func() {
 		member := membership.Member{
-			Address:           membership.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
+			Address:           encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 			State:             membership.MemberStateAlive,
 			IncarnationNumber: 1,
 		}
@@ -72,7 +73,7 @@ var _ = Describe("Member", func() {
 
 func BenchmarkAppendMemberToBuffer(b *testing.B) {
 	member := membership.Member{
-		Address:           membership.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
+		Address:           encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 		State:             membership.MemberStateAlive,
 		IncarnationNumber: 1,
 	}
@@ -86,7 +87,7 @@ func BenchmarkAppendMemberToBuffer(b *testing.B) {
 
 func BenchmarkMemberFromBuffer(b *testing.B) {
 	member := membership.Member{
-		Address:           membership.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
+		Address:           encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 		State:             membership.MemberStateAlive,
 		IncarnationNumber: 1,
 	}

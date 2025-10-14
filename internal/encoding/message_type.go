@@ -1,4 +1,4 @@
-package membership
+package encoding
 
 import "errors"
 

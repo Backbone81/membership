@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/backbone81/membership/internal/membership"
+	"github.com/backbone81/membership/internal/encoding"
 	"github.com/go-logr/logr"
 )
 
@@ -61,22 +61,22 @@ func (t *UDPServer) Shutdown() error {
 }
 
 // Addr returns the address the server is listening on.
-func (t *UDPServer) Addr() (membership.Address, error) {
+func (t *UDPServer) Addr() (encoding.Address, error) {
 	host, port, err := net.SplitHostPort(t.connection.LocalAddr().String())
 	if err != nil {
-		return membership.Address{}, err
+		return encoding.Address{}, err
 	}
 
 	ip := net.ParseIP(host)
 	if ip == nil {
-		return membership.Address{}, errors.New("not an ip address")
+		return encoding.Address{}, errors.New("not an ip address")
 	}
 	typedPort, err := strconv.Atoi(port)
 	if err != nil {
-		return membership.Address{}, err
+		return encoding.Address{}, err
 	}
 
-	return membership.NewAddress(ip, typedPort), nil
+	return encoding.NewAddress(ip, typedPort), nil
 }
 
 func (t *UDPServer) backgroundTask() {

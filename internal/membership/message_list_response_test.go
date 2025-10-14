@@ -5,6 +5,7 @@ import (
 	"net"
 	"testing"
 
+	"github.com/backbone81/membership/internal/encoding"
 	"github.com/backbone81/membership/internal/membership"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -13,15 +14,15 @@ import (
 var _ = Describe("MessageListResponse", func() {
 	It("should append to nil buffer", func() {
 		message := membership.MessageListResponse{
-			Source: membership.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
+			Source: encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 			Members: []membership.Member{
 				{
-					Address:           membership.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
+					Address:           encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 					State:             membership.MemberStateAlive,
 					IncarnationNumber: 1,
 				},
 				{
-					Address:           membership.NewAddress(net.IPv4(11, 12, 13, 14), 1024),
+					Address:           encoding.NewAddress(net.IPv4(11, 12, 13, 14), 1024),
 					State:             membership.MemberStateAlive,
 					IncarnationNumber: 2,
 				},
@@ -35,15 +36,15 @@ var _ = Describe("MessageListResponse", func() {
 	It("should append to buffer", func() {
 		var localBuffer [10]byte
 		message := membership.MessageListResponse{
-			Source: membership.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
+			Source: encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 			Members: []membership.Member{
 				{
-					Address:           membership.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
+					Address:           encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 					State:             membership.MemberStateAlive,
 					IncarnationNumber: 1,
 				},
 				{
-					Address:           membership.NewAddress(net.IPv4(11, 12, 13, 14), 1024),
+					Address:           encoding.NewAddress(net.IPv4(11, 12, 13, 14), 1024),
 					State:             membership.MemberStateAlive,
 					IncarnationNumber: 2,
 				},
@@ -56,15 +57,15 @@ var _ = Describe("MessageListResponse", func() {
 
 	It("should read from buffer", func() {
 		appendMessage := membership.MessageListResponse{
-			Source: membership.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
+			Source: encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 			Members: []membership.Member{
 				{
-					Address:           membership.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
+					Address:           encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 					State:             membership.MemberStateAlive,
 					IncarnationNumber: 1,
 				},
 				{
-					Address:           membership.NewAddress(net.IPv4(11, 12, 13, 14), 1024),
+					Address:           encoding.NewAddress(net.IPv4(11, 12, 13, 14), 1024),
 					State:             membership.MemberStateAlive,
 					IncarnationNumber: 2,
 				},
@@ -89,15 +90,15 @@ var _ = Describe("MessageListResponse", func() {
 
 	It("should fail to read from buffer which is too small", func() {
 		message := membership.MessageListResponse{
-			Source: membership.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
+			Source: encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 			Members: []membership.Member{
 				{
-					Address:           membership.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
+					Address:           encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 					State:             membership.MemberStateAlive,
 					IncarnationNumber: 1,
 				},
 				{
-					Address:           membership.NewAddress(net.IPv4(11, 12, 13, 14), 1024),
+					Address:           encoding.NewAddress(net.IPv4(11, 12, 13, 14), 1024),
 					State:             membership.MemberStateAlive,
 					IncarnationNumber: 2,
 				},
@@ -116,11 +117,11 @@ var _ = Describe("MessageListResponse", func() {
 func BenchmarkMessageListResponse_AppendToBuffer(b *testing.B) {
 	for memberCount := 1; memberCount <= 16*1024; memberCount *= 2 {
 		message := membership.MessageListResponse{
-			Source: membership.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
+			Source: encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 		}
 		for i := range memberCount {
 			message.Members = append(message.Members, membership.Member{
-				Address:           membership.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
+				Address:           encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
 				State:             membership.MemberStateAlive,
 				IncarnationNumber: 1,
 			})
@@ -139,11 +140,11 @@ func BenchmarkMessageListResponse_AppendToBuffer(b *testing.B) {
 func BenchmarkMessageListResponse_FromBuffer(b *testing.B) {
 	for memberCount := 1; memberCount <= 16*1024; memberCount *= 2 {
 		message := membership.MessageListResponse{
-			Source: membership.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
+			Source: encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 		}
 		for i := range memberCount {
 			message.Members = append(message.Members, membership.Member{
-				Address:           membership.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
+				Address:           encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
 				State:             membership.MemberStateAlive,
 				IncarnationNumber: 1,
 			})

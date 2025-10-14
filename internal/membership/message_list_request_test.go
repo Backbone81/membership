@@ -4,6 +4,7 @@ import (
 	"net"
 	"testing"
 
+	"github.com/backbone81/membership/internal/encoding"
 	"github.com/backbone81/membership/internal/membership"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -12,7 +13,7 @@ import (
 var _ = Describe("MessageListRequest", func() {
 	It("should append to nil buffer", func() {
 		message := membership.MessageListRequest{
-			Source: membership.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
+			Source: encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 		}
 		buffer, _, err := message.AppendToBuffer(nil)
 		Expect(err).ToNot(HaveOccurred())
@@ -22,7 +23,7 @@ var _ = Describe("MessageListRequest", func() {
 	It("should append to buffer", func() {
 		var localBuffer [10]byte
 		message := membership.MessageListRequest{
-			Source: membership.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
+			Source: encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 		}
 		buffer, _, err := message.AppendToBuffer(localBuffer[:0])
 		Expect(err).ToNot(HaveOccurred())
@@ -31,7 +32,7 @@ var _ = Describe("MessageListRequest", func() {
 
 	It("should read from buffer", func() {
 		appendMessage := membership.MessageListRequest{
-			Source: membership.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
+			Source: encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 		}
 		buffer, appendN, err := appendMessage.AppendToBuffer(nil)
 		Expect(err).ToNot(HaveOccurred())
@@ -52,7 +53,7 @@ var _ = Describe("MessageListRequest", func() {
 
 	It("should fail to read from buffer which is too small", func() {
 		message := membership.MessageListRequest{
-			Source: membership.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
+			Source: encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 		}
 		buffer, _, err := message.AppendToBuffer(nil)
 		Expect(err).ToNot(HaveOccurred())
@@ -66,7 +67,7 @@ var _ = Describe("MessageListRequest", func() {
 
 func BenchmarkMessageListRequest_AppendToBuffer(b *testing.B) {
 	message := membership.MessageListRequest{
-		Source: membership.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
+		Source: encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 	}
 	var buffer [1024]byte
 	for b.Loop() {
@@ -78,7 +79,7 @@ func BenchmarkMessageListRequest_AppendToBuffer(b *testing.B) {
 
 func BenchmarkMessageListRequest_FromBuffer(b *testing.B) {
 	message := membership.MessageListRequest{
-		Source: membership.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
+		Source: encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 	}
 	buffer, _, err := message.AppendToBuffer(nil)
 	if err != nil {

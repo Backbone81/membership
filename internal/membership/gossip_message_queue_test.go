@@ -6,6 +6,7 @@ import (
 	"net"
 	"testing"
 
+	"github.com/backbone81/membership/internal/encoding"
 	"github.com/backbone81/membership/internal/membership"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -438,7 +439,7 @@ var _ = Describe("GossipMessageQueue", func() {
 		queue.Add(message3)
 		queue.MarkTransmitted(2)
 
-		queue.PrioritizeForAddress(membership.Address{})
+		queue.PrioritizeForAddress(encoding.Address{})
 		Expect(queue.Get(0)).To(Equal(message3))
 		Expect(queue.Get(1)).To(Equal(message1))
 		Expect(queue.Get(2)).To(Equal(message2))
@@ -545,19 +546,19 @@ var _ = Describe("GossipMessageQueue", func() {
 			Source:            TestAddress,
 			IncarnationNumber: 0,
 		})
-		gossipQueue.PrioritizeForAddress(membership.Address{})
+		gossipQueue.PrioritizeForAddress(encoding.Address{})
 		Expect(gossipQueue.Len()).To(Equal(1))
 
 		gossipQueue.MarkTransmitted(0)
-		gossipQueue.PrioritizeForAddress(membership.Address{})
+		gossipQueue.PrioritizeForAddress(encoding.Address{})
 		Expect(gossipQueue.Len()).To(Equal(1))
 
 		gossipQueue.MarkTransmitted(0)
-		gossipQueue.PrioritizeForAddress(membership.Address{})
+		gossipQueue.PrioritizeForAddress(encoding.Address{})
 		Expect(gossipQueue.Len()).To(Equal(1))
 
 		gossipQueue.MarkTransmitted(0)
-		gossipQueue.PrioritizeForAddress(membership.Address{})
+		gossipQueue.PrioritizeForAddress(encoding.Address{})
 		Expect(gossipQueue.Len()).To(Equal(0))
 	})
 })
@@ -567,14 +568,14 @@ func BenchmarkGossipQueue_Add(b *testing.B) {
 		gossipQueue := membership.NewGossipMessageQueue(math.MaxInt)
 		for i := range gossipCount {
 			gossipQueue.Add(&membership.MessageAlive{
-				Source:            membership.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
+				Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
 				IncarnationNumber: 0,
 			})
 		}
 		b.Run(fmt.Sprintf("%d gossip", gossipCount), func(b *testing.B) {
 			for b.Loop() {
 				gossipQueue.Add(&membership.MessageAlive{
-					Source:            membership.NewAddress(net.IPv4(11, 12, 13, 14), 1024),
+					Source:            encoding.NewAddress(net.IPv4(11, 12, 13, 14), 1024),
 					IncarnationNumber: 0,
 				})
 				//gossipQueue.UndoAdd()
@@ -588,13 +589,13 @@ func BenchmarkGossipQueue_PrepareFor(b *testing.B) {
 		gossipQueue := membership.NewGossipMessageQueue(math.MaxInt)
 		for i := range gossipCount {
 			gossipQueue.Add(&membership.MessageAlive{
-				Source:            membership.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
+				Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
 				IncarnationNumber: 0,
 			})
 		}
 		b.Run(fmt.Sprintf("%d gossip", gossipCount), func(b *testing.B) {
 			for b.Loop() {
-				gossipQueue.PrioritizeForAddress(membership.Address{})
+				gossipQueue.PrioritizeForAddress(encoding.Address{})
 			}
 		})
 	}

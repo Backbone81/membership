@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/backbone81/membership/internal/encoding"
 	"github.com/backbone81/membership/internal/membership"
 	"github.com/backbone81/membership/internal/scheduler"
 	"github.com/backbone81/membership/internal/transport"
@@ -50,13 +51,13 @@ var rootCmd = &cobra.Command{
 
 		logger.Info("Application startup")
 
-		var typedAdvertiseAddress membership.Address
+		var typedAdvertiseAddress encoding.Address
 		if advertiseAddress != "" {
 			addr, err := net.ResolveUDPAddr("udp", advertiseAddress)
 			if err != nil {
 				return fmt.Errorf("resolving advertise address: %w", err)
 			}
-			typedAdvertiseAddress = membership.NewAddress(
+			typedAdvertiseAddress = encoding.NewAddress(
 				addr.IP,
 				addr.Port,
 			)
@@ -74,7 +75,7 @@ var rootCmd = &cobra.Command{
 			if err != nil {
 				return err
 			}
-			typedAdvertiseAddress = membership.NewAddress(
+			typedAdvertiseAddress = encoding.NewAddress(
 				localIp,
 				typedPort,
 			)
@@ -86,14 +87,14 @@ var rootCmd = &cobra.Command{
 			"port", typedAdvertiseAddress.Port(),
 		)
 
-		var initialMembers []membership.Address
+		var initialMembers []encoding.Address
 		for _, member := range members {
 			addr, err := net.ResolveUDPAddr("udp", member)
 			if err != nil {
 				logger.Error(err, "Resolving member", "address", member)
 				continue
 			}
-			address := membership.NewAddress(
+			address := encoding.NewAddress(
 				addr.IP,
 				addr.Port,
 			)

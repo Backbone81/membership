@@ -6,7 +6,7 @@ import (
 	"math"
 	"net"
 
-	"github.com/backbone81/membership/internal/membership"
+	"github.com/backbone81/membership/internal/encoding"
 )
 
 // TCPClient provides reliable transport for sending data to a member.
@@ -18,14 +18,14 @@ func NewTCPClient() *TCPClient {
 }
 
 // Send transmits the given buffer to the member with the given address.
-func (t *TCPClient) Send(address membership.Address, buffer []byte) error {
+func (t *TCPClient) Send(address encoding.Address, buffer []byte) error {
 	if err := t.send(address, buffer); err != nil {
 		return fmt.Errorf("TCP client transport send: %w", err)
 	}
 	return nil
 }
 
-func (t *TCPClient) send(address membership.Address, buffer []byte) error {
+func (t *TCPClient) send(address encoding.Address, buffer []byte) error {
 	// Make sure we are not exceeding the maximum datagram length with the given buffer.
 	if len(buffer) > math.MaxUint32 {
 		return errors.New("buffer length exceeds maximum datagram length")
@@ -38,7 +38,7 @@ func (t *TCPClient) send(address membership.Address, buffer []byte) error {
 	defer connection.Close()
 
 	var lengthBuffer [4]byte
-	membership.Endian.PutUint32(lengthBuffer[:], uint32(len(buffer)))
+	encoding.Endian.PutUint32(lengthBuffer[:], uint32(len(buffer)))
 	if _, err := connection.Write(lengthBuffer[:]); err != nil {
 		return fmt.Errorf("sending the datagram length: %w", err)
 	}

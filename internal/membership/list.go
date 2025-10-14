@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/backbone81/membership/internal/encoding"
 	"github.com/go-logr/logr"
 )
 
@@ -28,7 +29,7 @@ type List struct {
 	randomIndexes   []int
 	nextRandomIndex int
 	gossipQueue     *GossipMessageQueue
-	self            Address
+	self            encoding.Address
 
 	datagramBuffer []byte
 
@@ -40,8 +41,8 @@ type ListConfig struct {
 	Logger            logr.Logger
 	DirectPingTimeout time.Duration
 	ProtocolPeriod    time.Duration
-	InitialMembers    []Address
-	AdvertisedAddress Address
+	InitialMembers    []encoding.Address
+	AdvertisedAddress encoding.Address
 	UDPClient         Transport
 	TCPClient         Transport
 	MaxDatagramLength int
@@ -59,7 +60,7 @@ type DirectProbeRecord struct {
 	Timestamp time.Time
 
 	// Destination is the address which the direct probe was sent to.
-	Destination Address
+	Destination encoding.Address
 
 	// MessageDirectPing is a copy of the message which was sent for the direct probe.
 	MessageDirectPing MessageDirectPing
@@ -184,7 +185,7 @@ func (l *List) IndirectPing() error {
 	return joinedErr
 }
 
-func (l *List) pickIndirectProbes(failureDetectionSubgroupSize int, directProbeAddress Address) []*Member {
+func (l *List) pickIndirectProbes(failureDetectionSubgroupSize int, directProbeAddress encoding.Address) []*Member {
 	candidateIndexes := make([]int, 0, len(l.members))
 	for index := range l.members {
 		if l.members[index].Address.Equal(directProbeAddress) {
@@ -338,13 +339,13 @@ func (l *List) DispatchDatagram(buffer []byte) error {
 
 	var joinedErr error
 	for len(buffer) > 0 {
-		messageType, _, err := MessageTypeFromBuffer(buffer)
+		messageType, _, err := encoding.MessageTypeFromBuffer(buffer)
 		if err != nil {
 			return err
 		}
 
 		switch messageType {
-		case MessageTypeDirectPing:
+		case encoding.MessageTypeDirectPing:
 			var message MessageDirectPing
 			n, err := message.FromBuffer(buffer)
 			if err != nil {
@@ -354,7 +355,7 @@ func (l *List) DispatchDatagram(buffer []byte) error {
 			if err := l.handleDirectPing(message); err != nil {
 				joinedErr = errors.Join(joinedErr, err)
 			}
-		case MessageTypeDirectAck:
+		case encoding.MessageTypeDirectAck:
 			var message MessageDirectAck
 			n, err := message.FromBuffer(buffer)
 			if err != nil {
@@ -364,7 +365,7 @@ func (l *List) DispatchDatagram(buffer []byte) error {
 			if err := l.handleDirectAck(message); err != nil {
 				joinedErr = errors.Join(joinedErr, err)
 			}
-		case MessageTypeIndirectPing:
+		case encoding.MessageTypeIndirectPing:
 			var message MessageIndirectPing
 			n, err := message.FromBuffer(buffer)
 			if err != nil {
@@ -374,7 +375,7 @@ func (l *List) DispatchDatagram(buffer []byte) error {
 			if err := l.handleIndirectPing(message); err != nil {
 				joinedErr = errors.Join(joinedErr, err)
 			}
-		case MessageTypeIndirectAck:
+		case encoding.MessageTypeIndirectAck:
 			var message MessageIndirectAck
 			n, err := message.FromBuffer(buffer)
 			if err != nil {
@@ -382,7 +383,7 @@ func (l *List) DispatchDatagram(buffer []byte) error {
 			}
 			buffer = buffer[n:]
 			l.handleIndirectAck(message)
-		case MessageTypeSuspect:
+		case encoding.MessageTypeSuspect:
 			var message MessageSuspect
 			n, err := message.FromBuffer(buffer)
 			if err != nil {
@@ -390,7 +391,7 @@ func (l *List) DispatchDatagram(buffer []byte) error {
 			}
 			buffer = buffer[n:]
 			l.handleSuspect(message)
-		case MessageTypeAlive:
+		case encoding.MessageTypeAlive:
 			var message MessageAlive
 			n, err := message.FromBuffer(buffer)
 			if err != nil {
@@ -398,7 +399,7 @@ func (l *List) DispatchDatagram(buffer []byte) error {
 			}
 			buffer = buffer[n:]
 			l.handleAlive(message)
-		case MessageTypeFaulty:
+		case encoding.MessageTypeFaulty:
 			var message MessageFaulty
 			n, err := message.FromBuffer(buffer)
 			if err != nil {
@@ -406,7 +407,7 @@ func (l *List) DispatchDatagram(buffer []byte) error {
 			}
 			buffer = buffer[n:]
 			l.handleFaulty(message)
-		case MessageTypeListRequest:
+		case encoding.MessageTypeListRequest:
 			var message MessageListRequest
 			n, err := message.FromBuffer(buffer)
 			if err != nil {
@@ -416,7 +417,7 @@ func (l *List) DispatchDatagram(buffer []byte) error {
 			if err := l.handleListRequest(message); err != nil {
 				joinedErr = errors.Join(joinedErr, err)
 			}
-		case MessageTypeListResponse:
+		case encoding.MessageTypeListResponse:
 			var message MessageListResponse
 			n, err := message.FromBuffer(buffer)
 			if err != nil {
@@ -908,7 +909,7 @@ func (l *List) handleListResponse(listResponse MessageListResponse) error {
 	return nil
 }
 
-func (l *List) sendWithGossip(address Address, message Message) error {
+func (l *List) sendWithGossip(address encoding.Address, message Message) error {
 	l.datagramBuffer = l.datagramBuffer[:0]
 
 	var err error
@@ -960,13 +961,13 @@ func (l *List) getRandomMember() *Member {
 	return &l.members[randomIndex]
 }
 
-func (l *List) isMember(address Address) bool {
+func (l *List) isMember(address encoding.Address) bool {
 	return slices.ContainsFunc(l.members, func(member Member) bool {
 		return address.Equal(member.Address)
 	})
 }
 
-func (l *List) getMember(address Address) *Member {
+func (l *List) getMember(address encoding.Address) *Member {
 	index := slices.IndexFunc(l.members, func(member Member) bool {
 		return address.Equal(member.Address)
 	})
@@ -998,7 +999,7 @@ func (l *List) addMember(member Member) {
 	}
 }
 
-func (l *List) removeMemberByAddress(address Address) {
+func (l *List) removeMemberByAddress(address encoding.Address) {
 	index := slices.IndexFunc(l.members, func(member Member) bool {
 		return address.Equal(member.Address)
 	})

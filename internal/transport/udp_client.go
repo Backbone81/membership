@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/backbone81/membership/internal/membership"
+	"github.com/backbone81/membership/internal/encoding"
 )
 
 // UDPClient provides unreliable transport for sending data to a member.
@@ -23,14 +23,14 @@ func NewUDPClient(maxDatagramLength int) *UDPClient {
 // Send transmits the given buffer to the member with the given address. The length of the buffer is validated against
 // the max datagram length provided during construction. If the length exceeds the maximum length, no data is sent
 // and an error is returned.
-func (t *UDPClient) Send(address membership.Address, buffer []byte) error {
+func (t *UDPClient) Send(address encoding.Address, buffer []byte) error {
 	if err := t.send(address, buffer); err != nil {
 		return fmt.Errorf("UDP client transport send: %w", err)
 	}
 	return nil
 }
 
-func (t *UDPClient) send(address membership.Address, buffer []byte) error {
+func (t *UDPClient) send(address encoding.Address, buffer []byte) error {
 	if len(buffer) > t.maxDatagramLength {
 		return errors.New("buffer length exceeds maximum datagram length")
 	}

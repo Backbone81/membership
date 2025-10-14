@@ -4,6 +4,7 @@ import (
 	"net"
 	"testing"
 
+	"github.com/backbone81/membership/internal/encoding"
 	"github.com/backbone81/membership/internal/membership"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -12,8 +13,8 @@ import (
 var _ = Describe("MessageSuspect", func() {
 	It("should append to nil buffer", func() {
 		message := membership.MessageSuspect{
-			Source:            membership.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
-			Destination:       membership.NewAddress(net.IPv4(11, 12, 13, 14), 1024),
+			Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
+			Destination:       encoding.NewAddress(net.IPv4(11, 12, 13, 14), 1024),
 			IncarnationNumber: 7,
 		}
 		buffer, _, err := message.AppendToBuffer(nil)
@@ -24,8 +25,8 @@ var _ = Describe("MessageSuspect", func() {
 	It("should append to buffer", func() {
 		var localBuffer [10]byte
 		message := membership.MessageSuspect{
-			Source:            membership.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
-			Destination:       membership.NewAddress(net.IPv4(11, 12, 13, 14), 1024),
+			Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
+			Destination:       encoding.NewAddress(net.IPv4(11, 12, 13, 14), 1024),
 			IncarnationNumber: 7,
 		}
 		buffer, _, err := message.AppendToBuffer(localBuffer[:0])
@@ -35,8 +36,8 @@ var _ = Describe("MessageSuspect", func() {
 
 	It("should read from buffer", func() {
 		appendMessage := membership.MessageSuspect{
-			Source:            membership.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
-			Destination:       membership.NewAddress(net.IPv4(11, 12, 13, 14), 1024),
+			Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
+			Destination:       encoding.NewAddress(net.IPv4(11, 12, 13, 14), 1024),
 			IncarnationNumber: 7,
 		}
 		buffer, appendN, err := appendMessage.AppendToBuffer(nil)
@@ -58,8 +59,8 @@ var _ = Describe("MessageSuspect", func() {
 
 	It("should fail to read from buffer which is too small", func() {
 		message := membership.MessageSuspect{
-			Source:            membership.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
-			Destination:       membership.NewAddress(net.IPv4(11, 12, 13, 14), 1024),
+			Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
+			Destination:       encoding.NewAddress(net.IPv4(11, 12, 13, 14), 1024),
 			IncarnationNumber: 7,
 		}
 		buffer, _, err := message.AppendToBuffer(nil)
@@ -74,8 +75,8 @@ var _ = Describe("MessageSuspect", func() {
 
 func BenchmarkMessageSuspect_AppendToBuffer(b *testing.B) {
 	message := membership.MessageSuspect{
-		Source:            membership.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
-		Destination:       membership.NewAddress(net.IPv4(11, 12, 13, 14), 1024),
+		Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
+		Destination:       encoding.NewAddress(net.IPv4(11, 12, 13, 14), 1024),
 		IncarnationNumber: 7,
 	}
 	var buffer [1024]byte
@@ -88,8 +89,8 @@ func BenchmarkMessageSuspect_AppendToBuffer(b *testing.B) {
 
 func BenchmarkMessageSuspect_FromBuffer(b *testing.B) {
 	message := membership.MessageSuspect{
-		Source:            membership.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
-		Destination:       membership.NewAddress(net.IPv4(11, 12, 13, 14), 1024),
+		Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
+		Destination:       encoding.NewAddress(net.IPv4(11, 12, 13, 14), 1024),
 		IncarnationNumber: 7,
 	}
 	buffer, _, err := message.AppendToBuffer(nil)

@@ -4,6 +4,7 @@ import (
 	"net"
 	"testing"
 
+	"github.com/backbone81/membership/internal/encoding"
 	"github.com/backbone81/membership/internal/membership"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -12,7 +13,7 @@ import (
 var _ = Describe("MessageAlive", func() {
 	It("should append to nil buffer", func() {
 		message := membership.MessageAlive{
-			Source:            membership.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
+			Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 			IncarnationNumber: 7,
 		}
 		buffer, _, err := message.AppendToBuffer(nil)
@@ -23,7 +24,7 @@ var _ = Describe("MessageAlive", func() {
 	It("should append to buffer", func() {
 		var localBuffer [10]byte
 		message := membership.MessageAlive{
-			Source:            membership.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
+			Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 			IncarnationNumber: 7,
 		}
 		buffer, _, err := message.AppendToBuffer(localBuffer[:0])
@@ -33,7 +34,7 @@ var _ = Describe("MessageAlive", func() {
 
 	It("should read from buffer", func() {
 		appendMessage := membership.MessageAlive{
-			Source:            membership.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
+			Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 			IncarnationNumber: 7,
 		}
 		buffer, appendN, err := appendMessage.AppendToBuffer(nil)
@@ -55,7 +56,7 @@ var _ = Describe("MessageAlive", func() {
 
 	It("should fail to read from buffer which is too small", func() {
 		message := membership.MessageAlive{
-			Source:            membership.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
+			Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 			IncarnationNumber: 7,
 		}
 		buffer, _, err := message.AppendToBuffer(nil)
@@ -70,7 +71,7 @@ var _ = Describe("MessageAlive", func() {
 
 func BenchmarkMessageAlive_AppendToBuffer(b *testing.B) {
 	message := membership.MessageAlive{
-		Source:            membership.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
+		Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 		IncarnationNumber: 7,
 	}
 	var buffer [1024]byte
@@ -83,7 +84,7 @@ func BenchmarkMessageAlive_AppendToBuffer(b *testing.B) {
 
 func BenchmarkMessageAlive_FromBuffer(b *testing.B) {
 	message := membership.MessageAlive{
-		Source:            membership.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
+		Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 		IncarnationNumber: 7,
 	}
 	buffer, _, err := message.AppendToBuffer(nil)

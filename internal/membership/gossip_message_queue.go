@@ -3,6 +3,8 @@ package membership
 import (
 	"cmp"
 	"slices"
+
+	"github.com/backbone81/membership/internal/encoding"
 )
 
 // GossipMessageQueue is responsible for managing the messages we need to gossip. It will sort the gossip messages in a way
@@ -13,7 +15,7 @@ type GossipMessageQueue struct {
 
 	// indexByAddress is correlating the position within queue with the address. This helps in making checks for
 	// existing gossip faster.
-	indexByAddress map[Address]int
+	indexByAddress map[encoding.Address]int
 
 	// maxTransmissionCount is the maximum times each gossip is transmitted before it is dropped from the queue.
 	maxTransmissionCount int
@@ -22,7 +24,7 @@ type GossipMessageQueue struct {
 // NewGossipMessageQueue creates a new gossip message queue.
 func NewGossipMessageQueue(maxTransmissionCount int) *GossipMessageQueue {
 	return &GossipMessageQueue{
-		indexByAddress:       make(map[Address]int),
+		indexByAddress:       make(map[encoding.Address]int),
 		maxTransmissionCount: maxTransmissionCount,
 	}
 }
@@ -40,8 +42,8 @@ type GossipMessageQueueEntry struct {
 type GossipMessage interface {
 	AppendToBuffer(buffer []byte) ([]byte, int, error)
 	FromBuffer(buffer []byte) (int, error)
-	GetAddress() Address
-	GetType() MessageType
+	GetAddress() encoding.Address
+	GetType() encoding.MessageType
 	GetIncarnationNumber() int
 }
 
@@ -54,7 +56,7 @@ type GossipMessage interface {
 // gossip is an alive message, it is placed last, as that is not important for the member.
 //
 // This method will delete gossip which has exceeded the maximum transmission count.
-func (q *GossipMessageQueue) PrioritizeForAddress(address Address) {
+func (q *GossipMessageQueue) PrioritizeForAddress(address encoding.Address) {
 	q.queue = slices.DeleteFunc(q.queue, func(entry GossipMessageQueueEntry) bool {
 		result := entry.TransmissionCount >= q.maxTransmissionCount
 		if result {
@@ -66,7 +68,7 @@ func (q *GossipMessageQueue) PrioritizeForAddress(address Address) {
 	localQueue := q.queue
 	index, ok := q.indexByAddress[address]
 	if ok {
-		if localQueue[index].Message.GetType() == MessageTypeSuspect || localQueue[index].Message.GetType() == MessageTypeFaulty {
+		if localQueue[index].Message.GetType() == encoding.MessageTypeSuspect || localQueue[index].Message.GetType() == encoding.MessageTypeFaulty {
 			// We already have a suspect or faulty gossip message for the address we are preparing. Move that gossip to
 			// the start of the queue to gossip it with high priority.
 			localQueue[0], localQueue[index] = localQueue[index], localQueue[0]
@@ -122,9 +124,9 @@ func (q *GossipMessageQueue) Add(message GossipMessage) {
 			return
 		}
 		if message.GetIncarnationNumber() == q.queue[index].Message.GetIncarnationNumber() &&
-			(message.GetType() == MessageTypeAlive ||
-				message.GetType() == MessageTypeSuspect && q.queue[index].Message.GetType() != MessageTypeAlive ||
-				message.GetType() == MessageTypeFaulty && q.queue[index].Message.GetType() != MessageTypeAlive && q.queue[index].Message.GetType() != MessageTypeSuspect) {
+			(message.GetType() == encoding.MessageTypeAlive ||
+				message.GetType() == encoding.MessageTypeSuspect && q.queue[index].Message.GetType() != encoding.MessageTypeAlive ||
+				message.GetType() == encoding.MessageTypeFaulty && q.queue[index].Message.GetType() != encoding.MessageTypeAlive && q.queue[index].Message.GetType() != encoding.MessageTypeSuspect) {
 			// No need to overwrite with the same incarnation number and the wrong priorities.
 			return
 		}

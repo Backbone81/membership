@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/backbone81/membership/internal/membership"
+	"github.com/backbone81/membership/internal/encoding"
 	"github.com/go-logr/logr"
 )
 
@@ -54,22 +54,22 @@ func (t *TCPServer) Shutdown() error {
 }
 
 // Addr returns the address the server is listening on.
-func (t *TCPServer) Addr() (membership.Address, error) {
+func (t *TCPServer) Addr() (encoding.Address, error) {
 	host, port, err := net.SplitHostPort(t.listener.Addr().String())
 	if err != nil {
-		return membership.Address{}, err
+		return encoding.Address{}, err
 	}
 
 	ip := net.ParseIP(host)
 	if ip == nil {
-		return membership.Address{}, errors.New("not an ip address")
+		return encoding.Address{}, errors.New("not an ip address")
 	}
 	typedPort, err := strconv.Atoi(port)
 	if err != nil {
-		return membership.Address{}, err
+		return encoding.Address{}, err
 	}
 
-	return membership.NewAddress(ip, typedPort), nil
+	return encoding.NewAddress(ip, typedPort), nil
 }
 
 // backgroundTask is accepting connections and creating go routines to handle them.
@@ -110,7 +110,7 @@ func (t *TCPServer) handleConnectionImpl(connection net.Conn) error {
 	if _, err := io.ReadFull(connection, buffer[:4]); err != nil {
 		return err
 	}
-	datagramLength := int(membership.Endian.Uint32(buffer[:4]))
+	datagramLength := int(encoding.Endian.Uint32(buffer[:4]))
 
 	// Let's read the datagram payload.
 	if len(buffer) < 4+datagramLength {

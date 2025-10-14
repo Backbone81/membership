@@ -1,28 +1,32 @@
 package membership
 
-import "errors"
+import (
+	"errors"
+
+	"github.com/backbone81/membership/internal/encoding"
+)
 
 // MessageListResponse provides a list of all known members. This message can become quite big and should always be
 // transmitted over TCP and not UDP.
 type MessageListResponse struct {
-	Source  Address
+	Source  encoding.Address
 	Members []Member
 }
 
 // AppendToBuffer appends the message to the provided buffer encoded for network transfer.
 // Returns the buffer with the data appended, the number of bytes appended and any error which occurred.
 func (m *MessageListResponse) AppendToBuffer(buffer []byte) ([]byte, int, error) {
-	messageTypeBuffer, messageTypeN, err := AppendMessageTypeToBuffer(buffer, MessageTypeListResponse)
+	messageTypeBuffer, messageTypeN, err := encoding.AppendMessageTypeToBuffer(buffer, encoding.MessageTypeListResponse)
 	if err != nil {
 		return buffer, 0, err
 	}
 
-	sourceBuffer, sourceN, err := AppendAddressToBuffer(messageTypeBuffer, m.Source)
+	sourceBuffer, sourceN, err := encoding.AppendAddressToBuffer(messageTypeBuffer, m.Source)
 	if err != nil {
 		return buffer, 0, err
 	}
 
-	countBuffer, countN, err := AppendMemberCountToBuffer(sourceBuffer, len(m.Members))
+	countBuffer, countN, err := encoding.AppendMemberCountToBuffer(sourceBuffer, len(m.Members))
 	if err != nil {
 		return buffer, 0, err
 	}
@@ -44,18 +48,18 @@ func (m *MessageListResponse) AppendToBuffer(buffer []byte) ([]byte, int, error)
 // FromBuffer reads the message from the provided buffer.
 // Returns the number of bytes read and any error which occurred.
 func (m *MessageListResponse) FromBuffer(buffer []byte) (int, error) {
-	messageType, messageTypeN, err := MessageTypeFromBuffer(buffer)
-	if messageType != MessageTypeListResponse {
+	messageType, messageTypeN, err := encoding.MessageTypeFromBuffer(buffer)
+	if messageType != encoding.MessageTypeListResponse {
 		return 0, errors.New("invalid message type")
 	}
 
 	var sourceN int
-	m.Source, sourceN, err = AddressFromBuffer(buffer[messageTypeN:])
+	m.Source, sourceN, err = encoding.AddressFromBuffer(buffer[messageTypeN:])
 	if err != nil {
 		return 0, err
 	}
 
-	count, countN, err := MemberCountFromBuffer(buffer[messageTypeN+sourceN:])
+	count, countN, err := encoding.MemberCountFromBuffer(buffer[messageTypeN+sourceN:])
 	if err != nil {
 		return 0, err
 	}

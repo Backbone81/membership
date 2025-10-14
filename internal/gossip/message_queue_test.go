@@ -1,4 +1,4 @@
-package membership_test
+package gossip_test
 
 import (
 	"fmt"
@@ -7,21 +7,21 @@ import (
 	"testing"
 
 	"github.com/backbone81/membership/internal/encoding"
-	"github.com/backbone81/membership/internal/membership"
+	"github.com/backbone81/membership/internal/gossip"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("GossipMessageQueue", func() {
-	var queue *membership.GossipMessageQueue
+var _ = Describe("MessageQueue", func() {
+	var queue *gossip.MessageQueue
 
 	BeforeEach(func() {
-		queue = membership.NewGossipMessageQueue(math.MaxInt)
+		queue = gossip.NewMessageQueue(math.MaxInt)
 		Expect(queue.Len()).To(Equal(0))
 	})
 
 	It("should add gossip", func() {
-		gossipMessage := membership.MessageAlive{
+		gossipMessage := gossip.MessageAlive{
 			Source:            TestAddress,
 			IncarnationNumber: 0,
 		}
@@ -32,13 +32,13 @@ var _ = Describe("GossipMessageQueue", func() {
 	})
 
 	It("should add gossip with different address", func() {
-		gossipMessage1 := membership.MessageAlive{
+		gossipMessage1 := gossip.MessageAlive{
 			Source:            TestAddress,
 			IncarnationNumber: 0,
 		}
 		queue.Add(&gossipMessage1)
 
-		gossipMessage2 := membership.MessageAlive{
+		gossipMessage2 := gossip.MessageAlive{
 			Source:            TestAddress2,
 			IncarnationNumber: 0,
 		}
@@ -50,13 +50,13 @@ var _ = Describe("GossipMessageQueue", func() {
 	})
 
 	It("should not add duplicate gossip", func() {
-		gossipMessage1 := membership.MessageAlive{
+		gossipMessage1 := gossip.MessageAlive{
 			Source:            TestAddress,
 			IncarnationNumber: 0,
 		}
 		queue.Add(&gossipMessage1)
 
-		gossipMessage2 := membership.MessageAlive{
+		gossipMessage2 := gossip.MessageAlive{
 			Source:            TestAddress,
 			IncarnationNumber: 0,
 		}
@@ -67,8 +67,8 @@ var _ = Describe("GossipMessageQueue", func() {
 	})
 
 	DescribeTable("Messages should overwrite in the correct priority",
-		func(message1 membership.GossipMessage, message2 membership.GossipMessage, overwrite bool) {
-			gossipQueue := membership.NewGossipMessageQueue(math.MaxInt)
+		func(message1 gossip.Message, message2 gossip.Message, overwrite bool) {
+			gossipQueue := gossip.NewMessageQueue(math.MaxInt)
 			gossipQueue.Add(message1)
 			gossipQueue.Add(message2)
 			if overwrite {
@@ -78,44 +78,44 @@ var _ = Describe("GossipMessageQueue", func() {
 			}
 		},
 		Entry("Alive with lower incarnation number should NOT overwrite alive",
-			&membership.MessageAlive{
+			&gossip.MessageAlive{
 				Source:            TestAddress,
 				IncarnationNumber: 2,
 			},
-			&membership.MessageAlive{
+			&gossip.MessageAlive{
 				Source:            TestAddress,
 				IncarnationNumber: 1,
 			},
 			false,
 		),
 		Entry("Alive with same incarnation number should NOT overwrite alive",
-			&membership.MessageAlive{
+			&gossip.MessageAlive{
 				Source:            TestAddress,
 				IncarnationNumber: 2,
 			},
-			&membership.MessageAlive{
+			&gossip.MessageAlive{
 				Source:            TestAddress,
 				IncarnationNumber: 2,
 			},
 			false,
 		),
 		Entry("Alive with bigger incarnation number should overwrite alive",
-			&membership.MessageAlive{
+			&gossip.MessageAlive{
 				Source:            TestAddress,
 				IncarnationNumber: 2,
 			},
-			&membership.MessageAlive{
+			&gossip.MessageAlive{
 				Source:            TestAddress,
 				IncarnationNumber: 3,
 			},
 			true,
 		),
 		Entry("Suspect with lower incarnation number should NOT overwrite alive",
-			&membership.MessageAlive{
+			&gossip.MessageAlive{
 				Source:            TestAddress,
 				IncarnationNumber: 2,
 			},
-			&membership.MessageSuspect{
+			&gossip.MessageSuspect{
 				Source:            TestAddress2,
 				Destination:       TestAddress,
 				IncarnationNumber: 1,
@@ -123,11 +123,11 @@ var _ = Describe("GossipMessageQueue", func() {
 			false,
 		),
 		Entry("Suspect with same incarnation number should overwrite alive",
-			&membership.MessageAlive{
+			&gossip.MessageAlive{
 				Source:            TestAddress,
 				IncarnationNumber: 2,
 			},
-			&membership.MessageSuspect{
+			&gossip.MessageSuspect{
 				Source:            TestAddress2,
 				Destination:       TestAddress,
 				IncarnationNumber: 2,
@@ -135,11 +135,11 @@ var _ = Describe("GossipMessageQueue", func() {
 			true,
 		),
 		Entry("Suspect with bigger incarnation number should overwrite alive",
-			&membership.MessageAlive{
+			&gossip.MessageAlive{
 				Source:            TestAddress,
 				IncarnationNumber: 2,
 			},
-			&membership.MessageSuspect{
+			&gossip.MessageSuspect{
 				Source:            TestAddress2,
 				Destination:       TestAddress,
 				IncarnationNumber: 3,
@@ -147,11 +147,11 @@ var _ = Describe("GossipMessageQueue", func() {
 			true,
 		),
 		Entry("Faulty with lower incarnation number should NOT overwrite alive",
-			&membership.MessageAlive{
+			&gossip.MessageAlive{
 				Source:            TestAddress,
 				IncarnationNumber: 2,
 			},
-			&membership.MessageFaulty{
+			&gossip.MessageFaulty{
 				Source:            TestAddress2,
 				Destination:       TestAddress,
 				IncarnationNumber: 1,
@@ -159,11 +159,11 @@ var _ = Describe("GossipMessageQueue", func() {
 			false,
 		),
 		Entry("Faulty with same incarnation number should overwrite alive",
-			&membership.MessageAlive{
+			&gossip.MessageAlive{
 				Source:            TestAddress,
 				IncarnationNumber: 2,
 			},
-			&membership.MessageFaulty{
+			&gossip.MessageFaulty{
 				Source:            TestAddress2,
 				Destination:       TestAddress,
 				IncarnationNumber: 2,
@@ -171,11 +171,11 @@ var _ = Describe("GossipMessageQueue", func() {
 			true,
 		),
 		Entry("Faulty with bigger incarnation number should overwrite alive",
-			&membership.MessageAlive{
+			&gossip.MessageAlive{
 				Source:            TestAddress,
 				IncarnationNumber: 2,
 			},
-			&membership.MessageFaulty{
+			&gossip.MessageFaulty{
 				Source:            TestAddress2,
 				Destination:       TestAddress,
 				IncarnationNumber: 3,
@@ -184,48 +184,48 @@ var _ = Describe("GossipMessageQueue", func() {
 		),
 
 		Entry("Alive with lower incarnation number should NOT overwrite suspect",
-			&membership.MessageSuspect{
+			&gossip.MessageSuspect{
 				Source:            TestAddress2,
 				Destination:       TestAddress,
 				IncarnationNumber: 2,
 			},
-			&membership.MessageAlive{
+			&gossip.MessageAlive{
 				Source:            TestAddress,
 				IncarnationNumber: 1,
 			},
 			false,
 		),
 		Entry("Alive with same incarnation number should NOT overwrite suspect",
-			&membership.MessageSuspect{
+			&gossip.MessageSuspect{
 				Source:            TestAddress2,
 				Destination:       TestAddress,
 				IncarnationNumber: 2,
 			},
-			&membership.MessageAlive{
+			&gossip.MessageAlive{
 				Source:            TestAddress,
 				IncarnationNumber: 2,
 			},
 			false,
 		),
 		Entry("Alive with bigger incarnation number should overwrite suspect",
-			&membership.MessageSuspect{
+			&gossip.MessageSuspect{
 				Source:            TestAddress2,
 				Destination:       TestAddress,
 				IncarnationNumber: 2,
 			},
-			&membership.MessageAlive{
+			&gossip.MessageAlive{
 				Source:            TestAddress,
 				IncarnationNumber: 3,
 			},
 			true,
 		),
 		Entry("Suspect with lower incarnation number should NOT overwrite suspect",
-			&membership.MessageSuspect{
+			&gossip.MessageSuspect{
 				Source:            TestAddress2,
 				Destination:       TestAddress,
 				IncarnationNumber: 2,
 			},
-			&membership.MessageSuspect{
+			&gossip.MessageSuspect{
 				Source:            TestAddress2,
 				Destination:       TestAddress,
 				IncarnationNumber: 1,
@@ -233,12 +233,12 @@ var _ = Describe("GossipMessageQueue", func() {
 			false,
 		),
 		Entry("Suspect with same incarnation number should NOT overwrite suspect",
-			&membership.MessageSuspect{
+			&gossip.MessageSuspect{
 				Source:            TestAddress2,
 				Destination:       TestAddress,
 				IncarnationNumber: 2,
 			},
-			&membership.MessageSuspect{
+			&gossip.MessageSuspect{
 				Source:            TestAddress2,
 				Destination:       TestAddress,
 				IncarnationNumber: 2,
@@ -246,12 +246,12 @@ var _ = Describe("GossipMessageQueue", func() {
 			false,
 		),
 		Entry("Suspect with bigger incarnation number should overwrite suspect",
-			&membership.MessageSuspect{
+			&gossip.MessageSuspect{
 				Source:            TestAddress2,
 				Destination:       TestAddress,
 				IncarnationNumber: 2,
 			},
-			&membership.MessageSuspect{
+			&gossip.MessageSuspect{
 				Source:            TestAddress2,
 				Destination:       TestAddress,
 				IncarnationNumber: 3,
@@ -259,12 +259,12 @@ var _ = Describe("GossipMessageQueue", func() {
 			true,
 		),
 		Entry("Faulty with lower incarnation number should NOT overwrite suspect",
-			&membership.MessageSuspect{
+			&gossip.MessageSuspect{
 				Source:            TestAddress2,
 				Destination:       TestAddress,
 				IncarnationNumber: 2,
 			},
-			&membership.MessageFaulty{
+			&gossip.MessageFaulty{
 				Source:            TestAddress2,
 				Destination:       TestAddress,
 				IncarnationNumber: 1,
@@ -272,12 +272,12 @@ var _ = Describe("GossipMessageQueue", func() {
 			false,
 		),
 		Entry("Faulty with same incarnation number should overwrite suspect",
-			&membership.MessageSuspect{
+			&gossip.MessageSuspect{
 				Source:            TestAddress2,
 				Destination:       TestAddress,
 				IncarnationNumber: 2,
 			},
-			&membership.MessageFaulty{
+			&gossip.MessageFaulty{
 				Source:            TestAddress2,
 				Destination:       TestAddress,
 				IncarnationNumber: 2,
@@ -285,12 +285,12 @@ var _ = Describe("GossipMessageQueue", func() {
 			true,
 		),
 		Entry("Faulty with bigger incarnation number should overwrite suspect",
-			&membership.MessageSuspect{
+			&gossip.MessageSuspect{
 				Source:            TestAddress2,
 				Destination:       TestAddress,
 				IncarnationNumber: 2,
 			},
-			&membership.MessageFaulty{
+			&gossip.MessageFaulty{
 				Source:            TestAddress2,
 				Destination:       TestAddress,
 				IncarnationNumber: 3,
@@ -299,48 +299,48 @@ var _ = Describe("GossipMessageQueue", func() {
 		),
 
 		Entry("Alive with lower incarnation number should NOT overwrite faulty",
-			&membership.MessageFaulty{
+			&gossip.MessageFaulty{
 				Source:            TestAddress2,
 				Destination:       TestAddress,
 				IncarnationNumber: 2,
 			},
-			&membership.MessageAlive{
+			&gossip.MessageAlive{
 				Source:            TestAddress,
 				IncarnationNumber: 1,
 			},
 			false,
 		),
 		Entry("Alive with same incarnation number should NOT overwrite faulty",
-			&membership.MessageFaulty{
+			&gossip.MessageFaulty{
 				Source:            TestAddress2,
 				Destination:       TestAddress,
 				IncarnationNumber: 2,
 			},
-			&membership.MessageAlive{
+			&gossip.MessageAlive{
 				Source:            TestAddress,
 				IncarnationNumber: 2,
 			},
 			false,
 		),
 		Entry("Alive with bigger incarnation number should overwrite faulty",
-			&membership.MessageFaulty{
+			&gossip.MessageFaulty{
 				Source:            TestAddress2,
 				Destination:       TestAddress,
 				IncarnationNumber: 2,
 			},
-			&membership.MessageAlive{
+			&gossip.MessageAlive{
 				Source:            TestAddress,
 				IncarnationNumber: 3,
 			},
 			true,
 		),
 		Entry("Suspect with lower incarnation number should NOT overwrite faulty",
-			&membership.MessageFaulty{
+			&gossip.MessageFaulty{
 				Source:            TestAddress2,
 				Destination:       TestAddress,
 				IncarnationNumber: 2,
 			},
-			&membership.MessageSuspect{
+			&gossip.MessageSuspect{
 				Source:            TestAddress2,
 				Destination:       TestAddress,
 				IncarnationNumber: 1,
@@ -348,12 +348,12 @@ var _ = Describe("GossipMessageQueue", func() {
 			false,
 		),
 		Entry("Suspect with same incarnation number should NOT overwrite faulty",
-			&membership.MessageFaulty{
+			&gossip.MessageFaulty{
 				Source:            TestAddress2,
 				Destination:       TestAddress,
 				IncarnationNumber: 2,
 			},
-			&membership.MessageSuspect{
+			&gossip.MessageSuspect{
 				Source:            TestAddress2,
 				Destination:       TestAddress,
 				IncarnationNumber: 2,
@@ -361,12 +361,12 @@ var _ = Describe("GossipMessageQueue", func() {
 			false,
 		),
 		Entry("Suspect with bigger incarnation number should overwrite faulty",
-			&membership.MessageFaulty{
+			&gossip.MessageFaulty{
 				Source:            TestAddress2,
 				Destination:       TestAddress,
 				IncarnationNumber: 2,
 			},
-			&membership.MessageSuspect{
+			&gossip.MessageSuspect{
 				Source:            TestAddress2,
 				Destination:       TestAddress,
 				IncarnationNumber: 3,
@@ -374,12 +374,12 @@ var _ = Describe("GossipMessageQueue", func() {
 			true,
 		),
 		Entry("Faulty with lower incarnation number should NOT overwrite faulty",
-			&membership.MessageFaulty{
+			&gossip.MessageFaulty{
 				Source:            TestAddress2,
 				Destination:       TestAddress,
 				IncarnationNumber: 2,
 			},
-			&membership.MessageFaulty{
+			&gossip.MessageFaulty{
 				Source:            TestAddress2,
 				Destination:       TestAddress,
 				IncarnationNumber: 1,
@@ -387,12 +387,12 @@ var _ = Describe("GossipMessageQueue", func() {
 			false,
 		),
 		Entry("Faulty with same incarnation number should NOT overwrite faulty",
-			&membership.MessageFaulty{
+			&gossip.MessageFaulty{
 				Source:            TestAddress2,
 				Destination:       TestAddress,
 				IncarnationNumber: 2,
 			},
-			&membership.MessageFaulty{
+			&gossip.MessageFaulty{
 				Source:            TestAddress2,
 				Destination:       TestAddress,
 				IncarnationNumber: 1,
@@ -400,12 +400,12 @@ var _ = Describe("GossipMessageQueue", func() {
 			false,
 		),
 		Entry("Faulty with bigger incarnation number should overwrite faulty",
-			&membership.MessageFaulty{
+			&gossip.MessageFaulty{
 				Source:            TestAddress2,
 				Destination:       TestAddress,
 				IncarnationNumber: 2,
 			},
-			&membership.MessageFaulty{
+			&gossip.MessageFaulty{
 				Source:            TestAddress2,
 				Destination:       TestAddress,
 				IncarnationNumber: 3,
@@ -415,7 +415,7 @@ var _ = Describe("GossipMessageQueue", func() {
 	)
 
 	It("should correctly sort gossip by gossip count when preparing", func() {
-		message1 := &membership.MessageAlive{
+		message1 := &gossip.MessageAlive{
 			Source:            TestAddress,
 			IncarnationNumber: 0,
 		}
@@ -423,7 +423,7 @@ var _ = Describe("GossipMessageQueue", func() {
 		queue.MarkTransmitted(0)
 		queue.MarkTransmitted(0)
 
-		message2 := &membership.MessageAlive{
+		message2 := &gossip.MessageAlive{
 			Source:            TestAddress2,
 			IncarnationNumber: 0,
 		}
@@ -432,7 +432,7 @@ var _ = Describe("GossipMessageQueue", func() {
 		queue.MarkTransmitted(1)
 		queue.MarkTransmitted(1)
 
-		message3 := &membership.MessageAlive{
+		message3 := &gossip.MessageAlive{
 			Source:            TestAddress3,
 			IncarnationNumber: 0,
 		}
@@ -446,7 +446,7 @@ var _ = Describe("GossipMessageQueue", func() {
 	})
 
 	It("should correctly prioritize suspect gossip when preparing", func() {
-		message1 := &membership.MessageSuspect{
+		message1 := &gossip.MessageSuspect{
 			Source:            TestAddress2,
 			Destination:       TestAddress,
 			IncarnationNumber: 0,
@@ -455,7 +455,7 @@ var _ = Describe("GossipMessageQueue", func() {
 		queue.MarkTransmitted(0)
 		queue.MarkTransmitted(0)
 
-		message2 := &membership.MessageAlive{
+		message2 := &gossip.MessageAlive{
 			Source:            TestAddress2,
 			IncarnationNumber: 0,
 		}
@@ -464,7 +464,7 @@ var _ = Describe("GossipMessageQueue", func() {
 		queue.MarkTransmitted(1)
 		queue.MarkTransmitted(1)
 
-		message3 := &membership.MessageAlive{
+		message3 := &gossip.MessageAlive{
 			Source:            TestAddress3,
 			IncarnationNumber: 0,
 		}
@@ -478,7 +478,7 @@ var _ = Describe("GossipMessageQueue", func() {
 	})
 
 	It("should correctly prioritize faulty gossip when preparing", func() {
-		message1 := &membership.MessageFaulty{
+		message1 := &gossip.MessageFaulty{
 			Source:            TestAddress2,
 			Destination:       TestAddress,
 			IncarnationNumber: 0,
@@ -487,7 +487,7 @@ var _ = Describe("GossipMessageQueue", func() {
 		queue.MarkTransmitted(0)
 		queue.MarkTransmitted(0)
 
-		message2 := &membership.MessageAlive{
+		message2 := &gossip.MessageAlive{
 			Source:            TestAddress2,
 			IncarnationNumber: 0,
 		}
@@ -496,7 +496,7 @@ var _ = Describe("GossipMessageQueue", func() {
 		queue.MarkTransmitted(1)
 		queue.MarkTransmitted(1)
 
-		message3 := &membership.MessageAlive{
+		message3 := &gossip.MessageAlive{
 			Source:            TestAddress3,
 			IncarnationNumber: 0,
 		}
@@ -510,7 +510,7 @@ var _ = Describe("GossipMessageQueue", func() {
 	})
 
 	It("should correctly prioritize alive gossip when preparing", func() {
-		message1 := &membership.MessageAlive{
+		message1 := &gossip.MessageAlive{
 			Source:            TestAddress,
 			IncarnationNumber: 0,
 		}
@@ -518,7 +518,7 @@ var _ = Describe("GossipMessageQueue", func() {
 		queue.MarkTransmitted(0)
 		queue.MarkTransmitted(0)
 
-		message2 := &membership.MessageAlive{
+		message2 := &gossip.MessageAlive{
 			Source:            TestAddress2,
 			IncarnationNumber: 0,
 		}
@@ -527,7 +527,7 @@ var _ = Describe("GossipMessageQueue", func() {
 		queue.MarkTransmitted(1)
 		queue.MarkTransmitted(1)
 
-		message3 := &membership.MessageAlive{
+		message3 := &gossip.MessageAlive{
 			Source:            TestAddress3,
 			IncarnationNumber: 0,
 		}
@@ -541,8 +541,8 @@ var _ = Describe("GossipMessageQueue", func() {
 	})
 
 	It("should correctly remove messages which were transmitted enough", func() {
-		gossipQueue := membership.NewGossipMessageQueue(3)
-		gossipQueue.Add(&membership.MessageAlive{
+		gossipQueue := gossip.NewMessageQueue(3)
+		gossipQueue.Add(&gossip.MessageAlive{
 			Source:            TestAddress,
 			IncarnationNumber: 0,
 		})
@@ -565,16 +565,16 @@ var _ = Describe("GossipMessageQueue", func() {
 
 func BenchmarkGossipQueue_Add(b *testing.B) {
 	for gossipCount := 1; gossipCount <= 16*1024; gossipCount *= 2 {
-		gossipQueue := membership.NewGossipMessageQueue(math.MaxInt)
+		gossipQueue := gossip.NewMessageQueue(math.MaxInt)
 		for i := range gossipCount {
-			gossipQueue.Add(&membership.MessageAlive{
+			gossipQueue.Add(&gossip.MessageAlive{
 				Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
 				IncarnationNumber: 0,
 			})
 		}
 		b.Run(fmt.Sprintf("%d gossip", gossipCount), func(b *testing.B) {
 			for b.Loop() {
-				gossipQueue.Add(&membership.MessageAlive{
+				gossipQueue.Add(&gossip.MessageAlive{
 					Source:            encoding.NewAddress(net.IPv4(11, 12, 13, 14), 1024),
 					IncarnationNumber: 0,
 				})
@@ -586,9 +586,9 @@ func BenchmarkGossipQueue_Add(b *testing.B) {
 
 func BenchmarkGossipQueue_PrepareFor(b *testing.B) {
 	for gossipCount := 1; gossipCount <= 16*1024; gossipCount *= 2 {
-		gossipQueue := membership.NewGossipMessageQueue(math.MaxInt)
+		gossipQueue := gossip.NewMessageQueue(math.MaxInt)
 		for i := range gossipCount {
-			gossipQueue.Add(&membership.MessageAlive{
+			gossipQueue.Add(&gossip.MessageAlive{
 				Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
 				IncarnationNumber: 0,
 			})

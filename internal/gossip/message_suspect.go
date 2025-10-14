@@ -1,4 +1,4 @@
-package membership
+package gossip
 
 import (
 	"errors"
@@ -6,13 +6,13 @@ import (
 	"github.com/backbone81/membership/internal/encoding"
 )
 
-// MessageFaulty declares the destination as being faulty by the source.
-// This is the `Confirm` message of SWIM chapter 4.2. Suspicion Mechanism: Reducing the Frequency of False Positives.
-type MessageFaulty struct {
-	// Source is the member which declared the destination as faulty.
+// MessageSuspect declares the destination as being suspected for failure by the source.
+// This is the `Suspect` message of SWIM chapter 4.2. Suspicion Mechanism: Reducing the Frequency of False Positives.
+type MessageSuspect struct {
+	// Source is the member which declared the destination as suspect.
 	Source encoding.Address
 
-	// Destination is the member which was declared as faulty by source.
+	// Destination is the member which was declared as suspect by source.
 	Destination encoding.Address
 
 	// IncarnationNumber is the incarnation which source saw and based its decision on. This helps in identifying
@@ -22,8 +22,8 @@ type MessageFaulty struct {
 
 // AppendToBuffer appends the message to the provided buffer encoded for network transfer.
 // Returns the buffer with the data appended, the number of bytes appended and any error which occurred.
-func (m *MessageFaulty) AppendToBuffer(buffer []byte) ([]byte, int, error) {
-	messageTypeBuffer, messageTypeN, err := encoding.AppendMessageTypeToBuffer(buffer, encoding.MessageTypeFaulty)
+func (m *MessageSuspect) AppendToBuffer(buffer []byte) ([]byte, int, error) {
+	messageTypeBuffer, messageTypeN, err := encoding.AppendMessageTypeToBuffer(buffer, encoding.MessageTypeSuspect)
 	if err != nil {
 		return buffer, 0, err
 	}
@@ -48,9 +48,9 @@ func (m *MessageFaulty) AppendToBuffer(buffer []byte) ([]byte, int, error) {
 
 // FromBuffer reads the message from the provided buffer.
 // Returns the number of bytes read and any error which occurred.
-func (m *MessageFaulty) FromBuffer(buffer []byte) (int, error) {
+func (m *MessageSuspect) FromBuffer(buffer []byte) (int, error) {
 	messageType, messageTypeN, err := encoding.MessageTypeFromBuffer(buffer)
-	if messageType != encoding.MessageTypeFaulty {
+	if messageType != encoding.MessageTypeSuspect {
 		return 0, errors.New("invalid message type")
 	}
 
@@ -74,14 +74,14 @@ func (m *MessageFaulty) FromBuffer(buffer []byte) (int, error) {
 }
 
 // GetAddress returns the address which is relevant for this message. Needed for the gossip queue to check for equality.
-func (m *MessageFaulty) GetAddress() encoding.Address {
+func (m *MessageSuspect) GetAddress() encoding.Address {
 	return m.Destination
 }
 
-func (m *MessageFaulty) GetType() encoding.MessageType {
-	return encoding.MessageTypeFaulty
+func (m *MessageSuspect) GetType() encoding.MessageType {
+	return encoding.MessageTypeSuspect
 }
 
-func (m *MessageFaulty) GetIncarnationNumber() int {
+func (m *MessageSuspect) GetIncarnationNumber() int {
 	return m.IncarnationNumber
 }

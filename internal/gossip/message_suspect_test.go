@@ -1,18 +1,18 @@
-package membership_test
+package gossip_test
 
 import (
 	"net"
 	"testing"
 
 	"github.com/backbone81/membership/internal/encoding"
-	"github.com/backbone81/membership/internal/membership"
+	"github.com/backbone81/membership/internal/gossip"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("MessageSuspect", func() {
 	It("should append to nil buffer", func() {
-		message := membership.MessageSuspect{
+		message := gossip.MessageSuspect{
 			Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 			Destination:       encoding.NewAddress(net.IPv4(11, 12, 13, 14), 1024),
 			IncarnationNumber: 7,
@@ -24,7 +24,7 @@ var _ = Describe("MessageSuspect", func() {
 
 	It("should append to buffer", func() {
 		var localBuffer [10]byte
-		message := membership.MessageSuspect{
+		message := gossip.MessageSuspect{
 			Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 			Destination:       encoding.NewAddress(net.IPv4(11, 12, 13, 14), 1024),
 			IncarnationNumber: 7,
@@ -35,7 +35,7 @@ var _ = Describe("MessageSuspect", func() {
 	})
 
 	It("should read from buffer", func() {
-		appendMessage := membership.MessageSuspect{
+		appendMessage := gossip.MessageSuspect{
 			Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 			Destination:       encoding.NewAddress(net.IPv4(11, 12, 13, 14), 1024),
 			IncarnationNumber: 7,
@@ -44,7 +44,7 @@ var _ = Describe("MessageSuspect", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(buffer).ToNot(BeNil())
 
-		var readMessage membership.MessageSuspect
+		var readMessage gossip.MessageSuspect
 		readN, err := readMessage.FromBuffer(buffer)
 		Expect(err).ToNot(HaveOccurred())
 
@@ -53,12 +53,12 @@ var _ = Describe("MessageSuspect", func() {
 	})
 
 	It("should fail to read from nil buffer", func() {
-		var readMessage membership.MessageSuspect
+		var readMessage gossip.MessageSuspect
 		Expect(readMessage.FromBuffer(nil)).Error().To(HaveOccurred())
 	})
 
 	It("should fail to read from buffer which is too small", func() {
-		message := membership.MessageSuspect{
+		message := gossip.MessageSuspect{
 			Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 			Destination:       encoding.NewAddress(net.IPv4(11, 12, 13, 14), 1024),
 			IncarnationNumber: 7,
@@ -74,7 +74,7 @@ var _ = Describe("MessageSuspect", func() {
 })
 
 func BenchmarkMessageSuspect_AppendToBuffer(b *testing.B) {
-	message := membership.MessageSuspect{
+	message := gossip.MessageSuspect{
 		Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 		Destination:       encoding.NewAddress(net.IPv4(11, 12, 13, 14), 1024),
 		IncarnationNumber: 7,
@@ -88,7 +88,7 @@ func BenchmarkMessageSuspect_AppendToBuffer(b *testing.B) {
 }
 
 func BenchmarkMessageSuspect_FromBuffer(b *testing.B) {
-	message := membership.MessageSuspect{
+	message := gossip.MessageSuspect{
 		Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 		Destination:       encoding.NewAddress(net.IPv4(11, 12, 13, 14), 1024),
 		IncarnationNumber: 7,

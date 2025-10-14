@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/backbone81/membership/internal/encoding"
+	"github.com/backbone81/membership/internal/gossip"
 	"github.com/go-logr/logr"
 )
 
@@ -28,7 +29,7 @@ type List struct {
 
 	randomIndexes   []int
 	nextRandomIndex int
-	gossipQueue     *GossipMessageQueue
+	gossipQueue     *gossip.MessageQueue
 	self            encoding.Address
 
 	datagramBuffer []byte
@@ -84,11 +85,11 @@ func NewList(config ListConfig) *List {
 		config:         config,
 		logger:         config.Logger,
 		self:           config.AdvertisedAddress,
-		gossipQueue:    NewGossipMessageQueue(10), // TODO: The max gossip count needs to be adjusted for the number of members during runtime.
+		gossipQueue:    gossip.NewMessageQueue(10), // TODO: The max gossip count needs to be adjusted for the number of members during runtime.
 		datagramBuffer: make([]byte, 0, config.MaxDatagramLength),
 	}
 	// We need to gossip our own alive. Otherwise, nobody will pick us up into their own member list.
-	newList.gossipQueue.Add(&MessageAlive{
+	newList.gossipQueue.Add(&gossip.MessageAlive{
 		Source:            config.AdvertisedAddress,
 		IncarnationNumber: 0,
 	})
@@ -246,7 +247,7 @@ func (l *List) markSuspectsAsFaulty() {
 			LastStateChange:   time.Now(),
 			IncarnationNumber: member.IncarnationNumber,
 		})
-		l.gossipQueue.Add(&MessageFaulty{
+		l.gossipQueue.Add(&gossip.MessageFaulty{
 			Source:            l.self,
 			Destination:       member.Address,
 			IncarnationNumber: member.IncarnationNumber,
@@ -288,7 +289,7 @@ func (l *List) processFailedProbes() {
 		// We need to mark the member as suspect and gossip about it.
 		member.State = MemberStateSuspect
 		member.LastStateChange = time.Now()
-		l.gossipQueue.Add(&MessageSuspect{
+		l.gossipQueue.Add(&gossip.MessageSuspect{
 			Source:            l.self,
 			Destination:       member.Address,
 			IncarnationNumber: member.IncarnationNumber,
@@ -384,7 +385,7 @@ func (l *List) DispatchDatagram(buffer []byte) error {
 			buffer = buffer[n:]
 			l.handleIndirectAck(message)
 		case encoding.MessageTypeSuspect:
-			var message MessageSuspect
+			var message gossip.MessageSuspect
 			n, err := message.FromBuffer(buffer)
 			if err != nil {
 				return err
@@ -392,7 +393,7 @@ func (l *List) DispatchDatagram(buffer []byte) error {
 			buffer = buffer[n:]
 			l.handleSuspect(message)
 		case encoding.MessageTypeAlive:
-			var message MessageAlive
+			var message gossip.MessageAlive
 			n, err := message.FromBuffer(buffer)
 			if err != nil {
 				return err
@@ -400,7 +401,7 @@ func (l *List) DispatchDatagram(buffer []byte) error {
 			buffer = buffer[n:]
 			l.handleAlive(message)
 		case encoding.MessageTypeFaulty:
-			var message MessageFaulty
+			var message gossip.MessageFaulty
 			n, err := message.FromBuffer(buffer)
 			if err != nil {
 				return err
@@ -564,7 +565,7 @@ func (l *List) handleIndirectAckForPendingIndirectProbes(indirectAck MessageIndi
 	l.pendingIndirectProbes = slices.Delete(l.pendingIndirectProbes, pendingIndirectProbeIndex, pendingIndirectProbeIndex+1)
 }
 
-func (l *List) handleSuspect(suspect MessageSuspect) {
+func (l *List) handleSuspect(suspect gossip.MessageSuspect) {
 	l.logger.V(3).Info(
 		"Received gossip about suspect",
 		"source", suspect.Source,
@@ -583,7 +584,7 @@ func (l *List) handleSuspect(suspect MessageSuspect) {
 	l.handleSuspectForUnknown(suspect)
 }
 
-func (l *List) handleSuspectForSelf(suspect MessageSuspect) bool {
+func (l *List) handleSuspectForSelf(suspect gossip.MessageSuspect) bool {
 	if !suspect.Destination.Equal(l.self) {
 		return false
 	}
@@ -596,14 +597,14 @@ func (l *List) handleSuspectForSelf(suspect MessageSuspect) bool {
 	// We need to refute the suspect about ourselves. Add a new alive message to gossip.
 	// Also make sure that our incarnation number is bigger than before.
 	l.incarnationNumber = max(l.incarnationNumber+1, suspect.IncarnationNumber+1)
-	l.gossipQueue.Add(&MessageAlive{
+	l.gossipQueue.Add(&gossip.MessageAlive{
 		Source:            l.self,
 		IncarnationNumber: l.incarnationNumber,
 	})
 	return true
 }
 
-func (l *List) handleSuspectForFaultyMembers(suspect MessageSuspect) bool {
+func (l *List) handleSuspectForFaultyMembers(suspect gossip.MessageSuspect) bool {
 	faultyMemberIndex := slices.IndexFunc(l.faultyMembers, func(member Member) bool {
 		return member.Address.Equal(suspect.Destination)
 	})
@@ -630,7 +631,7 @@ func (l *List) handleSuspectForFaultyMembers(suspect MessageSuspect) bool {
 	return true
 }
 
-func (l *List) handleSuspectForMembers(suspect MessageSuspect) bool {
+func (l *List) handleSuspectForMembers(suspect gossip.MessageSuspect) bool {
 	memberIndex := slices.IndexFunc(l.members, func(member Member) bool {
 		return member.Address.Equal(suspect.Source)
 	})
@@ -658,7 +659,7 @@ func (l *List) handleSuspectForMembers(suspect MessageSuspect) bool {
 	return true
 }
 
-func (l *List) handleSuspectForUnknown(suspect MessageSuspect) {
+func (l *List) handleSuspectForUnknown(suspect gossip.MessageSuspect) {
 	// We don't know about this member yet. Add it to our member list and gossip about it.
 	l.addMember(Member{
 		Address:           suspect.Destination,
@@ -669,7 +670,7 @@ func (l *List) handleSuspectForUnknown(suspect MessageSuspect) {
 	l.gossipQueue.Add(&suspect)
 }
 
-func (l *List) handleAlive(alive MessageAlive) {
+func (l *List) handleAlive(alive gossip.MessageAlive) {
 	l.logger.V(3).Info(
 		"Received gossip about alive",
 		"source", alive.Source,
@@ -687,14 +688,14 @@ func (l *List) handleAlive(alive MessageAlive) {
 	l.handleAliveForUnknown(alive)
 }
 
-func (l *List) handleAliveForSelf(alive MessageAlive) bool {
+func (l *List) handleAliveForSelf(alive gossip.MessageAlive) bool {
 	if !alive.Source.Equal(l.self) {
 		return false
 	}
 	return true
 }
 
-func (l *List) handleAliveForFaultyMembers(alive MessageAlive) bool {
+func (l *List) handleAliveForFaultyMembers(alive gossip.MessageAlive) bool {
 	faultyMemberIndex := slices.IndexFunc(l.faultyMembers, func(member Member) bool {
 		return member.Address.Equal(alive.Source)
 	})
@@ -721,7 +722,7 @@ func (l *List) handleAliveForFaultyMembers(alive MessageAlive) bool {
 	return true
 }
 
-func (l *List) handleAliveForMembers(alive MessageAlive) bool {
+func (l *List) handleAliveForMembers(alive gossip.MessageAlive) bool {
 	memberIndex := slices.IndexFunc(l.members, func(member Member) bool {
 		return member.Address.Equal(alive.Source)
 	})
@@ -749,7 +750,7 @@ func (l *List) handleAliveForMembers(alive MessageAlive) bool {
 	return true
 }
 
-func (l *List) handleAliveForUnknown(alive MessageAlive) {
+func (l *List) handleAliveForUnknown(alive gossip.MessageAlive) {
 	// We don't know about this member yet. Add it to our member list and gossip about it.
 	l.addMember(Member{
 		Address:           alive.Source,
@@ -760,7 +761,7 @@ func (l *List) handleAliveForUnknown(alive MessageAlive) {
 	l.gossipQueue.Add(&alive)
 }
 
-func (l *List) handleFaulty(faulty MessageFaulty) {
+func (l *List) handleFaulty(faulty gossip.MessageFaulty) {
 	l.logger.V(3).Info(
 		"Received gossip about faulty",
 		"source", faulty.Source,
@@ -779,7 +780,7 @@ func (l *List) handleFaulty(faulty MessageFaulty) {
 	l.handleFaultyForUnknown(faulty)
 }
 
-func (l *List) handleFaultyForSelf(faulty MessageFaulty) bool {
+func (l *List) handleFaultyForSelf(faulty gossip.MessageFaulty) bool {
 	if !faulty.Destination.Equal(l.self) {
 		return false
 	}
@@ -792,14 +793,14 @@ func (l *List) handleFaultyForSelf(faulty MessageFaulty) bool {
 	// We need to re-join. Add a new alive message to gossip.
 	// Also make sure that our incarnation number is bigger than before.
 	l.incarnationNumber = max(l.incarnationNumber+1, faulty.IncarnationNumber+1)
-	l.gossipQueue.Add(&MessageAlive{
+	l.gossipQueue.Add(&gossip.MessageAlive{
 		Source:            l.self,
 		IncarnationNumber: l.incarnationNumber,
 	})
 	return true
 }
 
-func (l *List) handleFaultyForFaultyMembers(faulty MessageFaulty) bool {
+func (l *List) handleFaultyForFaultyMembers(faulty gossip.MessageFaulty) bool {
 	faultyMemberIndex := slices.IndexFunc(l.faultyMembers, func(member Member) bool {
 		return member.Address.Equal(faulty.Destination)
 	})
@@ -819,7 +820,7 @@ func (l *List) handleFaultyForFaultyMembers(faulty MessageFaulty) bool {
 	return true
 }
 
-func (l *List) handleFaultyForMembers(faulty MessageFaulty) bool {
+func (l *List) handleFaultyForMembers(faulty gossip.MessageFaulty) bool {
 	memberIndex := slices.IndexFunc(l.members, func(member Member) bool {
 		return member.Address.Equal(faulty.Destination)
 	})
@@ -846,7 +847,7 @@ func (l *List) handleFaultyForMembers(faulty MessageFaulty) bool {
 	return true
 }
 
-func (l *List) handleFaultyForUnknown(faulty MessageFaulty) {
+func (l *List) handleFaultyForUnknown(faulty gossip.MessageFaulty) {
 	// We don't know about this member yet. Add it to our faulty member list and gossip about it.
 	l.faultyMembers = append(l.faultyMembers, Member{
 		Address:           faulty.Destination,
@@ -886,18 +887,18 @@ func (l *List) handleListResponse(listResponse MessageListResponse) error {
 	for _, member := range listResponse.Members {
 		switch member.State {
 		case MemberStateAlive:
-			l.handleAlive(MessageAlive{
+			l.handleAlive(gossip.MessageAlive{
 				Source:            listResponse.Source,
 				IncarnationNumber: member.IncarnationNumber,
 			})
 		case MemberStateSuspect:
-			l.handleSuspect(MessageSuspect{
+			l.handleSuspect(gossip.MessageSuspect{
 				Source:            listResponse.Source,
 				Destination:       member.Address,
 				IncarnationNumber: member.IncarnationNumber,
 			})
 		case MemberStateFaulty:
-			l.handleFaulty(MessageFaulty{
+			l.handleFaulty(gossip.MessageFaulty{
 				Source:            listResponse.Source,
 				Destination:       member.Address,
 				IncarnationNumber: member.IncarnationNumber,

@@ -1,4 +1,4 @@
-package membership
+package gossip
 
 import (
 	"cmp"
@@ -7,11 +7,11 @@ import (
 	"github.com/backbone81/membership/internal/encoding"
 )
 
-// GossipMessageQueue is responsible for managing the messages we need to gossip. It will sort the gossip messages in a way
+// MessageQueue is responsible for managing the messages we need to gossip. It will sort the gossip messages in a way
 // which helps distribute new gossip quickly.
-type GossipMessageQueue struct {
+type MessageQueue struct {
 	// queue is the list of gossip entries.
-	queue []GossipMessageQueueEntry
+	queue []MessageQueueEntry
 
 	// indexByAddress is correlating the position within queue with the address. This helps in making checks for
 	// existing gossip faster.
@@ -21,25 +21,25 @@ type GossipMessageQueue struct {
 	maxTransmissionCount int
 }
 
-// NewGossipMessageQueue creates a new gossip message queue.
-func NewGossipMessageQueue(maxTransmissionCount int) *GossipMessageQueue {
-	return &GossipMessageQueue{
+// NewMessageQueue creates a new gossip message queue.
+func NewMessageQueue(maxTransmissionCount int) *MessageQueue {
+	return &MessageQueue{
 		indexByAddress:       make(map[encoding.Address]int),
 		maxTransmissionCount: maxTransmissionCount,
 	}
 }
 
-// GossipMessageQueueEntry is a helper struct making up each entry in the queue.
-type GossipMessageQueueEntry struct {
+// MessageQueueEntry is a helper struct making up each entry in the queue.
+type MessageQueueEntry struct {
 	// Message is the message to gossip about.
-	Message GossipMessage
+	Message Message
 
 	// TransmissionCount is the number of times the message has been gossiped.
 	TransmissionCount int
 }
 
-// GossipMessage is the interface all gossip network messages need to implement.
-type GossipMessage interface {
+// Message is the interface all gossip network messages need to implement.
+type Message interface {
 	AppendToBuffer(buffer []byte) ([]byte, int, error)
 	FromBuffer(buffer []byte) (int, error)
 	GetAddress() encoding.Address
@@ -56,8 +56,8 @@ type GossipMessage interface {
 // gossip is an alive message, it is placed last, as that is not important for the member.
 //
 // This method will delete gossip which has exceeded the maximum transmission count.
-func (q *GossipMessageQueue) PrioritizeForAddress(address encoding.Address) {
-	q.queue = slices.DeleteFunc(q.queue, func(entry GossipMessageQueueEntry) bool {
+func (q *MessageQueue) PrioritizeForAddress(address encoding.Address) {
+	q.queue = slices.DeleteFunc(q.queue, func(entry MessageQueueEntry) bool {
 		result := entry.TransmissionCount >= q.maxTransmissionCount
 		if result {
 			delete(q.indexByAddress, entry.Message.GetAddress())
@@ -83,7 +83,7 @@ func (q *GossipMessageQueue) PrioritizeForAddress(address encoding.Address) {
 
 	// Let's make sure that our gossip is ordered with the least gossiped first. We are sorting what we did not move
 	// to the start or end of the queue if the address was already there.
-	slices.SortFunc(localQueue, func(a, b GossipMessageQueueEntry) int {
+	slices.SortFunc(localQueue, func(a, b MessageQueueEntry) int {
 		return cmp.Compare(a.TransmissionCount, b.TransmissionCount)
 	})
 
@@ -93,18 +93,18 @@ func (q *GossipMessageQueue) PrioritizeForAddress(address encoding.Address) {
 }
 
 // Len returns the number of entries currently stored in the queue.
-func (q *GossipMessageQueue) Len() int {
+func (q *MessageQueue) Len() int {
 	return len(q.queue)
 }
 
 // Get returns the message at the given index within the queue.
 // Call PrioritizeForAddress before you iterate over the content of the queue. Otherwise, the order of messages is undefined.
-func (q *GossipMessageQueue) Get(index int) GossipMessage {
+func (q *MessageQueue) Get(index int) Message {
 	return q.queue[index].Message
 }
 
 // MarkTransmitted increases the transmission counter for the given message by one.
-func (q *GossipMessageQueue) MarkTransmitted(index int) {
+func (q *MessageQueue) MarkTransmitted(index int) {
 	q.queue[index].TransmissionCount++
 }
 
@@ -115,7 +115,7 @@ func (q *GossipMessageQueue) MarkTransmitted(index int) {
 //
 // Note that calls to this method need to be fast, as we might need to add multiple gossip messages when receiving
 // pings and acks.
-func (q *GossipMessageQueue) Add(message GossipMessage) {
+func (q *MessageQueue) Add(message Message) {
 	index, ok := q.indexByAddress[message.GetAddress()]
 	if ok {
 		// The queue already contains a message for that address. Let's check if we need to overwrite it.
@@ -137,7 +137,7 @@ func (q *GossipMessageQueue) Add(message GossipMessage) {
 		return
 	}
 
-	q.queue = append(q.queue, GossipMessageQueueEntry{
+	q.queue = append(q.queue, MessageQueueEntry{
 		Message: message,
 	})
 	q.indexByAddress[message.GetAddress()] = len(q.queue) - 1

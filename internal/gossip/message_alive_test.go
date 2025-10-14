@@ -1,20 +1,19 @@
-package membership_test
+package gossip_test
 
 import (
 	"net"
 	"testing"
 
 	"github.com/backbone81/membership/internal/encoding"
-	"github.com/backbone81/membership/internal/membership"
+	"github.com/backbone81/membership/internal/gossip"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("MessageFaulty", func() {
+var _ = Describe("MessageAlive", func() {
 	It("should append to nil buffer", func() {
-		message := membership.MessageFaulty{
+		message := gossip.MessageAlive{
 			Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
-			Destination:       encoding.NewAddress(net.IPv4(11, 12, 13, 14), 1024),
 			IncarnationNumber: 7,
 		}
 		buffer, _, err := message.AppendToBuffer(nil)
@@ -24,9 +23,8 @@ var _ = Describe("MessageFaulty", func() {
 
 	It("should append to buffer", func() {
 		var localBuffer [10]byte
-		message := membership.MessageFaulty{
+		message := gossip.MessageAlive{
 			Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
-			Destination:       encoding.NewAddress(net.IPv4(11, 12, 13, 14), 1024),
 			IncarnationNumber: 7,
 		}
 		buffer, _, err := message.AppendToBuffer(localBuffer[:0])
@@ -35,16 +33,15 @@ var _ = Describe("MessageFaulty", func() {
 	})
 
 	It("should read from buffer", func() {
-		appendMessage := membership.MessageFaulty{
+		appendMessage := gossip.MessageAlive{
 			Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
-			Destination:       encoding.NewAddress(net.IPv4(11, 12, 13, 14), 1024),
 			IncarnationNumber: 7,
 		}
 		buffer, appendN, err := appendMessage.AppendToBuffer(nil)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(buffer).ToNot(BeNil())
 
-		var readMessage membership.MessageFaulty
+		var readMessage gossip.MessageAlive
 		readN, err := readMessage.FromBuffer(buffer)
 		Expect(err).ToNot(HaveOccurred())
 
@@ -53,14 +50,13 @@ var _ = Describe("MessageFaulty", func() {
 	})
 
 	It("should fail to read from nil buffer", func() {
-		var readMessage membership.MessageFaulty
+		var readMessage gossip.MessageAlive
 		Expect(readMessage.FromBuffer(nil)).Error().To(HaveOccurred())
 	})
 
 	It("should fail to read from buffer which is too small", func() {
-		message := membership.MessageFaulty{
+		message := gossip.MessageAlive{
 			Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
-			Destination:       encoding.NewAddress(net.IPv4(11, 12, 13, 14), 1024),
 			IncarnationNumber: 7,
 		}
 		buffer, _, err := message.AppendToBuffer(nil)
@@ -73,10 +69,9 @@ var _ = Describe("MessageFaulty", func() {
 	})
 })
 
-func BenchmarkMessageFaulty_AppendToBuffer(b *testing.B) {
-	message := membership.MessageFaulty{
+func BenchmarkMessageAlive_AppendToBuffer(b *testing.B) {
+	message := gossip.MessageAlive{
 		Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
-		Destination:       encoding.NewAddress(net.IPv4(11, 12, 13, 14), 1024),
 		IncarnationNumber: 7,
 	}
 	var buffer [1024]byte
@@ -87,10 +82,9 @@ func BenchmarkMessageFaulty_AppendToBuffer(b *testing.B) {
 	}
 }
 
-func BenchmarkMessageFaulty_FromBuffer(b *testing.B) {
-	message := membership.MessageFaulty{
+func BenchmarkMessageAlive_FromBuffer(b *testing.B) {
+	message := gossip.MessageAlive{
 		Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
-		Destination:       encoding.NewAddress(net.IPv4(11, 12, 13, 14), 1024),
 		IncarnationNumber: 7,
 	}
 	buffer, _, err := message.AppendToBuffer(nil)

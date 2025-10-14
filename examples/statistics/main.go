@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	for members := 1; members < 1_000_000; members *= 2 {
+	for members := 1; members <= 64*1024; members *= 2 {
 		fmt.Printf(
 			"%d members, %f ping chance, %s failure detection\n",
 			members,

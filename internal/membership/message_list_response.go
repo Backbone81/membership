@@ -10,7 +10,7 @@ import (
 // transmitted over TCP and not UDP.
 type MessageListResponse struct {
 	Source  encoding.Address
-	Members []Member
+	Members []encoding.Member
 }
 
 // AppendToBuffer appends the message to the provided buffer encoded for network transfer.
@@ -34,7 +34,7 @@ func (m *MessageListResponse) AppendToBuffer(buffer []byte) ([]byte, int, error)
 	memberBuffer := countBuffer
 	var memberN int
 	for _, member := range m.Members {
-		appendedBuffer, n, err := AppendMemberToBuffer(memberBuffer, member)
+		appendedBuffer, n, err := encoding.AppendMemberToBuffer(memberBuffer, member)
 		if err != nil {
 			return buffer, 0, err
 		}
@@ -65,7 +65,7 @@ func (m *MessageListResponse) FromBuffer(buffer []byte) (int, error) {
 	}
 
 	if cap(m.Members) < count {
-		m.Members = make([]Member, 0, count)
+		m.Members = make([]encoding.Member, 0, count)
 	}
 	if len(m.Members) != 0 {
 		// We reset the members slice after the check for capacity. In case the capacity is not enough, we save the
@@ -75,7 +75,7 @@ func (m *MessageListResponse) FromBuffer(buffer []byte) (int, error) {
 
 	var memberN int
 	for i := 0; i < count; i++ {
-		member, n, err := MemberFromBuffer(buffer[messageTypeN+sourceN+countN+memberN:])
+		member, n, err := encoding.MemberFromBuffer(buffer[messageTypeN+sourceN+countN+memberN:])
 		if err != nil {
 			return 0, err
 		}

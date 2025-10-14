@@ -1,15 +1,13 @@
-package membership
+package encoding
 
 import (
 	"time"
-
-	"github.com/backbone81/membership/internal/encoding"
 )
 
 // Member is a single member which we know of.
 type Member struct {
 	// Address is the address the member can be reached.
-	Address encoding.Address
+	Address Address
 
 	// State is the state the member is currently in.
 	State MemberState
@@ -26,7 +24,7 @@ type Member struct {
 // Note that the LastStateChange is not encoded to the buffer.
 // Returns the buffer with the data appended, the number of bytes appended and any error which occurred.
 func AppendMemberToBuffer(buffer []byte, member Member) ([]byte, int, error) {
-	addressBuffer, addressN, err := encoding.AppendAddressToBuffer(buffer, member.Address)
+	addressBuffer, addressN, err := AppendAddressToBuffer(buffer, member.Address)
 	if err != nil {
 		return buffer, 0, err
 	}
@@ -36,7 +34,7 @@ func AppendMemberToBuffer(buffer []byte, member Member) ([]byte, int, error) {
 		return buffer, 0, err
 	}
 
-	incarnationNumberBuffer, incarnationNumberN, err := encoding.AppendIncarnationNumberToBuffer(stateBuffer, member.IncarnationNumber)
+	incarnationNumberBuffer, incarnationNumberN, err := AppendIncarnationNumberToBuffer(stateBuffer, member.IncarnationNumber)
 	if err != nil {
 		return buffer, 0, err
 	}
@@ -48,7 +46,7 @@ func AppendMemberToBuffer(buffer []byte, member Member) ([]byte, int, error) {
 // Note that the LastStateChange is always the zero value.
 // Returns the member, the number of bytes read and any error which occurred.
 func MemberFromBuffer(buffer []byte) (Member, int, error) {
-	address, addressN, err := encoding.AddressFromBuffer(buffer)
+	address, addressN, err := AddressFromBuffer(buffer)
 	if err != nil {
 		return Member{}, 0, err
 	}
@@ -58,7 +56,7 @@ func MemberFromBuffer(buffer []byte) (Member, int, error) {
 		return Member{}, 0, err
 	}
 
-	incarnationNumber, incarnationNumberN, err := encoding.IncarnationNumberFromBuffer(buffer[addressN+stateN:])
+	incarnationNumber, incarnationNumberN, err := IncarnationNumberFromBuffer(buffer[addressN+stateN:])
 	if err != nil {
 		return Member{}, 0, err
 	}

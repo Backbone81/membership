@@ -15,15 +15,15 @@ var _ = Describe("MessageListResponse", func() {
 	It("should append to nil buffer", func() {
 		message := membership.MessageListResponse{
 			Source: encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
-			Members: []membership.Member{
+			Members: []encoding.Member{
 				{
 					Address:           encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
-					State:             membership.MemberStateAlive,
+					State:             encoding.MemberStateAlive,
 					IncarnationNumber: 1,
 				},
 				{
 					Address:           encoding.NewAddress(net.IPv4(11, 12, 13, 14), 1024),
-					State:             membership.MemberStateAlive,
+					State:             encoding.MemberStateAlive,
 					IncarnationNumber: 2,
 				},
 			},
@@ -37,15 +37,15 @@ var _ = Describe("MessageListResponse", func() {
 		var localBuffer [10]byte
 		message := membership.MessageListResponse{
 			Source: encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
-			Members: []membership.Member{
+			Members: []encoding.Member{
 				{
 					Address:           encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
-					State:             membership.MemberStateAlive,
+					State:             encoding.MemberStateAlive,
 					IncarnationNumber: 1,
 				},
 				{
 					Address:           encoding.NewAddress(net.IPv4(11, 12, 13, 14), 1024),
-					State:             membership.MemberStateAlive,
+					State:             encoding.MemberStateAlive,
 					IncarnationNumber: 2,
 				},
 			},
@@ -58,15 +58,15 @@ var _ = Describe("MessageListResponse", func() {
 	It("should read from buffer", func() {
 		appendMessage := membership.MessageListResponse{
 			Source: encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
-			Members: []membership.Member{
+			Members: []encoding.Member{
 				{
 					Address:           encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
-					State:             membership.MemberStateAlive,
+					State:             encoding.MemberStateAlive,
 					IncarnationNumber: 1,
 				},
 				{
 					Address:           encoding.NewAddress(net.IPv4(11, 12, 13, 14), 1024),
-					State:             membership.MemberStateAlive,
+					State:             encoding.MemberStateAlive,
 					IncarnationNumber: 2,
 				},
 			},
@@ -91,15 +91,15 @@ var _ = Describe("MessageListResponse", func() {
 	It("should fail to read from buffer which is too small", func() {
 		message := membership.MessageListResponse{
 			Source: encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
-			Members: []membership.Member{
+			Members: []encoding.Member{
 				{
 					Address:           encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
-					State:             membership.MemberStateAlive,
+					State:             encoding.MemberStateAlive,
 					IncarnationNumber: 1,
 				},
 				{
 					Address:           encoding.NewAddress(net.IPv4(11, 12, 13, 14), 1024),
-					State:             membership.MemberStateAlive,
+					State:             encoding.MemberStateAlive,
 					IncarnationNumber: 2,
 				},
 			},
@@ -120,9 +120,9 @@ func BenchmarkMessageListResponse_AppendToBuffer(b *testing.B) {
 			Source: encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 		}
 		for i := range memberCount {
-			message.Members = append(message.Members, membership.Member{
+			message.Members = append(message.Members, encoding.Member{
 				Address:           encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
-				State:             membership.MemberStateAlive,
+				State:             encoding.MemberStateAlive,
 				IncarnationNumber: 1,
 			})
 		}
@@ -143,9 +143,9 @@ func BenchmarkMessageListResponse_FromBuffer(b *testing.B) {
 			Source: encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 		}
 		for i := range memberCount {
-			message.Members = append(message.Members, membership.Member{
+			message.Members = append(message.Members, encoding.Member{
 				Address:           encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
-				State:             membership.MemberStateAlive,
+				State:             encoding.MemberStateAlive,
 				IncarnationNumber: 1,
 			})
 		}
@@ -155,7 +155,7 @@ func BenchmarkMessageListResponse_FromBuffer(b *testing.B) {
 		}
 		b.Run(fmt.Sprintf("%d members", memberCount), func(b *testing.B) {
 			var readMessage membership.MessageListResponse
-			readMessage.Members = make([]membership.Member, memberCount)
+			readMessage.Members = make([]encoding.Member, memberCount)
 			for b.Loop() {
 				if _, err := readMessage.FromBuffer(buffer); err != nil {
 					b.Fatal(err)

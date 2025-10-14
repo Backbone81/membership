@@ -24,8 +24,8 @@ type List struct {
 	incarnationNumber            int
 	failureDetectionSubgroupSize int
 
-	members       []Member
-	faultyMembers []Member
+	members       []encoding.Member
+	faultyMembers []encoding.Member
 
 	randomIndexes   []int
 	nextRandomIndex int
@@ -94,9 +94,9 @@ func NewList(config ListConfig) *List {
 		IncarnationNumber: 0,
 	})
 	for _, initialMember := range config.InitialMembers {
-		newList.addMember(Member{
+		newList.addMember(encoding.Member{
 			Address:           initialMember,
-			State:             MemberStateAlive,
+			State:             encoding.MemberStateAlive,
 			LastStateChange:   time.Now(),
 			IncarnationNumber: 0,
 		})
@@ -186,7 +186,7 @@ func (l *List) IndirectPing() error {
 	return joinedErr
 }
 
-func (l *List) pickIndirectProbes(failureDetectionSubgroupSize int, directProbeAddress encoding.Address) []*Member {
+func (l *List) pickIndirectProbes(failureDetectionSubgroupSize int, directProbeAddress encoding.Address) []*encoding.Member {
 	candidateIndexes := make([]int, 0, len(l.members))
 	for index := range l.members {
 		if l.members[index].Address.Equal(directProbeAddress) {
@@ -202,7 +202,7 @@ func (l *List) pickIndirectProbes(failureDetectionSubgroupSize int, directProbeA
 
 	// Pick the first few candidates.
 	candidateIndexes = candidateIndexes[:min(failureDetectionSubgroupSize, len(candidateIndexes))]
-	result := make([]*Member, len(candidateIndexes))
+	result := make([]*encoding.Member, len(candidateIndexes))
 	for i := range candidateIndexes {
 		result[i] = &l.members[candidateIndexes[i]]
 	}
@@ -228,7 +228,7 @@ func (l *List) markSuspectsAsFaulty() {
 	// order to not skip a member when the content changes.
 	for i := len(l.members) - 1; i >= 0; i-- {
 		member := &l.members[i]
-		if member.State != MemberStateSuspect {
+		if member.State != encoding.MemberStateSuspect {
 			continue
 		}
 		if !member.LastStateChange.Before(suspicionThreshold) {
@@ -241,9 +241,9 @@ func (l *List) markSuspectsAsFaulty() {
 			"destination", member.Address,
 			"incarnation-number", member.IncarnationNumber,
 		)
-		l.faultyMembers = append(l.faultyMembers, Member{
+		l.faultyMembers = append(l.faultyMembers, encoding.Member{
 			Address:           member.Address,
-			State:             MemberStateFaulty,
+			State:             encoding.MemberStateFaulty,
 			LastStateChange:   time.Now(),
 			IncarnationNumber: member.IncarnationNumber,
 		})
@@ -264,7 +264,7 @@ func (l *List) processFailedProbes() {
 			continue
 		}
 
-		memberIndex := slices.IndexFunc(l.members, func(record Member) bool {
+		memberIndex := slices.IndexFunc(l.members, func(record encoding.Member) bool {
 			return record.Address.Equal(pendingDirectProbe.Destination)
 		})
 		if memberIndex == -1 {
@@ -274,7 +274,7 @@ func (l *List) processFailedProbes() {
 		}
 
 		member := &l.members[memberIndex]
-		if member.State == MemberStateSuspect {
+		if member.State == encoding.MemberStateSuspect {
 			// The member is already suspect. Nothing to do.
 			continue
 		}
@@ -287,7 +287,7 @@ func (l *List) processFailedProbes() {
 		)
 
 		// We need to mark the member as suspect and gossip about it.
-		member.State = MemberStateSuspect
+		member.State = encoding.MemberStateSuspect
 		member.LastStateChange = time.Now()
 		l.gossipQueue.Add(&gossip.MessageSuspect{
 			Source:            l.self,
@@ -605,7 +605,7 @@ func (l *List) handleSuspectForSelf(suspect gossip.MessageSuspect) bool {
 }
 
 func (l *List) handleSuspectForFaultyMembers(suspect gossip.MessageSuspect) bool {
-	faultyMemberIndex := slices.IndexFunc(l.faultyMembers, func(member Member) bool {
+	faultyMemberIndex := slices.IndexFunc(l.faultyMembers, func(member encoding.Member) bool {
 		return member.Address.Equal(suspect.Destination)
 	})
 	if faultyMemberIndex == -1 {
@@ -621,9 +621,9 @@ func (l *List) handleSuspectForFaultyMembers(suspect gossip.MessageSuspect) bool
 
 	// Move the faulty member over to the member list
 	l.faultyMembers = slices.Delete(l.faultyMembers, faultyMemberIndex, faultyMemberIndex+1)
-	l.addMember(Member{
+	l.addMember(encoding.Member{
 		Address:           suspect.Source,
-		State:             MemberStateSuspect,
+		State:             encoding.MemberStateSuspect,
 		LastStateChange:   time.Now(),
 		IncarnationNumber: suspect.IncarnationNumber,
 	})
@@ -632,7 +632,7 @@ func (l *List) handleSuspectForFaultyMembers(suspect gossip.MessageSuspect) bool
 }
 
 func (l *List) handleSuspectForMembers(suspect gossip.MessageSuspect) bool {
-	memberIndex := slices.IndexFunc(l.members, func(member Member) bool {
+	memberIndex := slices.IndexFunc(l.members, func(member encoding.Member) bool {
 		return member.Address.Equal(suspect.Source)
 	})
 	if memberIndex == -1 {
@@ -647,13 +647,13 @@ func (l *List) handleSuspectForMembers(suspect gossip.MessageSuspect) bool {
 	}
 
 	member.IncarnationNumber = suspect.IncarnationNumber
-	if member.State == MemberStateSuspect {
+	if member.State == encoding.MemberStateSuspect {
 		// We already know about this member being suspect. Nothing to do.
 		return true
 	}
 
 	// This information is new to us, we need to make sure to gossip about it.
-	member.State = MemberStateSuspect
+	member.State = encoding.MemberStateSuspect
 	member.LastStateChange = time.Now()
 	l.gossipQueue.Add(&suspect)
 	return true
@@ -661,9 +661,9 @@ func (l *List) handleSuspectForMembers(suspect gossip.MessageSuspect) bool {
 
 func (l *List) handleSuspectForUnknown(suspect gossip.MessageSuspect) {
 	// We don't know about this member yet. Add it to our member list and gossip about it.
-	l.addMember(Member{
+	l.addMember(encoding.Member{
 		Address:           suspect.Destination,
-		State:             MemberStateSuspect,
+		State:             encoding.MemberStateSuspect,
 		LastStateChange:   time.Now(),
 		IncarnationNumber: suspect.IncarnationNumber,
 	})
@@ -696,7 +696,7 @@ func (l *List) handleAliveForSelf(alive gossip.MessageAlive) bool {
 }
 
 func (l *List) handleAliveForFaultyMembers(alive gossip.MessageAlive) bool {
-	faultyMemberIndex := slices.IndexFunc(l.faultyMembers, func(member Member) bool {
+	faultyMemberIndex := slices.IndexFunc(l.faultyMembers, func(member encoding.Member) bool {
 		return member.Address.Equal(alive.Source)
 	})
 	if faultyMemberIndex == -1 {
@@ -712,9 +712,9 @@ func (l *List) handleAliveForFaultyMembers(alive gossip.MessageAlive) bool {
 
 	// Move the faulty member over to the member list
 	l.faultyMembers = slices.Delete(l.faultyMembers, faultyMemberIndex, faultyMemberIndex+1)
-	l.addMember(Member{
+	l.addMember(encoding.Member{
 		Address:           alive.Source,
-		State:             MemberStateAlive,
+		State:             encoding.MemberStateAlive,
 		LastStateChange:   time.Now(),
 		IncarnationNumber: alive.IncarnationNumber,
 	})
@@ -723,7 +723,7 @@ func (l *List) handleAliveForFaultyMembers(alive gossip.MessageAlive) bool {
 }
 
 func (l *List) handleAliveForMembers(alive gossip.MessageAlive) bool {
-	memberIndex := slices.IndexFunc(l.members, func(member Member) bool {
+	memberIndex := slices.IndexFunc(l.members, func(member encoding.Member) bool {
 		return member.Address.Equal(alive.Source)
 	})
 	if memberIndex == -1 {
@@ -738,13 +738,13 @@ func (l *List) handleAliveForMembers(alive gossip.MessageAlive) bool {
 	}
 
 	member.IncarnationNumber = alive.IncarnationNumber
-	if member.State == MemberStateAlive {
+	if member.State == encoding.MemberStateAlive {
 		// We already know about this member being alive. Nothing to do.
 		return true
 	}
 
 	// This information is new to us, we need to make sure to gossip about it.
-	member.State = MemberStateAlive
+	member.State = encoding.MemberStateAlive
 	member.LastStateChange = time.Now()
 	l.gossipQueue.Add(&alive)
 	return true
@@ -752,9 +752,9 @@ func (l *List) handleAliveForMembers(alive gossip.MessageAlive) bool {
 
 func (l *List) handleAliveForUnknown(alive gossip.MessageAlive) {
 	// We don't know about this member yet. Add it to our member list and gossip about it.
-	l.addMember(Member{
+	l.addMember(encoding.Member{
 		Address:           alive.Source,
-		State:             MemberStateAlive,
+		State:             encoding.MemberStateAlive,
 		LastStateChange:   time.Now(),
 		IncarnationNumber: alive.IncarnationNumber,
 	})
@@ -801,7 +801,7 @@ func (l *List) handleFaultyForSelf(faulty gossip.MessageFaulty) bool {
 }
 
 func (l *List) handleFaultyForFaultyMembers(faulty gossip.MessageFaulty) bool {
-	faultyMemberIndex := slices.IndexFunc(l.faultyMembers, func(member Member) bool {
+	faultyMemberIndex := slices.IndexFunc(l.faultyMembers, func(member encoding.Member) bool {
 		return member.Address.Equal(faulty.Destination)
 	})
 	if faultyMemberIndex == -1 {
@@ -821,7 +821,7 @@ func (l *List) handleFaultyForFaultyMembers(faulty gossip.MessageFaulty) bool {
 }
 
 func (l *List) handleFaultyForMembers(faulty gossip.MessageFaulty) bool {
-	memberIndex := slices.IndexFunc(l.members, func(member Member) bool {
+	memberIndex := slices.IndexFunc(l.members, func(member encoding.Member) bool {
 		return member.Address.Equal(faulty.Destination)
 	})
 	if memberIndex == -1 {
@@ -837,9 +837,9 @@ func (l *List) handleFaultyForMembers(faulty gossip.MessageFaulty) bool {
 
 	// Remove member from member list and put it on the faulty member list.
 	l.removeMemberByAddress(faulty.Destination)
-	l.faultyMembers = append(l.faultyMembers, Member{
+	l.faultyMembers = append(l.faultyMembers, encoding.Member{
 		Address:           faulty.Destination,
-		State:             MemberStateFaulty,
+		State:             encoding.MemberStateFaulty,
 		LastStateChange:   time.Now(),
 		IncarnationNumber: faulty.IncarnationNumber,
 	})
@@ -849,9 +849,9 @@ func (l *List) handleFaultyForMembers(faulty gossip.MessageFaulty) bool {
 
 func (l *List) handleFaultyForUnknown(faulty gossip.MessageFaulty) {
 	// We don't know about this member yet. Add it to our faulty member list and gossip about it.
-	l.faultyMembers = append(l.faultyMembers, Member{
+	l.faultyMembers = append(l.faultyMembers, encoding.Member{
 		Address:           faulty.Destination,
-		State:             MemberStateFaulty,
+		State:             encoding.MemberStateFaulty,
 		LastStateChange:   time.Now(),
 		IncarnationNumber: faulty.IncarnationNumber,
 	})
@@ -886,18 +886,18 @@ func (l *List) handleListResponse(listResponse MessageListResponse) error {
 	)
 	for _, member := range listResponse.Members {
 		switch member.State {
-		case MemberStateAlive:
+		case encoding.MemberStateAlive:
 			l.handleAlive(gossip.MessageAlive{
 				Source:            listResponse.Source,
 				IncarnationNumber: member.IncarnationNumber,
 			})
-		case MemberStateSuspect:
+		case encoding.MemberStateSuspect:
 			l.handleSuspect(gossip.MessageSuspect{
 				Source:            listResponse.Source,
 				Destination:       member.Address,
 				IncarnationNumber: member.IncarnationNumber,
 			})
-		case MemberStateFaulty:
+		case encoding.MemberStateFaulty:
 			l.handleFaulty(gossip.MessageFaulty{
 				Source:            listResponse.Source,
 				Destination:       member.Address,
@@ -943,7 +943,7 @@ func (l *List) sendWithGossip(address encoding.Address, message Message) error {
 	return nil
 }
 
-func (l *List) getNextMember() *Member {
+func (l *List) getNextMember() *encoding.Member {
 	if l.nextRandomIndex >= len(l.randomIndexes) {
 		// When we moved beyond the end of the list, re-shuffle the indices and reset back to the start of the list.
 		rand.Shuffle(len(l.randomIndexes), func(i, j int) {
@@ -957,19 +957,19 @@ func (l *List) getNextMember() *Member {
 	return &l.members[randomIndex]
 }
 
-func (l *List) getRandomMember() *Member {
+func (l *List) getRandomMember() *encoding.Member {
 	randomIndex := rand.Intn(len(l.members))
 	return &l.members[randomIndex]
 }
 
 func (l *List) isMember(address encoding.Address) bool {
-	return slices.ContainsFunc(l.members, func(member Member) bool {
+	return slices.ContainsFunc(l.members, func(member encoding.Member) bool {
 		return address.Equal(member.Address)
 	})
 }
 
-func (l *List) getMember(address encoding.Address) *Member {
-	index := slices.IndexFunc(l.members, func(member Member) bool {
+func (l *List) getMember(address encoding.Address) *encoding.Member {
+	index := slices.IndexFunc(l.members, func(member encoding.Member) bool {
 		return address.Equal(member.Address)
 	})
 	if index == -1 {
@@ -978,7 +978,7 @@ func (l *List) getMember(address encoding.Address) *Member {
 	return &l.members[index]
 }
 
-func (l *List) addMember(member Member) {
+func (l *List) addMember(member encoding.Member) {
 	l.logger.Info(
 		"Member added",
 		"address", member.Address,
@@ -1001,7 +1001,7 @@ func (l *List) addMember(member Member) {
 }
 
 func (l *List) removeMemberByAddress(address encoding.Address) {
-	index := slices.IndexFunc(l.members, func(member Member) bool {
+	index := slices.IndexFunc(l.members, func(member encoding.Member) bool {
 		return address.Equal(member.Address)
 	})
 	if index == -1 {

@@ -11,12 +11,12 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("GossipQueue", func() {
-	var gossipQueue *membership.GossipQueue
+var _ = Describe("GossipMessageQueue", func() {
+	var queue *membership.GossipMessageQueue
 
 	BeforeEach(func() {
-		gossipQueue = membership.NewGossipQueue(math.MaxInt)
-		Expect(gossipQueue.Len()).To(Equal(0))
+		queue = membership.NewGossipMessageQueue(math.MaxInt)
+		Expect(queue.Len()).To(Equal(0))
 	})
 
 	It("should add gossip", func() {
@@ -24,10 +24,10 @@ var _ = Describe("GossipQueue", func() {
 			Source:            TestAddress,
 			IncarnationNumber: 0,
 		}
-		gossipQueue.Add(&gossipMessage)
+		queue.Add(&gossipMessage)
 
-		Expect(gossipQueue.Len()).To(Equal(1))
-		Expect(gossipQueue.Get(0)).To(Equal(&gossipMessage))
+		Expect(queue.Len()).To(Equal(1))
+		Expect(queue.Get(0)).To(Equal(&gossipMessage))
 	})
 
 	It("should add gossip with different address", func() {
@@ -35,17 +35,17 @@ var _ = Describe("GossipQueue", func() {
 			Source:            TestAddress,
 			IncarnationNumber: 0,
 		}
-		gossipQueue.Add(&gossipMessage1)
+		queue.Add(&gossipMessage1)
 
 		gossipMessage2 := membership.MessageAlive{
 			Source:            TestAddress2,
 			IncarnationNumber: 0,
 		}
-		gossipQueue.Add(&gossipMessage2)
+		queue.Add(&gossipMessage2)
 
-		Expect(gossipQueue.Len()).To(Equal(2))
-		Expect(gossipQueue.Get(0)).To(Equal(&gossipMessage1))
-		Expect(gossipQueue.Get(1)).To(Equal(&gossipMessage2))
+		Expect(queue.Len()).To(Equal(2))
+		Expect(queue.Get(0)).To(Equal(&gossipMessage1))
+		Expect(queue.Get(1)).To(Equal(&gossipMessage2))
 	})
 
 	It("should not add duplicate gossip", func() {
@@ -53,21 +53,21 @@ var _ = Describe("GossipQueue", func() {
 			Source:            TestAddress,
 			IncarnationNumber: 0,
 		}
-		gossipQueue.Add(&gossipMessage1)
+		queue.Add(&gossipMessage1)
 
 		gossipMessage2 := membership.MessageAlive{
 			Source:            TestAddress,
 			IncarnationNumber: 0,
 		}
-		gossipQueue.Add(&gossipMessage2)
+		queue.Add(&gossipMessage2)
 
-		Expect(gossipQueue.Len()).To(Equal(1))
-		Expect(gossipQueue.Get(0)).To(Equal(&gossipMessage1))
+		Expect(queue.Len()).To(Equal(1))
+		Expect(queue.Get(0)).To(Equal(&gossipMessage1))
 	})
 
 	DescribeTable("Messages should overwrite in the correct priority",
 		func(message1 membership.GossipMessage, message2 membership.GossipMessage, overwrite bool) {
-			gossipQueue := membership.NewGossipQueue(math.MaxInt)
+			gossipQueue := membership.NewGossipMessageQueue(math.MaxInt)
 			gossipQueue.Add(message1)
 			gossipQueue.Add(message2)
 			if overwrite {
@@ -418,30 +418,30 @@ var _ = Describe("GossipQueue", func() {
 			Source:            TestAddress,
 			IncarnationNumber: 0,
 		}
-		gossipQueue.Add(message1)
-		gossipQueue.MarkGossiped(0)
-		gossipQueue.MarkGossiped(0)
+		queue.Add(message1)
+		queue.MarkTransmitted(0)
+		queue.MarkTransmitted(0)
 
 		message2 := &membership.MessageAlive{
 			Source:            TestAddress2,
 			IncarnationNumber: 0,
 		}
-		gossipQueue.Add(message2)
-		gossipQueue.MarkGossiped(1)
-		gossipQueue.MarkGossiped(1)
-		gossipQueue.MarkGossiped(1)
+		queue.Add(message2)
+		queue.MarkTransmitted(1)
+		queue.MarkTransmitted(1)
+		queue.MarkTransmitted(1)
 
 		message3 := &membership.MessageAlive{
 			Source:            TestAddress3,
 			IncarnationNumber: 0,
 		}
-		gossipQueue.Add(message3)
-		gossipQueue.MarkGossiped(2)
+		queue.Add(message3)
+		queue.MarkTransmitted(2)
 
-		gossipQueue.PrepareFor(membership.Address{})
-		Expect(gossipQueue.Get(0)).To(Equal(message3))
-		Expect(gossipQueue.Get(1)).To(Equal(message1))
-		Expect(gossipQueue.Get(2)).To(Equal(message2))
+		queue.PrioritizeForAddress(membership.Address{})
+		Expect(queue.Get(0)).To(Equal(message3))
+		Expect(queue.Get(1)).To(Equal(message1))
+		Expect(queue.Get(2)).To(Equal(message2))
 	})
 
 	It("should correctly prioritize suspect gossip when preparing", func() {
@@ -450,30 +450,30 @@ var _ = Describe("GossipQueue", func() {
 			Destination:       TestAddress,
 			IncarnationNumber: 0,
 		}
-		gossipQueue.Add(message1)
-		gossipQueue.MarkGossiped(0)
-		gossipQueue.MarkGossiped(0)
+		queue.Add(message1)
+		queue.MarkTransmitted(0)
+		queue.MarkTransmitted(0)
 
 		message2 := &membership.MessageAlive{
 			Source:            TestAddress2,
 			IncarnationNumber: 0,
 		}
-		gossipQueue.Add(message2)
-		gossipQueue.MarkGossiped(1)
-		gossipQueue.MarkGossiped(1)
-		gossipQueue.MarkGossiped(1)
+		queue.Add(message2)
+		queue.MarkTransmitted(1)
+		queue.MarkTransmitted(1)
+		queue.MarkTransmitted(1)
 
 		message3 := &membership.MessageAlive{
 			Source:            TestAddress3,
 			IncarnationNumber: 0,
 		}
-		gossipQueue.Add(message3)
-		gossipQueue.MarkGossiped(2)
+		queue.Add(message3)
+		queue.MarkTransmitted(2)
 
-		gossipQueue.PrepareFor(TestAddress)
-		Expect(gossipQueue.Get(0)).To(Equal(message1))
-		Expect(gossipQueue.Get(1)).To(Equal(message3))
-		Expect(gossipQueue.Get(2)).To(Equal(message2))
+		queue.PrioritizeForAddress(TestAddress)
+		Expect(queue.Get(0)).To(Equal(message1))
+		Expect(queue.Get(1)).To(Equal(message3))
+		Expect(queue.Get(2)).To(Equal(message2))
 	})
 
 	It("should correctly prioritize faulty gossip when preparing", func() {
@@ -482,30 +482,30 @@ var _ = Describe("GossipQueue", func() {
 			Destination:       TestAddress,
 			IncarnationNumber: 0,
 		}
-		gossipQueue.Add(message1)
-		gossipQueue.MarkGossiped(0)
-		gossipQueue.MarkGossiped(0)
+		queue.Add(message1)
+		queue.MarkTransmitted(0)
+		queue.MarkTransmitted(0)
 
 		message2 := &membership.MessageAlive{
 			Source:            TestAddress2,
 			IncarnationNumber: 0,
 		}
-		gossipQueue.Add(message2)
-		gossipQueue.MarkGossiped(1)
-		gossipQueue.MarkGossiped(1)
-		gossipQueue.MarkGossiped(1)
+		queue.Add(message2)
+		queue.MarkTransmitted(1)
+		queue.MarkTransmitted(1)
+		queue.MarkTransmitted(1)
 
 		message3 := &membership.MessageAlive{
 			Source:            TestAddress3,
 			IncarnationNumber: 0,
 		}
-		gossipQueue.Add(message3)
-		gossipQueue.MarkGossiped(2)
+		queue.Add(message3)
+		queue.MarkTransmitted(2)
 
-		gossipQueue.PrepareFor(TestAddress)
-		Expect(gossipQueue.Get(0)).To(Equal(message1))
-		Expect(gossipQueue.Get(1)).To(Equal(message3))
-		Expect(gossipQueue.Get(2)).To(Equal(message2))
+		queue.PrioritizeForAddress(TestAddress)
+		Expect(queue.Get(0)).To(Equal(message1))
+		Expect(queue.Get(1)).To(Equal(message3))
+		Expect(queue.Get(2)).To(Equal(message2))
 	})
 
 	It("should correctly prioritize alive gossip when preparing", func() {
@@ -513,36 +513,58 @@ var _ = Describe("GossipQueue", func() {
 			Source:            TestAddress,
 			IncarnationNumber: 0,
 		}
-		gossipQueue.Add(message1)
-		gossipQueue.MarkGossiped(0)
-		gossipQueue.MarkGossiped(0)
+		queue.Add(message1)
+		queue.MarkTransmitted(0)
+		queue.MarkTransmitted(0)
 
 		message2 := &membership.MessageAlive{
 			Source:            TestAddress2,
 			IncarnationNumber: 0,
 		}
-		gossipQueue.Add(message2)
-		gossipQueue.MarkGossiped(1)
-		gossipQueue.MarkGossiped(1)
-		gossipQueue.MarkGossiped(1)
+		queue.Add(message2)
+		queue.MarkTransmitted(1)
+		queue.MarkTransmitted(1)
+		queue.MarkTransmitted(1)
 
 		message3 := &membership.MessageAlive{
 			Source:            TestAddress3,
 			IncarnationNumber: 0,
 		}
-		gossipQueue.Add(message3)
-		gossipQueue.MarkGossiped(2)
+		queue.Add(message3)
+		queue.MarkTransmitted(2)
 
-		gossipQueue.PrepareFor(TestAddress)
-		Expect(gossipQueue.Get(0)).To(Equal(message3))
-		Expect(gossipQueue.Get(1)).To(Equal(message2))
-		Expect(gossipQueue.Get(2)).To(Equal(message1))
+		queue.PrioritizeForAddress(TestAddress)
+		Expect(queue.Get(0)).To(Equal(message3))
+		Expect(queue.Get(1)).To(Equal(message2))
+		Expect(queue.Get(2)).To(Equal(message1))
+	})
+
+	It("should correctly remove messages which were transmitted enough", func() {
+		gossipQueue := membership.NewGossipMessageQueue(3)
+		gossipQueue.Add(&membership.MessageAlive{
+			Source:            TestAddress,
+			IncarnationNumber: 0,
+		})
+		gossipQueue.PrioritizeForAddress(membership.Address{})
+		Expect(gossipQueue.Len()).To(Equal(1))
+
+		gossipQueue.MarkTransmitted(0)
+		gossipQueue.PrioritizeForAddress(membership.Address{})
+		Expect(gossipQueue.Len()).To(Equal(1))
+
+		gossipQueue.MarkTransmitted(0)
+		gossipQueue.PrioritizeForAddress(membership.Address{})
+		Expect(gossipQueue.Len()).To(Equal(1))
+
+		gossipQueue.MarkTransmitted(0)
+		gossipQueue.PrioritizeForAddress(membership.Address{})
+		Expect(gossipQueue.Len()).To(Equal(0))
 	})
 })
 
 func BenchmarkGossipQueue_Add(b *testing.B) {
 	for gossipCount := 1; gossipCount <= 16*1024; gossipCount *= 2 {
-		gossipQueue := membership.NewGossipQueue(math.MaxInt)
+		gossipQueue := membership.NewGossipMessageQueue(math.MaxInt)
 		for i := range gossipCount {
 			gossipQueue.Add(&membership.MessageAlive{
 				Source:            membership.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
@@ -563,7 +585,7 @@ func BenchmarkGossipQueue_Add(b *testing.B) {
 
 func BenchmarkGossipQueue_PrepareFor(b *testing.B) {
 	for gossipCount := 1; gossipCount <= 16*1024; gossipCount *= 2 {
-		gossipQueue := membership.NewGossipQueue(math.MaxInt)
+		gossipQueue := membership.NewGossipMessageQueue(math.MaxInt)
 		for i := range gossipCount {
 			gossipQueue.Add(&membership.MessageAlive{
 				Source:            membership.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
@@ -572,7 +594,7 @@ func BenchmarkGossipQueue_PrepareFor(b *testing.B) {
 		}
 		b.Run(fmt.Sprintf("%d gossip", gossipCount), func(b *testing.B) {
 			for b.Loop() {
-				gossipQueue.PrepareFor(membership.Address{})
+				gossipQueue.PrioritizeForAddress(membership.Address{})
 			}
 		})
 	}

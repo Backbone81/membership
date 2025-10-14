@@ -27,7 +27,7 @@ type List struct {
 
 	randomIndexes   []int
 	nextRandomIndex int
-	gossipQueue     *GossipQueue
+	gossipQueue     *GossipMessageQueue
 	self            Address
 
 	datagramBuffer []byte
@@ -83,7 +83,7 @@ func NewList(config ListConfig) *List {
 		config:         config,
 		logger:         config.Logger,
 		self:           config.AdvertisedAddress,
-		gossipQueue:    NewGossipQueue(10), // TODO: The max gossip count needs to be adjusted for the number of members during runtime.
+		gossipQueue:    NewGossipMessageQueue(10), // TODO: The max gossip count needs to be adjusted for the number of members during runtime.
 		datagramBuffer: make([]byte, 0, config.MaxDatagramLength),
 	}
 	// We need to gossip our own alive. Otherwise, nobody will pick us up into their own member list.
@@ -918,7 +918,7 @@ func (l *List) sendWithGossip(address Address, message Message) error {
 		return err
 	}
 
-	l.gossipQueue.PrepareFor(address)
+	l.gossipQueue.PrioritizeForAddress(address)
 	for i := 0; i < l.gossipQueue.Len(); i++ {
 		var gossipN int
 		l.datagramBuffer, gossipN, err = l.gossipQueue.Get(i).AppendToBuffer(l.datagramBuffer)
@@ -931,7 +931,7 @@ func (l *List) sendWithGossip(address Address, message Message) error {
 			break
 		}
 
-		l.gossipQueue.MarkGossiped(i)
+		l.gossipQueue.MarkTransmitted(i)
 		datagramN += gossipN
 	}
 

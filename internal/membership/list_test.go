@@ -24,7 +24,8 @@ var _ = Describe("List", func() {
 	})
 
 	It("should return the member list", func() {
-		Expect(list).ToNot(BeNil())
+		list := createListWithMembers(8)
+		Expect(list.Get()).To(HaveLen(8))
 	})
 
 	It("should trigger the member callbacks", func() {
@@ -32,21 +33,79 @@ var _ = Describe("List", func() {
 	})
 
 	It("should correctly add a member when gossiped alive", func() {
+		Expect(list.Get()).To(HaveLen(0))
 
+		messageAlive := gossip.MessageAlive{
+			Source:            TestAddress,
+			IncarnationNumber: 0,
+		}
+		buffer, _, err := messageAlive.AppendToBuffer(nil)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(list.DispatchDatagram(buffer)).To(Succeed())
+
+		Expect(list.Get()).To(HaveLen(1))
 	})
 
 	It("should keep a member when gossiped suspect", func() {
+		Expect(list.Get()).To(HaveLen(0))
 
+		messageAlive := gossip.MessageAlive{
+			Source:            TestAddress,
+			IncarnationNumber: 0,
+		}
+		buffer, _, err := messageAlive.AppendToBuffer(nil)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(list.DispatchDatagram(buffer)).To(Succeed())
+
+		Expect(list.Get()).To(HaveLen(1))
+
+		messageSuspect := gossip.MessageSuspect{
+			Source:            TestAddress2,
+			Destination:       TestAddress,
+			IncarnationNumber: 0,
+		}
+		buffer, _, err = messageSuspect.AppendToBuffer(nil)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(list.DispatchDatagram(buffer)).To(Succeed())
+
+		Expect(list.Get()).To(HaveLen(1))
 	})
 
 	It("should remove a member when gossiped faulty", func() {
+		Expect(list.Get()).To(HaveLen(0))
 
+		messageAlive := gossip.MessageAlive{
+			Source:            TestAddress,
+			IncarnationNumber: 0,
+		}
+		buffer, _, err := messageAlive.AppendToBuffer(nil)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(list.DispatchDatagram(buffer)).To(Succeed())
+
+		Expect(list.Get()).To(HaveLen(1))
+
+		messageFaulty := gossip.MessageFaulty{
+			Source:            TestAddress2,
+			Destination:       TestAddress,
+			IncarnationNumber: 0,
+		}
+		buffer, _, err = messageFaulty.AppendToBuffer(nil)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(list.DispatchDatagram(buffer)).To(Succeed())
+
+		Expect(list.Get()).To(HaveLen(0))
 	})
 
 	It("should remove a member after some time when no response", func() {
 
 	})
 })
+
+func BenchmarkList_Get(b *testing.B) {
+	executeFunctionWithMembers(b, func(list *membership.List) {
+		_ = list.Get()
+	})
+}
 
 func BenchmarkList_DirectPing(b *testing.B) {
 	executeFunctionWithMembers(b, func(list *membership.List) {
@@ -167,7 +226,7 @@ func dispatchDatagramWithMembers(b *testing.B, message membership.Message) {
 
 func executeFunctionWithMembers(b *testing.B, f func(list *membership.List)) {
 	for memberCount := 1; memberCount <= 16*1024; memberCount *= 2 {
-		list := createListWithMembers(b, memberCount)
+		list := createListWithMembers(memberCount)
 		b.Run(fmt.Sprintf("%d members", memberCount), func(b *testing.B) {
 			for b.Loop() {
 				f(list)
@@ -176,7 +235,7 @@ func executeFunctionWithMembers(b *testing.B, f func(list *membership.List)) {
 	}
 }
 
-func createListWithMembers(b *testing.B, memberCount int) *membership.List {
+func createListWithMembers(memberCount int) *membership.List {
 	list := membership.NewList(
 		membership.WithUDPClient(&DiscardClient{}),
 		membership.WithTCPClient(&DiscardClient{}),
@@ -189,10 +248,10 @@ func createListWithMembers(b *testing.B, memberCount int) *membership.List {
 		}
 		buffer, _, err := messageAlive.AppendToBuffer(nil)
 		if err != nil {
-			b.Fatal(err)
+			panic(err)
 		}
 		if err := list.DispatchDatagram(buffer); err != nil {
-			b.Fatal(err)
+			panic(err)
 		}
 	}
 

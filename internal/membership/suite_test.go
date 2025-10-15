@@ -22,7 +22,7 @@ func TestSuite(t *testing.T) {
 
 // DiscardClient provides a client transport which discards all data and always reports success. This is useful for
 // tests and benchmarks, when we do not want to send network messages for real.
-type DiscardClient struct {}
+type DiscardClient struct{}
 
 func (d DiscardClient) Send(address encoding.Address, buffer []byte) error {
 	return nil

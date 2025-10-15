@@ -93,6 +93,17 @@ func NewList(options ...Option) *List {
 	return &newList
 }
 
+func (l *List) Get() []encoding.Address {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	result := make([]encoding.Address, 0, len(l.members))
+	for _, member := range l.members {
+		result = append(result, member.Address)
+	}
+	return result
+}
+
 func (l *List) DirectPing() error {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
@@ -608,7 +619,7 @@ func (l *List) handleSuspectForFaultyMembers(suspect gossip.MessageSuspect) bool
 	// Move the faulty member over to the member list
 	l.faultyMembers = slices.Delete(l.faultyMembers, faultyMemberIndex, faultyMemberIndex+1)
 	l.addMember(encoding.Member{
-		Address:           suspect.Source,
+		Address:           suspect.Destination,
 		State:             encoding.MemberStateSuspect,
 		LastStateChange:   time.Now(),
 		IncarnationNumber: suspect.IncarnationNumber,
@@ -619,7 +630,7 @@ func (l *List) handleSuspectForFaultyMembers(suspect gossip.MessageSuspect) bool
 
 func (l *List) handleSuspectForMembers(suspect gossip.MessageSuspect) bool {
 	memberIndex := slices.IndexFunc(l.members, func(member encoding.Member) bool {
-		return member.Address.Equal(suspect.Source)
+		return member.Address.Equal(suspect.Destination)
 	})
 	if memberIndex == -1 {
 		// The member is not part of our members list. Nothing to do.

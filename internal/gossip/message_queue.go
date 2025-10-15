@@ -58,12 +58,12 @@ type Message interface {
 // This method will delete gossip which has exceeded the maximum transmission count.
 func (q *MessageQueue) PrioritizeForAddress(address encoding.Address) {
 	q.queue = slices.DeleteFunc(q.queue, func(entry MessageQueueEntry) bool {
-		result := entry.TransmissionCount >= q.maxTransmissionCount
-		if result {
-			delete(q.indexByAddress, entry.Message.GetAddress())
-		}
-		return result
+		return entry.TransmissionCount >= q.maxTransmissionCount
 	})
+	clear(q.indexByAddress)
+	for i, entry := range q.queue {
+		q.indexByAddress[entry.Message.GetAddress()] = i
+	}
 
 	localQueue := q.queue
 	index, ok := q.indexByAddress[address]
@@ -87,6 +87,7 @@ func (q *MessageQueue) PrioritizeForAddress(address encoding.Address) {
 		return cmp.Compare(a.TransmissionCount, b.TransmissionCount)
 	})
 
+	clear(q.indexByAddress)
 	for i, entry := range q.queue {
 		q.indexByAddress[entry.Message.GetAddress()] = i
 	}

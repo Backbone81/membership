@@ -18,6 +18,8 @@ This Go library provides a peer-to-peer gossip based membership implementation. 
   keys are used for decryption.
 - Shutdown of the membership should send a faulty message to propagate the not existing member.
 - The number a gossip is gossiped needs to be dynamically adjusted to the size of the member cluster.
+- Look into the performance of the gossip message queue. The implementation was incorrect and was fixed with a
+  conservative and slow approach.
 
 ### More Advanced Topics
 
@@ -42,3 +44,4 @@ This Go library provides a peer-to-peer gossip based membership implementation. 
 - The tests for messages are very repeating. Look into re-using code.
 - The message setup in the message tests are quite repetitive. We should consolidate them.
 - Introduce jitter into the scheduler to avoid spikes in network traffic.
+- Regularly log the statistical information about ping chance and time until all know about gossip

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"math/rand"
 	"slices"
 	"sync"
@@ -17,7 +18,7 @@ import (
 type List struct {
 	mutex sync.Mutex
 
-	config ListConfig
+	config Config
 	logger logr.Logger
 
 	nextSequenceNumber           int
@@ -36,23 +37,6 @@ type List struct {
 
 	pendingDirectProbes   []DirectProbeRecord
 	pendingIndirectProbes []IndirectProbeRecord
-}
-
-type ListConfig struct {
-	Logger            logr.Logger
-	DirectPingTimeout time.Duration
-	ProtocolPeriod    time.Duration
-	InitialMembers    []encoding.Address
-	AdvertisedAddress encoding.Address
-	UDPClient         Transport
-	TCPClient         Transport
-	MaxDatagramLength int
-}
-
-var DefaultListConfig = ListConfig{
-	DirectPingTimeout: 100 * time.Millisecond,
-	ProtocolPeriod:    1 * time.Second,
-	MaxDatagramLength: 512,
 }
 
 // DirectProbeRecord provides bookkeeping for a direct probe which is still active.
@@ -80,7 +64,12 @@ type IndirectProbeRecord struct {
 	MessageIndirectPing MessageIndirectPing
 }
 
-func NewList(config ListConfig) *List {
+func NewList(options ...Option) *List {
+	config := DefaultConfig
+	for _, option := range options {
+		option(&config)
+	}
+
 	newList := List{
 		config:         config,
 		logger:         config.Logger,
@@ -93,7 +82,7 @@ func NewList(config ListConfig) *List {
 		Source:            config.AdvertisedAddress,
 		IncarnationNumber: 0,
 	})
-	for _, initialMember := range config.InitialMembers {
+	for _, initialMember := range config.BootstrapMembers {
 		newList.addMember(encoding.Member{
 			Address:           initialMember,
 			State:             encoding.MemberStateAlive,
@@ -117,7 +106,7 @@ func (l *List) DirectPing() error {
 		Source:         l.self,
 		SequenceNumber: l.nextSequenceNumber,
 	}
-	l.nextSequenceNumber++
+	l.nextSequenceNumber = (l.nextSequenceNumber + 1) % math.MaxUint16
 
 	destination := l.getNextMember().Address
 	l.logger.V(1).Info(
@@ -215,9 +204,6 @@ func (l *List) EndOfProtocolPeriod() error {
 
 	l.markSuspectsAsFaulty()
 	l.processFailedProbes()
-	if err := l.RequestList(); err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -515,7 +501,7 @@ func (l *List) handleIndirectPing(indirectPing MessageIndirectPing) error {
 		Source:         l.self,
 		SequenceNumber: l.nextSequenceNumber,
 	}
-	l.nextSequenceNumber++
+	l.nextSequenceNumber = (l.nextSequenceNumber + 1) % math.MaxUint16
 
 	l.pendingDirectProbes = append(l.pendingDirectProbes, DirectProbeRecord{
 		Timestamp:           time.Now(),

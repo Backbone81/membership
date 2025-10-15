@@ -110,15 +110,15 @@ var rootCmd = &cobra.Command{
 			return errors.New("members were provided but none could be resolved")
 		}
 
-		membershipList := membership.NewList(membership.ListConfig{
-			Logger:            logger,
-			DirectPingTimeout: directPingTimeout,
-			ProtocolPeriod:    protocolPeriod,
-			InitialMembers:    initialMembers,
-			AdvertisedAddress: typedAdvertiseAddress,
-			UDPClient:         transport.NewUDPClient(maxDatagramLength),
-			MaxDatagramLength: maxDatagramLength,
-		})
+		membershipList := membership.NewList(
+			membership.WithLogger(logger),
+			membership.WithDirectPingTimeout(directPingTimeout),
+			membership.WithProtocolPeriod(protocolPeriod),
+			membership.WithBootstrapMembers(initialMembers),
+			membership.WithAdvertisedAddress(typedAdvertiseAddress),
+			membership.WithUDPClient(transport.NewUDPClient(maxDatagramLength)),
+			membership.WithTCPClient(transport.NewTCPClient()),
+		)
 
 		udpServerTransport := transport.NewUDPServer(logger, membershipList, bindAddress, maxDatagramLength)
 		if err := udpServerTransport.Startup(); err != nil {

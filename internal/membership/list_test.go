@@ -26,14 +26,18 @@ var _ = Describe("List", func() {
 	It("should return the member list", func() {
 		list := createListWithMembers(8)
 		Expect(list.Get()).To(HaveLen(8))
+		Expect(list.Len()).To(Equal(8))
 	})
 
 	It("should trigger the member callbacks", func() {
+
+		// TODO: implementation
 
 	})
 
 	It("should correctly add a member when gossiped alive", func() {
 		Expect(list.Get()).To(HaveLen(0))
+		Expect(list.Len()).To(Equal(0))
 
 		messageAlive := gossip.MessageAlive{
 			Source:            TestAddress,
@@ -44,10 +48,12 @@ var _ = Describe("List", func() {
 		Expect(list.DispatchDatagram(buffer)).To(Succeed())
 
 		Expect(list.Get()).To(HaveLen(1))
+		Expect(list.Len()).To(Equal(1))
 	})
 
 	It("should keep a member when gossiped suspect", func() {
 		Expect(list.Get()).To(HaveLen(0))
+		Expect(list.Len()).To(Equal(0))
 
 		messageAlive := gossip.MessageAlive{
 			Source:            TestAddress,
@@ -58,6 +64,7 @@ var _ = Describe("List", func() {
 		Expect(list.DispatchDatagram(buffer)).To(Succeed())
 
 		Expect(list.Get()).To(HaveLen(1))
+		Expect(list.Len()).To(Equal(1))
 
 		messageSuspect := gossip.MessageSuspect{
 			Source:            TestAddress2,
@@ -69,10 +76,12 @@ var _ = Describe("List", func() {
 		Expect(list.DispatchDatagram(buffer)).To(Succeed())
 
 		Expect(list.Get()).To(HaveLen(1))
+		Expect(list.Len()).To(Equal(1))
 	})
 
 	It("should remove a member when gossiped faulty", func() {
 		Expect(list.Get()).To(HaveLen(0))
+		Expect(list.Len()).To(Equal(0))
 
 		messageAlive := gossip.MessageAlive{
 			Source:            TestAddress,
@@ -83,6 +92,7 @@ var _ = Describe("List", func() {
 		Expect(list.DispatchDatagram(buffer)).To(Succeed())
 
 		Expect(list.Get()).To(HaveLen(1))
+		Expect(list.Len()).To(Equal(1))
 
 		messageFaulty := gossip.MessageFaulty{
 			Source:            TestAddress2,
@@ -94,9 +104,12 @@ var _ = Describe("List", func() {
 		Expect(list.DispatchDatagram(buffer)).To(Succeed())
 
 		Expect(list.Get()).To(HaveLen(0))
+		Expect(list.Len()).To(Equal(0))
 	})
 
 	It("should remove a member after some time when no response", func() {
+
+		// TODO: implementation
 
 	})
 })

@@ -77,6 +77,7 @@ func NewList(options ...Option) *List {
 		gossipQueue:    gossip.NewMessageQueue(10), // TODO: The max gossip count needs to be adjusted for the number of members during runtime.
 		datagramBuffer: make([]byte, 0, config.MaxDatagramLength),
 	}
+
 	// We need to gossip our own alive. Otherwise, nobody will pick us up into their own member list.
 	newList.gossipQueue.Add(&gossip.MessageAlive{
 		Source:            config.AdvertisedAddress,
@@ -91,6 +92,13 @@ func NewList(options ...Option) *List {
 		})
 	}
 	return &newList
+}
+
+func (l *List) Len() int {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	return len(l.members)
 }
 
 func (l *List) Get() []encoding.Address {

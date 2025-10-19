@@ -2,19 +2,12 @@ package cmd
 
 import (
 	"context"
-	"errors"
-	"fmt"
-	"net"
 	"os"
 	"os/signal"
-	"strconv"
 	"syscall"
 	"time"
 
-	"github.com/backbone81/membership/internal/encoding"
-	"github.com/backbone81/membership/internal/membership"
-	"github.com/backbone81/membership/internal/scheduler"
-	"github.com/backbone81/membership/internal/transport"
+	"github.com/backbone81/membership/pkg/membership"
 	"github.com/go-logr/logr"
 	"github.com/go-logr/zapr"
 	"github.com/spf13/cobra"
@@ -51,92 +44,41 @@ var rootCmd = &cobra.Command{
 
 		logger.Info("Application startup")
 
-		var typedAdvertiseAddress encoding.Address
-		if advertiseAddress != "" {
-			addr, err := net.ResolveUDPAddr("udp", advertiseAddress)
-			if err != nil {
-				return fmt.Errorf("resolving advertise address: %w", err)
-			}
-			typedAdvertiseAddress = encoding.NewAddress(
-				addr.IP,
-				addr.Port,
-			)
-		} else {
-			_, port, err := net.SplitHostPort(bindAddress)
-			if err != nil {
-				return err
-			}
-			typedPort, err := strconv.Atoi(port)
-			if err != nil {
-				return err
-			}
-
-			localIp, err := getLocalIPAddress()
-			if err != nil {
-				return err
-			}
-			typedAdvertiseAddress = encoding.NewAddress(
-				localIp,
-				typedPort,
-			)
+		resolveAdvertiseAddress, err := membership.ResolveAdvertiseAddress(advertiseAddress, bindAddress)
+		if err != nil {
+			return err
 		}
 		logger.Info(
-			"Advertised address",
+			"Advertise address",
 			"address", advertiseAddress,
-			"ip", typedAdvertiseAddress.IP(),
-			"port", typedAdvertiseAddress.Port(),
+			"ip", resolveAdvertiseAddress.IP(),
+			"port", resolveAdvertiseAddress.Port(),
 		)
 
-		var initialMembers []encoding.Address
-		for _, member := range members {
-			addr, err := net.ResolveUDPAddr("udp", member)
-			if err != nil {
-				logger.Error(err, "Resolving member", "address", member)
-				continue
-			}
-			address := encoding.NewAddress(
-				addr.IP,
-				addr.Port,
-			)
+		resolvedBootstrapMembers, err := membership.ResolveBootstrapMembers(members)
+		if err != nil {
+			return err
+		}
+		for i := range members {
 			logger.Info(
 				"Resolved member",
-				"member", member,
-				"ip", address.IP(),
-				"port", address.Port(),
+				"member", members[i],
+				"ip", resolvedBootstrapMembers[i].IP(),
+				"port", resolvedBootstrapMembers[i].Port(),
 			)
-			initialMembers = append(initialMembers, address)
-		}
-		if len(members) > 0 && len(initialMembers) == 0 {
-			return errors.New("members were provided but none could be resolved")
 		}
 
 		membershipList := membership.NewList(
 			membership.WithLogger(logger),
 			membership.WithDirectPingTimeout(directPingTimeout),
 			membership.WithProtocolPeriod(protocolPeriod),
-			membership.WithBootstrapMembers(initialMembers),
-			membership.WithAdvertisedAddress(typedAdvertiseAddress),
-			membership.WithUDPClient(transport.NewUDPClient(maxDatagramLength)),
-			membership.WithTCPClient(transport.NewTCPClient()),
+			membership.WithBootstrapMembers(resolvedBootstrapMembers),
+			membership.WithAdvertisedAddress(resolveAdvertiseAddress),
+			membership.WithBindAddress(bindAddress),
+			membership.WithMaxDatagramLength(maxDatagramLength),
 		)
 
-		udpServerTransport := transport.NewUDPServer(logger, membershipList, bindAddress, maxDatagramLength)
-		if err := udpServerTransport.Startup(); err != nil {
-			return err
-		}
-
-		tcpServerTransport := transport.NewTCPServer(logger, membershipList, bindAddress)
-		if err := tcpServerTransport.Startup(); err != nil {
-			return err
-		}
-
-		scheduler := scheduler.New(
-			membershipList,
-			scheduler.WithLogger(logger),
-			scheduler.WithProtocolPeriod(protocolPeriod),
-			scheduler.WithDirectPingTimeout(directPingTimeout),
-		)
-		if err := scheduler.Startup(); err != nil {
+		if err := membershipList.Startup(); err != nil {
 			return err
 		}
 
@@ -144,28 +86,11 @@ var rootCmd = &cobra.Command{
 		<-ctx.Done()
 
 		logger.Info("Application shutdown")
-		if err := scheduler.Shutdown(); err != nil {
-			return err
-		}
-		if err := tcpServerTransport.Shutdown(); err != nil {
-			return err
-		}
-		if err := udpServerTransport.Shutdown(); err != nil {
+		if err := membershipList.Shutdown(); err != nil {
 			return err
 		}
 		return nil
 	},
-}
-
-func getLocalIPAddress() (net.IP, error) {
-	connection, err := net.Dial("udp", "8.8.8.8:80")
-	if err != nil {
-		return nil, err
-	}
-	defer connection.Close()
-
-	localAddr := connection.LocalAddr().(*net.UDPAddr)
-	return localAddr.IP, nil
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.

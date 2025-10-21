@@ -38,6 +38,61 @@ var _ = Describe("List", func() {
 
 	})
 
+	It("should not do a ping without members", func() {
+		var storeClient StoreClient
+		list := membership.NewList(
+			membership.WithLogger(GinkgoLogr),
+			membership.WithUDPClient(&storeClient),
+			membership.WithTCPClient(&DiscardClient{}),
+			membership.WithAdvertisedAddress(TestAddress),
+		)
+
+		Expect(list.DirectPing()).To(Succeed())
+		Expect(storeClient.Addresses).To(HaveLen(0))
+	})
+
+	It("should do round robin direct pings", func() {
+		var storeClient StoreClient
+		list := membership.NewList(
+			membership.WithLogger(GinkgoLogr),
+			membership.WithUDPClient(&storeClient),
+			membership.WithTCPClient(&DiscardClient{}),
+			membership.WithAdvertisedAddress(TestAddress),
+		)
+
+		// Add a few members
+		for i := range 10 {
+			message := gossip.MessageAlive{
+				Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+1+i),
+				IncarnationNumber: 0,
+			}
+			buffer, _, err := message.AppendToBuffer(nil)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(list.DispatchDatagram(buffer)).To(Succeed())
+		}
+
+		// Catch the direct ping messages and remember which address was pinged how often
+		directPingAddresses := make(map[encoding.Address]int)
+		for range 100 {
+			Expect(list.DirectPing()).To(Succeed())
+
+			Expect(storeClient.Addresses).To(HaveLen(1))
+			var message membership.MessageDirectPing
+			Expect(message.FromBuffer(storeClient.Buffers[0])).Error().ToNot(HaveOccurred())
+			Expect(message.Source).To(Equal(TestAddress))
+			directPingAddresses[storeClient.Addresses[0]]++
+
+			storeClient.Addresses = nil
+			storeClient.Buffers = nil
+		}
+
+		// We expect every address to be pinged the same number of times.
+		Expect(directPingAddresses).To(HaveLen(10))
+		for _, value := range directPingAddresses {
+			Expect(value).To(Equal(10))
+		}
+	})
+
 	It("should ignore alive about self", func() {
 		list.GetGossip().Clear()
 		Expect(list.GetGossip().Len()).To(Equal(0))

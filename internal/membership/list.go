@@ -112,6 +112,40 @@ func (l *List) Get() []encoding.Address {
 	return result
 }
 
+func (l *List) GetMembers() []encoding.Member {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	return l.members
+}
+
+func (l *List) GetFaultyMembers() []encoding.Member {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	return l.faultyMembers
+}
+
+func (l *List) SetMembers(members []encoding.Member) {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	l.members = l.members[:0]
+	l.randomIndexes = l.randomIndexes[:0]
+	l.nextRandomIndex = 0
+
+	for _, member := range members {
+		l.addMember(member)
+	}
+}
+
+func (l *List) SetFaultyMembers(members []encoding.Member) {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	l.faultyMembers = append(l.faultyMembers[:0], members...)
+}
+
 func (l *List) DirectPing() error {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
@@ -619,7 +653,7 @@ func (l *List) handleSuspectForFaultyMembers(suspect gossip.MessageSuspect) bool
 	}
 	faultyMember := &l.faultyMembers[faultyMemberIndex]
 
-	if suspect.IncarnationNumber < faultyMember.IncarnationNumber {
+	if suspect.IncarnationNumber <= faultyMember.IncarnationNumber {
 		// We have more up-to-date information about this member.
 		return true
 	}

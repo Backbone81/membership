@@ -29,8 +29,11 @@ type Config struct {
 	// AdvertisedAddress is the address for contacting this member.
 	AdvertisedAddress encoding.Address
 
-	// MaxDatagramLength is the maximum length in bytes we should not exceed for UDP network messages.
-	MaxDatagramLength int
+	// MaxDatagramLengthSend is the maximum length in bytes we should not exceed for sending UDP network messages.
+	MaxDatagramLengthSend int
+
+	// MaxDatagramLengthReceive is the maximum length in bytes we should not exceed for receiving UDP network messages.
+	MaxDatagramLengthReceive int
 
 	BindAddress string
 
@@ -46,10 +49,11 @@ type Config struct {
 }
 
 var DefaultConfig = Config{
-	ProtocolPeriod:      intmembership.DefaultConfig.ProtocolPeriod,
-	DirectPingTimeout:   intmembership.DefaultConfig.DirectPingTimeout,
-	MaxDatagramLength:   intmembership.DefaultConfig.MaxDatagramLength,
-	BindAddress:         ":3000",
-	MaxSleepDuration:    scheduler.DefaultConfig.MaxSleepDuration,
-	ListRequestInterval: scheduler.DefaultConfig.ListRequestInterval,
+	ProtocolPeriod:           intmembership.DefaultConfig.ProtocolPeriod,
+	DirectPingTimeout:        intmembership.DefaultConfig.DirectPingTimeout,
+	MaxDatagramLengthSend:    intmembership.DefaultConfig.MaxDatagramLengthSend,
+	MaxDatagramLengthReceive: intmembership.DefaultConfig.MaxDatagramLengthSend,
+	BindAddress:              ":3000",
+	MaxSleepDuration:         scheduler.DefaultConfig.MaxSleepDuration,
+	ListRequestInterval:      scheduler.DefaultConfig.ListRequestInterval,
 }

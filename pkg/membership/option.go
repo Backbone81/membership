@@ -50,9 +50,15 @@ func WithAdvertisedAddress(address encoding.Address) Option {
 	}
 }
 
-func WithMaxDatagramLength(maxDatagramLength int) Option {
+func WithMaxDatagramLengthSend(maxDatagramLength int) Option {
 	return func(config *Config) {
-		config.MaxDatagramLength = maxDatagramLength
+		config.MaxDatagramLengthSend = maxDatagramLength
+	}
+}
+
+func WithMaxDatagramLengthReceive(maxDatagramLength int) Option {
+	return func(config *Config) {
+		config.MaxDatagramLengthReceive = maxDatagramLength
 	}
 }
 

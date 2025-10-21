@@ -26,13 +26,13 @@ func NewList(options ...Option) *List {
 		intmembership.WithDirectPingTimeout(config.DirectPingTimeout),
 		intmembership.WithBootstrapMembers(config.BootstrapMembers),
 		intmembership.WithAdvertisedAddress(config.AdvertisedAddress),
-		intmembership.WithMaxDatagramLength(config.MaxDatagramLength),
-		intmembership.WithUDPClient(inttransport.NewUDPClient(config.MaxDatagramLength)),
+		intmembership.WithMaxDatagramLengthSend(config.MaxDatagramLengthSend),
+		intmembership.WithUDPClient(inttransport.NewUDPClient(config.MaxDatagramLengthSend)),
 		intmembership.WithTCPClient(inttransport.NewTCPClient()),
 		intmembership.WithMemberAddedCallback(config.MemberAddedCallback),
 		intmembership.WithMemberRemovedCallback(config.MemberRemovedCallback),
 	)
-	udpServerTransport := inttransport.NewUDPServer(config.Logger, list, config.BindAddress, config.MaxDatagramLength)
+	udpServerTransport := inttransport.NewUDPServer(config.Logger, list, config.BindAddress, config.MaxDatagramLengthReceive)
 	tcpServerTransport := inttransport.NewTCPServer(config.Logger, list, config.BindAddress)
 	scheduler := intscheduler.New(
 		list,

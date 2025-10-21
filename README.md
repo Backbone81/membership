@@ -7,7 +7,6 @@ This Go library provides a peer-to-peer gossip based membership implementation. 
 
 ### Basic Requirements
 
-- Support different settings for max datagram length for receive and send
 - Have the members and faulty members always sorted by address and use binary search to find members in them.
 - Add metrics to expose what is happening.
 - Add encryption and support multiple encryption keys for key rollover. The first key is always used for encryption, all

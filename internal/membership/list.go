@@ -77,7 +77,7 @@ func NewList(options ...Option) *List {
 		logger:         config.Logger,
 		self:           config.AdvertisedAddress,
 		gossipQueue:    gossip.NewMessageQueue(10), // TODO: The max gossip count needs to be adjusted for the number of members during runtime.
-		datagramBuffer: make([]byte, 0, config.MaxDatagramLength),
+		datagramBuffer: make([]byte, 0, config.MaxDatagramLengthSend),
 	}
 
 	// We need to gossip our own alive. Otherwise, nobody will pick us up into their own member list.
@@ -993,7 +993,7 @@ func (l *List) sendWithGossip(address encoding.Address, message Message) error {
 			return err
 		}
 
-		if len(l.datagramBuffer) > l.config.MaxDatagramLength {
+		if len(l.datagramBuffer) > l.config.MaxDatagramLengthSend {
 			l.datagramBuffer = l.datagramBuffer[:len(l.datagramBuffer)-gossipN]
 			break
 		}

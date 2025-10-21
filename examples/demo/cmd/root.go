@@ -16,10 +16,11 @@ import (
 )
 
 var (
-	verbosity         int
-	maxDatagramLength int
-	bindAddress       string
-	advertiseAddress  string
+	verbosity                int
+	maxDatagramLengthSend    int
+	maxDatagramLengthReceive int
+	bindAddress              string
+	advertiseAddress         string
 
 	protocolPeriod    time.Duration
 	directPingTimeout time.Duration
@@ -75,7 +76,8 @@ var rootCmd = &cobra.Command{
 			membership.WithBootstrapMembers(resolvedBootstrapMembers),
 			membership.WithAdvertisedAddress(resolveAdvertiseAddress),
 			membership.WithBindAddress(bindAddress),
-			membership.WithMaxDatagramLength(maxDatagramLength),
+			membership.WithMaxDatagramLengthSend(maxDatagramLengthSend),
+			membership.WithMaxDatagramLengthReceive(maxDatagramLengthReceive),
 		)
 
 		if err := membershipList.Startup(); err != nil {
@@ -111,11 +113,20 @@ func init() {
 		"Sets the verbosity for log output. 0 reports info and error messages, while 1 and up report more detailed logs.",
 	)
 	rootCmd.PersistentFlags().IntVar(
-		&maxDatagramLength,
-		"max-datagram-length",
+		&maxDatagramLengthSend,
+		"max-datagram-length-send",
 		512,
 		`The maximum length of network messages in bytes. This should be set to a value which does not cause fragmentation.
-All members must use the same value, otherwise data loss and malformed messages might occur.
+This value must be equal or smaller to max-datagram-length-receive to not cause data loss.
+A conservative length with most compatibility is (576 bytes IP datagram length) - (20 to 60 bytes IP header) - (8 bytes UDP header).
+A progressive length for an internal ethernet based network is (1500 bytes ethernet MTU) - (20 to 60 bytes IP header) - (8 bytes UDP header).`,
+	)
+	rootCmd.PersistentFlags().IntVar(
+		&maxDatagramLengthReceive,
+		"max-datagram-length-receive",
+		512,
+		`The maximum length of network messages in bytes. This should be set to a value which does not cause fragmentation.
+The value must be equal or bigger to max-datagram-length-send to not cause data loss.
 A conservative length with most compatibility is (576 bytes IP datagram length) - (20 to 60 bytes IP header) - (8 bytes UDP header).
 A progressive length for an internal ethernet based network is (1500 bytes ethernet MTU) - (20 to 60 bytes IP header) - (8 bytes UDP header).`,
 	)

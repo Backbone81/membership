@@ -63,9 +63,9 @@ func WithTCPClient(transport Transport) Option {
 	}
 }
 
-func WithMaxDatagramLength(maxDatagramLength int) Option {
+func WithMaxDatagramLengthSend(maxDatagramLength int) Option {
 	return func(config *Config) {
-		config.MaxDatagramLength = maxDatagramLength
+		config.MaxDatagramLengthSend = maxDatagramLength
 	}
 }
 

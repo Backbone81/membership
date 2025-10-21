@@ -35,8 +35,8 @@ type Config struct {
 	// TCPClient is the transport for sending reliable TCP network messages.
 	TCPClient Transport
 
-	// MaxDatagramLength is the maximum length in bytes we should not exceed for UDP network messages.
-	MaxDatagramLength int
+	// MaxDatagramLengthSend is the maximum length in bytes we should not exceed for sending UDP network messages.
+	MaxDatagramLengthSend int
 
 	// MemberAddedCallback is the callback which is triggered when a new member is added to the list.
 	MemberAddedCallback func(address encoding.Address)
@@ -46,7 +46,7 @@ type Config struct {
 }
 
 var DefaultConfig = Config{
-	DirectPingTimeout: 100 * time.Millisecond,
-	ProtocolPeriod:    1 * time.Second,
-	MaxDatagramLength: 512,
+	DirectPingTimeout:     100 * time.Millisecond,
+	ProtocolPeriod:        1 * time.Second,
+	MaxDatagramLengthSend: 512,
 }

@@ -45,8 +45,9 @@ func (t *UDPServer) Startup() error {
 	}
 	t.connection = connection
 
-	t.waitGroup.Add(1)
-	go t.backgroundTask()
+	t.waitGroup.Go(func() {
+		t.backgroundTask()
+	})
 	return nil
 }
 
@@ -83,7 +84,6 @@ func (t *UDPServer) backgroundTask() {
 	t.logger.Info("UDP server transport background task started")
 	defer t.logger.Info("UDP server transport background task finished")
 
-	defer t.waitGroup.Done()
 	buffer := make([]byte, t.receiveBufferLength)
 	for {
 		n, _, err := t.connection.ReadFromUDP(buffer)

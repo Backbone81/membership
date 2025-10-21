@@ -3,6 +3,8 @@ package membership_test
 import (
 	"fmt"
 	"net"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -32,10 +34,51 @@ var _ = Describe("List", func() {
 	})
 
 	It("should trigger the member callbacks", func() {
+		var membersAdded, membersRemoved atomic.Int64
+		var callbacks sync.WaitGroup
 
-		// TODO: implementation
-		_ = list
+		list := membership.NewList(
+			membership.WithLogger(GinkgoLogr),
+			membership.WithUDPClient(&DiscardClient{}),
+			membership.WithTCPClient(&DiscardClient{}),
+			membership.WithMemberAddedCallback(func(address encoding.Address) {
+				membersAdded.Add(1)
+				callbacks.Done()
+			}),
+			membership.WithMemberRemovedCallback(func(address encoding.Address) {
+				membersRemoved.Add(1)
+				callbacks.Done()
+			}),
+		)
 
+		for i := range 10 {
+			messageAlive := gossip.MessageAlive{
+				Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
+				IncarnationNumber: 0,
+			}
+			buffer, _, err := messageAlive.AppendToBuffer(nil)
+			Expect(err).ToNot(HaveOccurred())
+			callbacks.Add(1)
+			Expect(list.DispatchDatagram(buffer)).To(Succeed())
+		}
+		callbacks.Wait()
+		Expect(int(membersAdded.Load())).To(Equal(10))
+		Expect(int(membersRemoved.Load())).To(Equal(0))
+
+		for i := range 10 {
+			messageAlive := gossip.MessageFaulty{
+				Source:            TestAddress,
+				Destination:       encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
+				IncarnationNumber: 0,
+			}
+			buffer, _, err := messageAlive.AppendToBuffer(nil)
+			Expect(err).ToNot(HaveOccurred())
+			callbacks.Add(1)
+			Expect(list.DispatchDatagram(buffer)).To(Succeed())
+		}
+		callbacks.Wait()
+		Expect(int(membersAdded.Load())).To(Equal(10))
+		Expect(int(membersRemoved.Load())).To(Equal(10))
 	})
 
 	It("should not do a ping without members", func() {
@@ -1001,9 +1044,9 @@ func createListWithMembers(memberCount int) *membership.List {
 			panic(err)
 		}
 	}
-
-	// TODO: Check if we now have the correct member count
-
+	if list.Len() != memberCount {
+		panic("member count does not match expected value")
+	}
 	return list
 }
 

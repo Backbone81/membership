@@ -36,9 +36,12 @@ func New(target Target, options ...Option) *Scheduler {
 func (s *Scheduler) Startup() error {
 	s.logger.Info("Scheduler startup")
 	s.listRequestTicker = time.NewTicker(s.config.ListRequestInterval)
-	s.waitGroup.Add(2)
-	go s.protocolPeriodTask()
-	go s.requestListTask()
+	s.waitGroup.Go(func() {
+		s.protocolPeriodTask()
+	})
+	s.waitGroup.Go(func() {
+		s.requestListTask()
+	})
 	return nil
 }
 
@@ -55,7 +58,6 @@ func (s *Scheduler) Shutdown() error {
 func (s *Scheduler) protocolPeriodTask() {
 	s.logger.Info("Protocol period background task started")
 	defer s.logger.Info("Protocol period background task finished")
-	defer s.waitGroup.Done()
 
 	directPingAt := time.Now()
 	for {
@@ -141,7 +143,6 @@ func (s *Scheduler) shutdownInProgress() bool {
 func (s *Scheduler) requestListTask() {
 	s.logger.Info("Member list request background task started")
 	defer s.logger.Info("Member list request background task finished")
-	defer s.waitGroup.Done()
 
 	// Let's do a list request right at startup to have the full member list available as soon as possible.
 	s.measure("Request list completed", func() {

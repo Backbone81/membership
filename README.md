@@ -7,7 +7,6 @@ This Go library provides a peer-to-peer gossip based membership implementation. 
 
 ### Basic Requirements
 
-- Provide callbacks when members change
 - Address should be serialized to buffer with variable length instead of ipv6 length all the time.
 - Support different settings for max datagram length for receive and send
 - Have the members and faulty members always sorted by address and use binary search to find members in them.

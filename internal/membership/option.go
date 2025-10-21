@@ -68,3 +68,15 @@ func WithMaxDatagramLength(maxDatagramLength int) Option {
 		config.MaxDatagramLength = maxDatagramLength
 	}
 }
+
+func WithMemberAddedCallback(memberAddedCallback func(address encoding.Address)) Option {
+	return func(config *Config) {
+		config.MemberAddedCallback = memberAddedCallback
+	}
+}
+
+func WithMemberRemovedCallback(memberRemovedCallback func(address encoding.Address)) Option {
+	return func(config *Config) {
+		config.MemberRemovedCallback = memberRemovedCallback
+	}
+}

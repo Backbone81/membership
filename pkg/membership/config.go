@@ -37,6 +37,12 @@ type Config struct {
 	MaxSleepDuration time.Duration
 
 	ListRequestInterval time.Duration
+
+	// MemberAddedCallback is the callback which is triggered when a new member is added to the list.
+	MemberAddedCallback func(address encoding.Address)
+
+	// MemberRemovedCallback is the callback which is triggered when a member is removed from the list.
+	MemberRemovedCallback func(address encoding.Address)
 }
 
 var DefaultConfig = Config{

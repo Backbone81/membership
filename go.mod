@@ -1,6 +1,6 @@
 module github.com/backbone81/membership
 
-go 1.24
+go 1.25
 
 toolchain go1.25.1
 

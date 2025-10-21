@@ -38,8 +38,9 @@ func (t *TCPServer) Startup() error {
 	}
 	t.listener = listener
 
-	t.waitGroup.Add(1)
-	go t.backgroundTask()
+	t.waitGroup.Go(func() {
+		t.backgroundTask()
+	})
 	return nil
 }
 
@@ -77,7 +78,6 @@ func (t *TCPServer) backgroundTask() {
 	t.logger.Info("TCP server transport background task started")
 	defer t.logger.Info("TCP server transport background task finished")
 
-	defer t.waitGroup.Done()
 	for {
 		connection, err := t.listener.Accept()
 		if err != nil {
@@ -87,8 +87,9 @@ func (t *TCPServer) backgroundTask() {
 			return
 		}
 
-		t.waitGroup.Add(1)
-		go t.handleConnection(connection)
+		t.waitGroup.Go(func() {
+			t.handleConnection(connection)
+		})
 	}
 }
 
@@ -103,7 +104,6 @@ func (t *TCPServer) handleConnection(connection net.Conn) {
 }
 
 func (t *TCPServer) handleConnectionImpl(connection net.Conn) error {
-	defer t.waitGroup.Done()
 	buffer := make([]byte, 1024)
 
 	// First let's read the datagram length which is an uint32.

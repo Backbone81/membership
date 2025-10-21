@@ -146,6 +146,13 @@ func (l *List) SetFaultyMembers(members []encoding.Member) {
 	l.faultyMembers = append(l.faultyMembers[:0], members...)
 }
 
+func (l *List) GetGossip() *gossip.MessageQueue {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	return l.gossipQueue
+}
+
 func (l *List) DirectPing() error {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()

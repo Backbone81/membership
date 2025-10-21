@@ -98,6 +98,12 @@ func (q *MessageQueue) Len() int {
 	return len(q.queue)
 }
 
+// Clear removes all gossip from the queue.
+func (q *MessageQueue) Clear() {
+	q.queue = q.queue[:0]
+	clear(q.indexByAddress)
+}
+
 // Get returns the message at the given index within the queue.
 // Call PrioritizeForAddress before you iterate over the content of the queue. Otherwise, the order of messages is undefined.
 func (q *MessageQueue) Get(index int) Message {

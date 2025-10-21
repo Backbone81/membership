@@ -21,6 +21,7 @@ var _ = Describe("List", func() {
 			membership.WithLogger(GinkgoLogr),
 			membership.WithUDPClient(&DiscardClient{}),
 			membership.WithTCPClient(&DiscardClient{}),
+			membership.WithAdvertisedAddress(TestAddress),
 		)
 	})
 
@@ -35,6 +36,64 @@ var _ = Describe("List", func() {
 		// TODO: implementation
 		_ = list
 
+	})
+
+	It("should ignore alive about self", func() {
+		list.GetGossip().Clear()
+		Expect(list.GetGossip().Len()).To(Equal(0))
+		message := gossip.MessageAlive{
+			Source:            TestAddress,
+			IncarnationNumber: 0,
+		}
+		buffer, _, err := message.AppendToBuffer(nil)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(list.DispatchDatagram(buffer)).To(Succeed())
+
+		Expect(list.GetMembers()).To(BeEmpty())
+		Expect(list.GetFaultyMembers()).To(BeEmpty())
+		Expect(list.GetGossip().Len()).To(Equal(0))
+	})
+
+	It("should refute suspect about self", func() {
+		list.GetGossip().Clear()
+		Expect(list.GetGossip().Len()).To(Equal(0))
+		message := gossip.MessageSuspect{
+			Source:            TestAddress2,
+			Destination:       TestAddress,
+			IncarnationNumber: 0,
+		}
+		buffer, _, err := message.AppendToBuffer(nil)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(list.DispatchDatagram(buffer)).To(Succeed())
+
+		Expect(list.GetMembers()).To(BeEmpty())
+		Expect(list.GetFaultyMembers()).To(BeEmpty())
+		Expect(list.GetGossip().Len()).To(Equal(1))
+		Expect(list.GetGossip().Get(0)).To(Equal(&gossip.MessageAlive{
+			Source:            TestAddress,
+			IncarnationNumber: 1,
+		}))
+	})
+
+	It("should refute faulty about self", func() {
+		list.GetGossip().Clear()
+		Expect(list.GetGossip().Len()).To(Equal(0))
+		message := gossip.MessageFaulty{
+			Source:            TestAddress2,
+			Destination:       TestAddress,
+			IncarnationNumber: 0,
+		}
+		buffer, _, err := message.AppendToBuffer(nil)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(list.DispatchDatagram(buffer)).To(Succeed())
+
+		Expect(list.GetMembers()).To(BeEmpty())
+		Expect(list.GetFaultyMembers()).To(BeEmpty())
+		Expect(list.GetGossip().Len()).To(Equal(1))
+		Expect(list.GetGossip().Get(0)).To(Equal(&gossip.MessageAlive{
+			Source:            TestAddress,
+			IncarnationNumber: 1,
+		}))
 	})
 
 	DescribeTable("Gossip should update the memberlist correctly",

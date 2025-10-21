@@ -40,10 +40,10 @@ type Config struct {
 }
 
 var DefaultConfig = Config{
-	ProtocolPeriod:    intmembership.DefaultConfig.ProtocolPeriod,
-	DirectPingTimeout: intmembership.DefaultConfig.DirectPingTimeout,
-	MaxDatagramLength: intmembership.DefaultConfig.MaxDatagramLength,
-	BindAddress:       ":3000",
-	MaxSleepDuration: scheduler.DefaultConfig.MaxSleepDuration,
+	ProtocolPeriod:      intmembership.DefaultConfig.ProtocolPeriod,
+	DirectPingTimeout:   intmembership.DefaultConfig.DirectPingTimeout,
+	MaxDatagramLength:   intmembership.DefaultConfig.MaxDatagramLength,
+	BindAddress:         ":3000",
+	MaxSleepDuration:    scheduler.DefaultConfig.MaxSleepDuration,
 	ListRequestInterval: scheduler.DefaultConfig.ListRequestInterval,
 }

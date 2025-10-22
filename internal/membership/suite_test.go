@@ -17,7 +17,7 @@ var (
 
 	// BenchmarkAddress is an address which is coming last in a sorted list of members. Using this address in benchmarks
 	// surfaces issues with slices scans, as the scan will take longer the more members are in a slice.
-	BenchmarkAddress  = encoding.NewAddress(net.IPv4(math.MaxUint8, math.MaxUint8, math.MaxUint8, math.MaxUint8), math.MaxUint16)
+	BenchmarkAddress = encoding.NewAddress(net.IPv4(math.MaxUint8, math.MaxUint8, math.MaxUint8, math.MaxUint8), math.MaxUint16)
 )
 
 func TestSuite(t *testing.T) {

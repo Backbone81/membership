@@ -7,6 +7,11 @@ This Go library provides a peer-to-peer gossip based membership implementation. 
 
 ### Basic Requirements
 
+- The gossip message queue does not have to sort all gossip ascending by transmission count. With 8k messages in the
+  queue, this gets really slow and is also not necessary as we will never be able to put 8k gossip messages into
+  the piggyback. We should use algorithms like quickselect to quickly find the 100 lowest gossip messages and then
+  only sort them. The number of gossip to sort could be dynamically derived from the highest Get() calls done in the
+  past. That way we could improve the performance significantly.
 - Add metrics to expose what is happening.
 - Add encryption and support multiple encryption keys for key rollover. The first key is always used for encryption, all
   keys are used for decryption.

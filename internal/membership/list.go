@@ -306,18 +306,25 @@ func (l *List) markSuspectsAsFaulty() {
 			"destination", member.Address,
 			"incarnation-number", member.IncarnationNumber,
 		)
-		l.faultyMembers = append(l.faultyMembers, encoding.Member{
-			Address:           member.Address,
-			State:             encoding.MemberStateFaulty,
-			LastStateChange:   time.Now(),
-			IncarnationNumber: member.IncarnationNumber,
-		})
+		member.State = encoding.MemberStateFaulty
+		member.LastStateChange = time.Now()
+		faultyMemberIndex, found := slices.BinarySearchFunc(
+			l.faultyMembers,
+			*member,
+			encoding.CompareMember,
+		)
+		if found {
+			// Overwrite existing faulty member
+			l.faultyMembers[faultyMemberIndex] = *member
+		} else {
+			l.faultyMembers = slices.Insert(l.faultyMembers, faultyMemberIndex, *member)
+		}
 		l.gossipQueue.Add(&gossip.MessageFaulty{
 			Source:            l.self,
 			Destination:       member.Address,
 			IncarnationNumber: member.IncarnationNumber,
 		})
-		l.removeMemberByIndex(i)
+		l.removeMemberByIndex(i) // must always happen last to keep the member alive during this method
 	}
 }
 
@@ -329,10 +336,12 @@ func (l *List) processFailedProbes() {
 			continue
 		}
 
-		memberIndex := slices.IndexFunc(l.members, func(record encoding.Member) bool {
-			return record.Address.Equal(pendingDirectProbe.Destination)
-		})
-		if memberIndex == -1 {
+		memberIndex, found := slices.BinarySearchFunc(
+			l.members,
+			encoding.Member{Address: pendingDirectProbe.Destination},
+			encoding.CompareMember,
+		)
+		if !found {
 			// We probably got a faulty message by some other member while we were waiting for our probe to succeed.
 			// Nothing to do here.
 			continue
@@ -670,10 +679,12 @@ func (l *List) handleSuspectForSelf(suspect gossip.MessageSuspect) bool {
 }
 
 func (l *List) handleSuspectForFaultyMembers(suspect gossip.MessageSuspect) bool {
-	faultyMemberIndex := slices.IndexFunc(l.faultyMembers, func(member encoding.Member) bool {
-		return member.Address.Equal(suspect.Destination)
-	})
-	if faultyMemberIndex == -1 {
+	faultyMemberIndex, found := slices.BinarySearchFunc(
+		l.faultyMembers,
+		encoding.Member{Address: suspect.Destination},
+		encoding.CompareMember,
+	)
+	if !found {
 		// The member is not part of our faulty members list. Nothing to do.
 		return false
 	}
@@ -697,10 +708,12 @@ func (l *List) handleSuspectForFaultyMembers(suspect gossip.MessageSuspect) bool
 }
 
 func (l *List) handleSuspectForMembers(suspect gossip.MessageSuspect) bool {
-	memberIndex := slices.IndexFunc(l.members, func(member encoding.Member) bool {
-		return member.Address.Equal(suspect.Destination)
-	})
-	if memberIndex == -1 {
+	memberIndex, found := slices.BinarySearchFunc(
+		l.members,
+		encoding.Member{Address: suspect.Destination},
+		encoding.CompareMember,
+	)
+	if !found {
 		// The member is not part of our members list. Nothing to do.
 		return false
 	}
@@ -761,10 +774,12 @@ func (l *List) handleAliveForSelf(alive gossip.MessageAlive) bool {
 }
 
 func (l *List) handleAliveForFaultyMembers(alive gossip.MessageAlive) bool {
-	faultyMemberIndex := slices.IndexFunc(l.faultyMembers, func(member encoding.Member) bool {
-		return member.Address.Equal(alive.Source)
-	})
-	if faultyMemberIndex == -1 {
+	faultyMemberIndex, found := slices.BinarySearchFunc(
+		l.faultyMembers,
+		encoding.Member{Address: alive.Source},
+		encoding.CompareMember,
+	)
+	if !found {
 		// The member is not part of our faulty members list. Nothing to do.
 		return false
 	}
@@ -788,10 +803,12 @@ func (l *List) handleAliveForFaultyMembers(alive gossip.MessageAlive) bool {
 }
 
 func (l *List) handleAliveForMembers(alive gossip.MessageAlive) bool {
-	memberIndex := slices.IndexFunc(l.members, func(member encoding.Member) bool {
-		return member.Address.Equal(alive.Source)
-	})
-	if memberIndex == -1 {
+	memberIndex, found := slices.BinarySearchFunc(
+		l.members,
+		encoding.Member{Address: alive.Source},
+		encoding.CompareMember,
+	)
+	if !found {
 		// The member is not part of our members list. Nothing to do.
 		return false
 	}
@@ -866,10 +883,12 @@ func (l *List) handleFaultyForSelf(faulty gossip.MessageFaulty) bool {
 }
 
 func (l *List) handleFaultyForFaultyMembers(faulty gossip.MessageFaulty) bool {
-	faultyMemberIndex := slices.IndexFunc(l.faultyMembers, func(member encoding.Member) bool {
-		return member.Address.Equal(faulty.Destination)
-	})
-	if faultyMemberIndex == -1 {
+	faultyMemberIndex, found := slices.BinarySearchFunc(
+		l.faultyMembers,
+		encoding.Member{Address: faulty.Destination},
+		encoding.CompareMember,
+	)
+	if !found {
 		// The member is not part of our faulty members list. Nothing to do.
 		return false
 	}
@@ -886,10 +905,12 @@ func (l *List) handleFaultyForFaultyMembers(faulty gossip.MessageFaulty) bool {
 }
 
 func (l *List) handleFaultyForMembers(faulty gossip.MessageFaulty) bool {
-	memberIndex := slices.IndexFunc(l.members, func(member encoding.Member) bool {
-		return member.Address.Equal(faulty.Destination)
-	})
-	if memberIndex == -1 {
+	memberIndex, found := slices.BinarySearchFunc(
+		l.members,
+		encoding.Member{Address: faulty.Destination},
+		encoding.CompareMember,
+	)
+	if !found {
 		// The member is not part of our member list. Nothing to do.
 		return false
 	}
@@ -901,25 +922,44 @@ func (l *List) handleFaultyForMembers(faulty gossip.MessageFaulty) bool {
 	}
 
 	// Remove member from member list and put it on the faulty member list.
-	l.removeMemberByAddress(faulty.Destination)
-	l.faultyMembers = append(l.faultyMembers, encoding.Member{
-		Address:           faulty.Destination,
-		State:             encoding.MemberStateFaulty,
-		LastStateChange:   time.Now(),
-		IncarnationNumber: faulty.IncarnationNumber,
-	})
+	member.State = encoding.MemberStateFaulty
+	member.LastStateChange = time.Now()
+	member.IncarnationNumber = faulty.IncarnationNumber
+	faultyMemberIndex, found := slices.BinarySearchFunc(
+		l.faultyMembers,
+		*member,
+		encoding.CompareMember,
+	)
+	if found {
+		// Overwrite existing faulty member
+		l.faultyMembers[faultyMemberIndex] = *member
+	} else {
+		l.faultyMembers = slices.Insert(l.faultyMembers, faultyMemberIndex, *member)
+	}
 	l.gossipQueue.Add(&faulty)
+	l.removeMemberByAddress(faulty.Destination) // must always happen last to keep the member alive during this method
 	return true
 }
 
 func (l *List) handleFaultyForUnknown(faulty gossip.MessageFaulty) {
 	// We don't know about this member yet. Add it to our faulty member list and gossip about it.
-	l.faultyMembers = append(l.faultyMembers, encoding.Member{
+	faultyMember := encoding.Member{
 		Address:           faulty.Destination,
 		State:             encoding.MemberStateFaulty,
 		LastStateChange:   time.Now(),
 		IncarnationNumber: faulty.IncarnationNumber,
-	})
+	}
+	faultyMemberIndex, found := slices.BinarySearchFunc(
+		l.faultyMembers,
+		faultyMember,
+		encoding.CompareMember,
+	)
+	if found {
+		// Overwrite existing faulty member
+		l.faultyMembers[faultyMemberIndex] = faultyMember
+	} else {
+		l.faultyMembers = slices.Insert(l.faultyMembers, faultyMemberIndex, faultyMember)
+	}
 	l.gossipQueue.Add(&faulty)
 }
 
@@ -1027,22 +1067,6 @@ func (l *List) getRandomMember() *encoding.Member {
 	return &l.members[randomIndex]
 }
 
-func (l *List) isMember(address encoding.Address) bool {
-	return slices.ContainsFunc(l.members, func(member encoding.Member) bool {
-		return address.Equal(member.Address)
-	})
-}
-
-func (l *List) getMember(address encoding.Address) *encoding.Member {
-	index := slices.IndexFunc(l.members, func(member encoding.Member) bool {
-		return address.Equal(member.Address)
-	})
-	if index == -1 {
-		return nil
-	}
-	return &l.members[index]
-}
-
 func (l *List) addMember(member encoding.Member) {
 	l.logger.Info(
 		"Member added",
@@ -1051,8 +1075,25 @@ func (l *List) addMember(member encoding.Member) {
 	)
 
 	// We append the new member always at the end of the member list. Remember the index for later.
-	memberIndex := len(l.members)
-	l.members = append(l.members, member)
+	memberIndex, found := slices.BinarySearchFunc(
+		l.members,
+		member,
+		encoding.CompareMember,
+	)
+	if found {
+		// Update the existing member
+		l.members[memberIndex] = member
+		return
+	}
+	l.members = slices.Insert(l.members, memberIndex, member)
+
+	// Fix the current indices to account for the inserted member.
+	for i := range l.randomIndexes {
+		if l.randomIndexes[i] < memberIndex {
+			continue
+		}
+		l.randomIndexes[i]++
+	}
 
 	// We pick a random location to insert the new member into the random indexes slice. We need to add +1 to the length
 	// of that slice to allow for appending at the end.
@@ -1074,13 +1115,15 @@ func (l *List) addMember(member encoding.Member) {
 }
 
 func (l *List) removeMemberByAddress(address encoding.Address) {
-	index := slices.IndexFunc(l.members, func(member encoding.Member) bool {
-		return address.Equal(member.Address)
-	})
-	if index == -1 {
+	index, found := slices.BinarySearchFunc(
+		l.members,
+		encoding.Member{Address: address},
+		encoding.CompareMember,
+	)
+	if !found {
 		return
 	}
-	l.removeMemberByIndex(index)
+	l.removeMemberByIndex(index) // must always happen last to keep the member alive during this method
 }
 
 func (l *List) removeMemberByIndex(index int) {

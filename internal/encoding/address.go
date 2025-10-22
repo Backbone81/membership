@@ -57,16 +57,21 @@ func (a Address) String() string {
 	return net.JoinHostPort(a.IP().String(), strconv.Itoa(a.Port()))
 }
 
-var v4InV6Prefix = []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff}
+// CompareAddress orders addresses.
+func CompareAddress(lhs Address, rhs Address) int {
+	return bytes.Compare(lhs[:], rhs[:])
+}
+
+var IPv4InIPv6Prefix = []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff}
 
 // AppendAddressToBuffer appends the address to the provided buffer encoded for network transfer.
 // Returns the buffer with the data appended, the number of bytes appended and any error which occurred.
 func AppendAddressToBuffer(buffer []byte, address Address) ([]byte, int, error) {
-	isIPv4 := bytes.Equal(address[:len(v4InV6Prefix)], v4InV6Prefix)
+	isIPv4 := bytes.Equal(address[:len(IPv4InIPv6Prefix)], IPv4InIPv6Prefix)
 	if isIPv4 {
 		buffer = append(buffer, 0)
-		buffer = append(buffer, address[len(v4InV6Prefix):]...)
-		return buffer, 1 + len(address[len(v4InV6Prefix):]), nil
+		buffer = append(buffer, address[len(IPv4InIPv6Prefix):]...)
+		return buffer, 1 + len(address[len(IPv4InIPv6Prefix):]), nil
 	} else {
 		buffer = append(buffer, 1)
 		buffer = append(buffer, address[:]...)
@@ -84,12 +89,12 @@ func AddressFromBuffer(buffer []byte) (Address, int, error) {
 	buffer = buffer[1:]
 	var result Address
 	if isIPv4 {
-		if len(buffer) < len(result[len(v4InV6Prefix):]) {
+		if len(buffer) < len(result[len(IPv4InIPv6Prefix):]) {
 			return Address{}, 0, errors.New("address buffer too small")
 		}
-		copy(result[:], v4InV6Prefix)
-		copy(result[len(v4InV6Prefix):], buffer[:])
-		return result, 1 + len(result[len(v4InV6Prefix):]), nil
+		copy(result[:], IPv4InIPv6Prefix)
+		copy(result[len(IPv4InIPv6Prefix):], buffer[:])
+		return result, 1 + len(result[len(IPv4InIPv6Prefix):]), nil
 	} else {
 		if len(buffer) < len(result) {
 			return Address{}, 0, errors.New("address buffer too small")

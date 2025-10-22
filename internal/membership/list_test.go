@@ -931,7 +931,7 @@ func BenchmarkList_RequestList(b *testing.B) {
 
 func BenchmarkList_handleDirectPing(b *testing.B) {
 	message := membership.MessageDirectPing{
-		Source:         TestAddress,
+		Source:         BenchmarkAddress,
 		SequenceNumber: 0,
 	}
 	dispatchDatagramWithMembers(b, &message)
@@ -939,7 +939,7 @@ func BenchmarkList_handleDirectPing(b *testing.B) {
 
 func BenchmarkList_handleDirectAck(b *testing.B) {
 	message := membership.MessageDirectAck{
-		Source:         TestAddress,
+		Source:         BenchmarkAddress,
 		SequenceNumber: 0,
 	}
 	dispatchDatagramWithMembers(b, &message)
@@ -956,7 +956,7 @@ func BenchmarkList_handleIndirectPing(b *testing.B) {
 
 func BenchmarkList_handleIndirectAck(b *testing.B) {
 	message := membership.MessageIndirectAck{
-		Source:         TestAddress,
+		Source:         BenchmarkAddress,
 		SequenceNumber: 0,
 	}
 	dispatchDatagramWithMembers(b, &message)
@@ -973,7 +973,7 @@ func BenchmarkList_handleSuspect(b *testing.B) {
 
 func BenchmarkList_handleAlive(b *testing.B) {
 	message := gossip.MessageAlive{
-		Source:            TestAddress,
+		Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+32000),
 		IncarnationNumber: 0,
 	}
 	dispatchDatagramWithMembers(b, &message)
@@ -981,7 +981,7 @@ func BenchmarkList_handleAlive(b *testing.B) {
 
 func BenchmarkList_handleFaulty(b *testing.B) {
 	message := gossip.MessageFaulty{
-		Source:            TestAddress,
+		Source:            BenchmarkAddress,
 		IncarnationNumber: 0,
 	}
 	dispatchDatagramWithMembers(b, &message)

@@ -20,6 +20,11 @@ type Member struct {
 	IncarnationNumber int
 }
 
+// CompareMember orders members by address.
+func CompareMember(lhs Member, rhs Member) int {
+	return CompareAddress(lhs.Address, rhs.Address)
+}
+
 // AppendMemberToBuffer appends the member to the provided buffer encoded for network transfer.
 // Note that the LastStateChange is not encoded to the buffer.
 // Returns the buffer with the data appended, the number of bytes appended and any error which occurred.

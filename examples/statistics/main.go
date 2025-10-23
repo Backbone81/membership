@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/backbone81/membership/internal/membership"
@@ -23,5 +24,12 @@ func main() {
 	)
 	for networkReliability := 1.0; networkReliability > 0.98; networkReliability -= 0.001 {
 		fmt.Printf("false positive chance network reliability %f: %f\n", networkReliability, membership.FailureDetectionFalsePositiveProbability(networkReliability, 1.0))
+	}
+	for members := 1; members <= 64*1024; members *= 2 {
+		fmt.Printf(
+			"%d members, %d protocol periods required\n",
+			members,
+			int(math.Ceil(membership.DisseminationPeriods(1.0, members))),
+		)
 	}
 }

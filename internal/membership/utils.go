@@ -54,7 +54,21 @@ func FailureDetectionFalsePositiveProbability(networkReliability float64, member
 		math.Exp(memberReliability) / (math.Exp(memberReliability) - 1.0)
 }
 
-func SuspicionTimeout(protocolPeriod time.Duration, suspicionMultiplier float64, memberCount int) time.Duration {
-	timeoutSeconds := protocolPeriod.Seconds() * suspicionMultiplier * math.Log(float64(memberCount))
-	return time.Duration(timeoutSeconds * float64(time.Second))
+// DisseminationPeriods returns the number of protocol periods required to disseminate a new information over all
+// members.
+// safetyFactor is a multiplier which describes the safety margin we want to have. A safetyFactor of 1.0 wil return the
+// minimal number of periods required in a perfect world. A factor of 2.0 will double the number of periods. Small
+// values between 1.0 and 3.0 should usually be a safe bet for calculating the number of times to gossip an information
+// or how long to wait until a suspicion should be converted to a confirmation.
+func DisseminationPeriods(safetyFactor float64, memberCount int) float64 {
+	return safetyFactor * math.Log(float64(memberCount))
+}
+
+// SuspicionTimeout returns the duration a suspicious member has time before it is declared as faulty.
+// safetyFactor is a multiplier which describes the safety margin we want to have. A safetyFactor of 1.0 wil return the
+// minimal number of periods required in a perfect world. A factor of 2.0 will double the number of periods. Small
+// values between 1.0 and 3.0 should usually be a safe bet for calculating the number of times to gossip an information
+// or how long to wait until a suspicion should be converted to a confirmation.
+func SuspicionTimeout(protocolPeriod time.Duration, safetyFactor float64, memberCount int) time.Duration {
+	return time.Duration(protocolPeriod.Seconds() * DisseminationPeriods(safetyFactor, memberCount) * float64(time.Second))
 }

@@ -7,6 +7,9 @@ This Go library provides a peer-to-peer gossip based membership implementation. 
 
 ### Basic Requirements
 
+- Use buckets for quickly selecting gossip to transmit. One bucket for the number of time a gossip message was gossiped.
+  No need to sort, messages are moved from bucket to bucket and the dropped when the maximum number of transmission is
+  reached.
 - The gossip message queue does not have to sort all gossip ascending by transmission count. With 8k messages in the
   queue, this gets really slow and is also not necessary as we will never be able to put 8k gossip messages into
   the piggyback. We should use algorithms like quickselect to quickly find the 100 lowest gossip messages and then

@@ -25,6 +25,7 @@ var _ = Describe("List", func() {
 			membership.WithTCPClient(&DiscardClient{}),
 			membership.WithAdvertisedAddress(TestAddress),
 		)
+		list.GetGossip().Clear()
 	})
 
 	It("should return the member list", func() {
@@ -50,6 +51,7 @@ var _ = Describe("List", func() {
 				callbacks.Done()
 			}),
 		)
+		list.GetGossip().Clear()
 
 		for i := range 10 {
 			messageAlive := gossip.MessageAlive{
@@ -89,6 +91,7 @@ var _ = Describe("List", func() {
 			membership.WithTCPClient(&DiscardClient{}),
 			membership.WithAdvertisedAddress(TestAddress),
 		)
+		list.GetGossip().Clear()
 
 		Expect(list.DirectPing()).To(Succeed())
 		Expect(storeClient.Addresses).To(HaveLen(0))
@@ -102,6 +105,7 @@ var _ = Describe("List", func() {
 			membership.WithTCPClient(&DiscardClient{}),
 			membership.WithAdvertisedAddress(TestAddress),
 		)
+		list.GetGossip().Clear()
 
 		// Add a few members
 		for i := range 10 {
@@ -137,7 +141,6 @@ var _ = Describe("List", func() {
 	})
 
 	It("should ignore alive about self", func() {
-		list.GetGossip().Clear()
 		Expect(list.GetGossip().Len()).To(Equal(0))
 		message := gossip.MessageAlive{
 			Source:            TestAddress,
@@ -153,7 +156,6 @@ var _ = Describe("List", func() {
 	})
 
 	It("should refute suspect about self", func() {
-		list.GetGossip().Clear()
 		Expect(list.GetGossip().Len()).To(Equal(0))
 		message := gossip.MessageSuspect{
 			Source:            TestAddress2,
@@ -174,7 +176,6 @@ var _ = Describe("List", func() {
 	})
 
 	It("should refute faulty about self", func() {
-		list.GetGossip().Clear()
 		Expect(list.GetGossip().Len()).To(Equal(0))
 		message := gossip.MessageFaulty{
 			Source:            TestAddress2,
@@ -200,6 +201,7 @@ var _ = Describe("List", func() {
 				membership.WithUDPClient(&DiscardClient{}),
 				membership.WithTCPClient(&DiscardClient{}),
 			)
+			list.GetGossip().Clear()
 			list.SetMembers(beforeMembers)
 			list.SetFaultyMembers(beforeFaultyMembers)
 
@@ -1047,6 +1049,7 @@ func createListWithMembers(memberCount int) *membership.List {
 	if list.Len() != memberCount {
 		panic("member count does not match expected value")
 	}
+	list.GetGossip().Clear()
 	return list
 }
 

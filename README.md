@@ -7,6 +7,7 @@ This Go library provides a peer-to-peer gossip based membership implementation. 
 
 ### Basic Requirements
 
+- Make membership list independent of ProtocolPeriod and DirectPingTimeout
 - Use buckets for quickly selecting gossip to transmit. One bucket for the number of time a gossip message was gossiped.
   No need to sort, messages are moved from bucket to bucket and the dropped when the maximum number of transmission is
   reached.
@@ -22,6 +23,7 @@ This Go library provides a peer-to-peer gossip based membership implementation. 
 - The number a gossip is gossiped needs to be dynamically adjusted to the size of the member cluster.
 - Look into the performance of the gossip message queue. The implementation was incorrect and was fixed with a
   conservative and slow approach.
+- Improve test coverage
 
 ### More Advanced Topics
 

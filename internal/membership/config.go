@@ -1,8 +1,6 @@
 package membership
 
 import (
-	"time"
-
 	"github.com/backbone81/membership/internal/encoding"
 	"github.com/go-logr/logr"
 )
@@ -10,12 +8,6 @@ import (
 type Config struct {
 	// Logger is the Logger to use for outputting status information.
 	Logger logr.Logger
-
-	// ProtocolPeriod is the time for a full cycle of direct ping followed by indirect pings. If there is no response
-	// from the target member within that time, we have to assume the member to have failed.
-	// Note that the protocol period must be at least three times the round-trip time.
-	// TODO: This setting should not be necessary, because we want to be timing-independent.
-	ProtocolPeriod time.Duration
 
 	// BootstrapMembers is a list of members which are contacted to join the members. This list does not have to be
 	// complete. One or two known members are enough.
@@ -41,6 +33,5 @@ type Config struct {
 }
 
 var DefaultConfig = Config{
-	ProtocolPeriod:        1 * time.Second,
 	MaxDatagramLengthSend: 512,
 }

@@ -35,17 +35,15 @@ type List struct {
 
 	datagramBuffer []byte
 
-	pendingDirectProbes   []DirectProbeRecord
-	pendingIndirectProbes []IndirectProbeRecord
+	pendingDirectProbes     []DirectProbeRecord
+	pendingDirectProbesNext []DirectProbeRecord
+	pendingIndirectProbes   []IndirectProbeRecord
 
 	callbackWaitGroup sync.WaitGroup
 }
 
 // DirectProbeRecord provides bookkeeping for a direct probe which is still active.
 type DirectProbeRecord struct {
-	// Timestamp is the point in time the direct probe was initiated.
-	Timestamp time.Time
-
 	// Destination is the address which the direct probe was sent to.
 	Destination encoding.Address
 
@@ -89,7 +87,6 @@ func NewList(options ...Option) *List {
 		newList.addMember(encoding.Member{
 			Address:           initialMember,
 			State:             encoding.MemberStateAlive,
-			LastStateChange:   time.Now(),
 			IncarnationNumber: 0,
 		})
 	}
@@ -195,7 +192,6 @@ func (l *List) DirectPing() error {
 		"sequence-number", directPing.SequenceNumber,
 	)
 	l.pendingDirectProbes = append(l.pendingDirectProbes, DirectProbeRecord{
-		Timestamp:         time.Now(),
 		Destination:       destination,
 		MessageDirectPing: directPing,
 	})
@@ -287,7 +283,7 @@ func (l *List) EndOfProtocolPeriod() error {
 }
 
 func (l *List) markSuspectsAsFaulty() {
-	suspicionThreshold := time.Now().Add(-SuspicionTimeout(l.config.ProtocolPeriod, 3, len(l.members)))
+	suspicionPeriodThreshold := int(math.Ceil(DisseminationPeriods(3, len(l.members))))
 
 	// As we are potentially removing elements from the member list, we need to iterate from the back to the front in
 	// order to not skip a member when the content changes.
@@ -296,7 +292,8 @@ func (l *List) markSuspectsAsFaulty() {
 		if member.State != encoding.MemberStateSuspect {
 			continue
 		}
-		if !member.LastStateChange.Before(suspicionThreshold) {
+		member.SuspicionPeriodCounter++
+		if member.SuspicionPeriodCounter < suspicionPeriodThreshold {
 			continue
 		}
 
@@ -307,7 +304,6 @@ func (l *List) markSuspectsAsFaulty() {
 			"incarnation-number", member.IncarnationNumber,
 		)
 		member.State = encoding.MemberStateFaulty
-		member.LastStateChange = time.Now()
 		faultyMemberIndex, found := slices.BinarySearchFunc(
 			l.faultyMembers,
 			*member,
@@ -329,13 +325,7 @@ func (l *List) markSuspectsAsFaulty() {
 }
 
 func (l *List) processFailedProbes() {
-	timeout := time.Now().Add(-l.config.ProtocolPeriod)
 	for _, pendingDirectProbe := range l.pendingDirectProbes {
-		if !pendingDirectProbe.MessageIndirectPing.IsZero() && !pendingDirectProbe.Timestamp.Before(timeout) {
-			// This is a direct probe which we need to keep around. Those are always requests for indirect probes.
-			continue
-		}
-
 		memberIndex, found := slices.BinarySearchFunc(
 			l.members,
 			encoding.Member{Address: pendingDirectProbe.Destination},
@@ -362,18 +352,14 @@ func (l *List) processFailedProbes() {
 
 		// We need to mark the member as suspect and gossip about it.
 		member.State = encoding.MemberStateSuspect
-		member.LastStateChange = time.Now()
+		member.SuspicionPeriodCounter = 0
 		l.gossipQueue.Add(&gossip.MessageSuspect{
 			Source:            l.self,
 			Destination:       member.Address,
 			IncarnationNumber: member.IncarnationNumber,
 		})
 	}
-
-	// Remove all pending probes which have timed out.
-	l.pendingDirectProbes = slices.DeleteFunc(l.pendingDirectProbes, func(record DirectProbeRecord) bool {
-		return record.MessageIndirectPing.IsZero() || record.Timestamp.Before(timeout)
-	})
+	l.pendingDirectProbes, l.pendingDirectProbesNext = l.pendingDirectProbesNext, l.pendingDirectProbes[:0]
 
 	// As indirect probes always happen with a direct probe not being satisfied before, we can clear the indirect probes
 	// without any further actions, as those actions have already been taken on the pending direct probes.
@@ -532,28 +518,34 @@ func (l *List) handleDirectAck(directAck MessageDirectAck) error {
 		"sequence-number", directAck.SequenceNumber,
 	)
 	l.handleDirectAckForPendingIndirectProbes(directAck)
-	if err := l.handleDirectAckForPendingDirectProbes(directAck); err != nil {
+	var err error
+	l.pendingDirectProbes, err = l.handleDirectAckForPendingDirectProbes(l.pendingDirectProbes, directAck)
+	if err != nil {
+		return err
+	}
+	l.pendingDirectProbesNext, err = l.handleDirectAckForPendingDirectProbes(l.pendingDirectProbesNext, directAck)
+	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (l *List) handleDirectAckForPendingDirectProbes(directAck MessageDirectAck) error {
-	// As we now got an indirect ack, we don't have to wait for a direct ack anymore.
-	pendingDirectProbeIndex := slices.IndexFunc(l.pendingDirectProbes, func(record DirectProbeRecord) bool {
+func (l *List) handleDirectAckForPendingDirectProbes(pendingDirectProbes []DirectProbeRecord, directAck MessageDirectAck) ([]DirectProbeRecord, error) {
+	// As we now got a direct ack, we don't have to wait for a direct ack anymore.
+	pendingDirectProbeIndex := slices.IndexFunc(pendingDirectProbes, func(record DirectProbeRecord) bool {
 		return record.MessageDirectPing.SequenceNumber == directAck.SequenceNumber &&
 			record.Destination.Equal(directAck.Source)
 	})
 	if pendingDirectProbeIndex == -1 {
-		return nil
+		return pendingDirectProbes, nil
 	}
 
-	pendingDirectProbe := l.pendingDirectProbes[pendingDirectProbeIndex]
-	l.pendingDirectProbes = slices.Delete(l.pendingDirectProbes, pendingDirectProbeIndex, pendingDirectProbeIndex+1)
+	pendingDirectProbe := pendingDirectProbes[pendingDirectProbeIndex]
+	pendingDirectProbes = slices.Delete(pendingDirectProbes, pendingDirectProbeIndex, pendingDirectProbeIndex+1)
 
 	if pendingDirectProbe.MessageIndirectPing.IsZero() {
 		// The direct probe was NOT done in a response to a request for an indirect probe, so we are done here.
-		return nil
+		return pendingDirectProbes, nil
 	}
 
 	indirectAck := MessageIndirectAck{
@@ -561,9 +553,9 @@ func (l *List) handleDirectAckForPendingDirectProbes(directAck MessageDirectAck)
 		SequenceNumber: pendingDirectProbe.MessageIndirectPing.SequenceNumber,
 	}
 	if err := l.sendWithGossip(pendingDirectProbe.MessageIndirectPing.Source, &indirectAck); err != nil {
-		return err
+		return pendingDirectProbes, err
 	}
-	return nil
+	return pendingDirectProbes, nil
 }
 
 func (l *List) handleDirectAckForPendingIndirectProbes(directAck MessageDirectAck) {
@@ -591,8 +583,7 @@ func (l *List) handleIndirectPing(indirectPing MessageIndirectPing) error {
 	}
 	l.nextSequenceNumber = (l.nextSequenceNumber + 1) % math.MaxUint16
 
-	l.pendingDirectProbes = append(l.pendingDirectProbes, DirectProbeRecord{
-		Timestamp:           time.Now(),
+	l.pendingDirectProbesNext = append(l.pendingDirectProbesNext, DirectProbeRecord{
 		Destination:         indirectPing.Destination,
 		MessageDirectPing:   directPing,
 		MessageIndirectPing: indirectPing,
@@ -698,10 +689,10 @@ func (l *List) handleSuspectForFaultyMembers(suspect gossip.MessageSuspect) bool
 	// Move the faulty member over to the member list
 	l.faultyMembers = slices.Delete(l.faultyMembers, faultyMemberIndex, faultyMemberIndex+1)
 	l.addMember(encoding.Member{
-		Address:           suspect.Destination,
-		State:             encoding.MemberStateSuspect,
-		LastStateChange:   time.Now(),
-		IncarnationNumber: suspect.IncarnationNumber,
+		Address:                suspect.Destination,
+		State:                  encoding.MemberStateSuspect,
+		SuspicionPeriodCounter: 0,
+		IncarnationNumber:      suspect.IncarnationNumber,
 	})
 	l.gossipQueue.Add(&suspect)
 	return true
@@ -732,7 +723,7 @@ func (l *List) handleSuspectForMembers(suspect gossip.MessageSuspect) bool {
 
 	// This information is new to us, we need to make sure to gossip about it.
 	member.State = encoding.MemberStateSuspect
-	member.LastStateChange = time.Now()
+	member.SuspicionPeriodCounter = 0
 	l.gossipQueue.Add(&suspect)
 	return true
 }
@@ -740,10 +731,10 @@ func (l *List) handleSuspectForMembers(suspect gossip.MessageSuspect) bool {
 func (l *List) handleSuspectForUnknown(suspect gossip.MessageSuspect) {
 	// We don't know about this member yet. Add it to our member list and gossip about it.
 	l.addMember(encoding.Member{
-		Address:           suspect.Destination,
-		State:             encoding.MemberStateSuspect,
-		LastStateChange:   time.Now(),
-		IncarnationNumber: suspect.IncarnationNumber,
+		Address:                suspect.Destination,
+		State:                  encoding.MemberStateSuspect,
+		SuspicionPeriodCounter: 0,
+		IncarnationNumber:      suspect.IncarnationNumber,
 	})
 	l.gossipQueue.Add(&suspect)
 }
@@ -795,7 +786,6 @@ func (l *List) handleAliveForFaultyMembers(alive gossip.MessageAlive) bool {
 	l.addMember(encoding.Member{
 		Address:           alive.Source,
 		State:             encoding.MemberStateAlive,
-		LastStateChange:   time.Now(),
 		IncarnationNumber: alive.IncarnationNumber,
 	})
 	l.gossipQueue.Add(&alive)
@@ -827,7 +817,6 @@ func (l *List) handleAliveForMembers(alive gossip.MessageAlive) bool {
 
 	// This information is new to us, we need to make sure to gossip about it.
 	member.State = encoding.MemberStateAlive
-	member.LastStateChange = time.Now()
 	l.gossipQueue.Add(&alive)
 	return true
 }
@@ -837,7 +826,6 @@ func (l *List) handleAliveForUnknown(alive gossip.MessageAlive) {
 	l.addMember(encoding.Member{
 		Address:           alive.Source,
 		State:             encoding.MemberStateAlive,
-		LastStateChange:   time.Now(),
 		IncarnationNumber: alive.IncarnationNumber,
 	})
 	l.gossipQueue.Add(&alive)
@@ -923,7 +911,6 @@ func (l *List) handleFaultyForMembers(faulty gossip.MessageFaulty) bool {
 
 	// Remove member from member list and put it on the faulty member list.
 	member.State = encoding.MemberStateFaulty
-	member.LastStateChange = time.Now()
 	member.IncarnationNumber = faulty.IncarnationNumber
 	faultyMemberIndex, found := slices.BinarySearchFunc(
 		l.faultyMembers,
@@ -946,7 +933,6 @@ func (l *List) handleFaultyForUnknown(faulty gossip.MessageFaulty) {
 	faultyMember := encoding.Member{
 		Address:           faulty.Destination,
 		State:             encoding.MemberStateFaulty,
-		LastStateChange:   time.Now(),
 		IncarnationNumber: faulty.IncarnationNumber,
 	}
 	faultyMemberIndex, found := slices.BinarySearchFunc(

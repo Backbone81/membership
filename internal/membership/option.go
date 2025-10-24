@@ -1,8 +1,6 @@
 package membership
 
 import (
-	"time"
-
 	"github.com/backbone81/membership/internal/encoding"
 	"github.com/go-logr/logr"
 )
@@ -14,13 +12,6 @@ type Option func(config *Config)
 func WithLogger(logger logr.Logger) Option {
 	return func(config *Config) {
 		config.Logger = logger
-	}
-}
-
-// WithProtocolPeriod sets the given protocol period for the list.
-func WithProtocolPeriod(protocolPeriod time.Duration) Option {
-	return func(config *Config) {
-		config.ProtocolPeriod = protocolPeriod
 	}
 }
 

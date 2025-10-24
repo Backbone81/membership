@@ -6,7 +6,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/backbone81/membership/internal/encoding"
 	"github.com/backbone81/membership/internal/gossip"
@@ -210,14 +209,14 @@ var _ = Describe("List", func() {
 			Expect(list.DispatchDatagram(buffer)).To(Succeed())
 
 			if afterMembers == nil {
-				Expect(cleanLastStateChange(list.GetMembers())).To(BeEmpty())
+				Expect(list.GetMembers()).To(BeEmpty())
 			} else {
-				Expect(cleanLastStateChange(list.GetMembers())).To(Equal(afterMembers))
+				Expect(list.GetMembers()).To(Equal(afterMembers))
 			}
 			if afterFaultyMembers == nil {
-				Expect(cleanLastStateChange(list.GetFaultyMembers())).To(BeEmpty())
+				Expect(list.GetFaultyMembers()).To(BeEmpty())
 			} else {
-				Expect(cleanLastStateChange(list.GetFaultyMembers())).To(Equal(afterFaultyMembers))
+				Expect(list.GetFaultyMembers()).To(Equal(afterFaultyMembers))
 			}
 		},
 		Entry("Alive should add a member",
@@ -1051,11 +1050,4 @@ func createListWithMembers(memberCount int) *membership.List {
 	}
 	list.GetGossip().Clear()
 	return list
-}
-
-func cleanLastStateChange(members []encoding.Member) []encoding.Member {
-	for i := range members {
-		members[i].LastStateChange = time.Time{}
-	}
-	return members
 }

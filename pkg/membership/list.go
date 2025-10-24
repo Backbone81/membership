@@ -22,7 +22,6 @@ func NewList(options ...Option) *List {
 
 	list := intmembership.NewList(
 		intmembership.WithLogger(config.Logger),
-		intmembership.WithProtocolPeriod(config.ProtocolPeriod),
 		intmembership.WithBootstrapMembers(config.BootstrapMembers),
 		intmembership.WithAdvertisedAddress(config.AdvertisedAddress),
 		intmembership.WithMaxDatagramLengthSend(config.MaxDatagramLengthSend),

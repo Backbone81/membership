@@ -1,9 +1,5 @@
 package encoding
 
-import (
-	"time"
-)
-
 // Member is a single member which we know of.
 type Member struct {
 	// Address is the address the member can be reached.
@@ -12,12 +8,13 @@ type Member struct {
 	// State is the state the member is currently in.
 	State MemberState
 
-	// LastStateChange is the point in time the state of the member last changed.
-	LastStateChange time.Time
-
 	// IncarnationNumber is the incarnation the member gave about itself. It is monotonically increasing each time
 	// somebody suspects the member. Only the member itself is allowed to increase the incarnation.
 	IncarnationNumber int
+
+	// SuspicionPeriodCounter is the number of protocol periods the member is in a suspicion state. This is useful when
+	// deciding about declaring a member as faulty when it was under suspicion long enough.
+	SuspicionPeriodCounter int
 }
 
 // CompareMember orders members by address.

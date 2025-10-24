@@ -17,11 +17,6 @@ type Config struct {
 	// TODO: This setting should not be necessary, because we want to be timing-independent.
 	ProtocolPeriod time.Duration
 
-	// DirectPingTimeout is the time to wait for a direct ping response. If there is no response within this duration,
-	// we need to start indirect pings.
-	// TODO: This setting should not be necessary, because we want to be timing-independent.
-	DirectPingTimeout time.Duration
-
 	// BootstrapMembers is a list of members which are contacted to join the members. This list does not have to be
 	// complete. One or two known members are enough.
 	BootstrapMembers []encoding.Address
@@ -46,7 +41,6 @@ type Config struct {
 }
 
 var DefaultConfig = Config{
-	DirectPingTimeout:     100 * time.Millisecond,
 	ProtocolPeriod:        1 * time.Second,
 	MaxDatagramLengthSend: 512,
 }

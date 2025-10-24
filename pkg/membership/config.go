@@ -50,7 +50,7 @@ type Config struct {
 
 var DefaultConfig = Config{
 	ProtocolPeriod:           intmembership.DefaultConfig.ProtocolPeriod,
-	DirectPingTimeout:        intmembership.DefaultConfig.DirectPingTimeout,
+	DirectPingTimeout:        scheduler.DefaultConfig.DirectPingTimeout,
 	MaxDatagramLengthSend:    intmembership.DefaultConfig.MaxDatagramLengthSend,
 	MaxDatagramLengthReceive: intmembership.DefaultConfig.MaxDatagramLengthSend,
 	BindAddress:              ":3000",

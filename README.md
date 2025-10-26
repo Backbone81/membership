@@ -15,13 +15,14 @@ This Go library provides a peer-to-peer gossip based membership implementation. 
   the piggyback. We should use algorithms like quickselect to quickly find the 100 lowest gossip messages and then
   only sort them. The number of gossip to sort could be dynamically derived from the highest Get() calls done in the
   past. That way we could improve the performance significantly.
+- Look into the performance of the gossip message queue. The implementation was incorrect and was fixed with a
+  conservative and slow approach.
+
 - Add metrics to expose what is happening.
 - Add encryption and support multiple encryption keys for key rollover. The first key is always used for encryption, all
   keys are used for decryption.
 - Shutdown of the membership should send a faulty message to propagate the not existing member.
 - The number a gossip is gossiped needs to be dynamically adjusted to the size of the member cluster.
-- Look into the performance of the gossip message queue. The implementation was incorrect and was fixed with a
-  conservative and slow approach.
 - Improve test coverage
 - Do not trigger callbacks through go routines, as this might not be required by users. Instead, trigger the callback
   inline while holding the lock on the mutex and document that users who need to call into the membership list from

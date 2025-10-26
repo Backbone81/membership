@@ -29,24 +29,6 @@ func NewMessageQueue(maxTransmissionCount int) *MessageQueue {
 	}
 }
 
-// MessageQueueEntry is a helper struct making up each entry in the queue.
-type MessageQueueEntry struct {
-	// Message is the message to gossip about.
-	Message Message
-
-	// TransmissionCount is the number of times the message has been gossiped.
-	TransmissionCount int
-}
-
-// Message is the interface all gossip network messages need to implement.
-type Message interface {
-	AppendToBuffer(buffer []byte) ([]byte, int, error)
-	FromBuffer(buffer []byte) (int, error)
-	GetAddress() encoding.Address
-	GetType() encoding.MessageType
-	GetIncarnationNumber() int
-}
-
 // PrioritizeForAddress brings the messages in the gossip message queue into the desired order.
 //
 // Messages which have been transmitted the least amount are placed first, those which have been transmitted most are

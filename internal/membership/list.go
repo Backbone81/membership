@@ -1012,6 +1012,7 @@ func (l *List) sendWithGossip(address encoding.Address, message Message) error {
 	}
 
 	l.gossipQueue.PrioritizeForAddress(address)
+	var gossipAdded int
 	for i := 0; i < l.gossipQueue.Len(); i++ {
 		var gossipN int
 		l.datagramBuffer, gossipN, err = l.gossipQueue.Get(i).AppendToBuffer(l.datagramBuffer)
@@ -1024,9 +1025,10 @@ func (l *List) sendWithGossip(address encoding.Address, message Message) error {
 			break
 		}
 
-		l.gossipQueue.MarkTransmitted(i)
 		datagramN += gossipN
+		gossipAdded++
 	}
+	l.gossipQueue.MarkFirstNMessagesTransmitted(gossipAdded)
 
 	if err := l.config.UDPClient.Send(address, l.datagramBuffer); err != nil {
 		return err

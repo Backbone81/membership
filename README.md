@@ -7,22 +7,11 @@ This Go library provides a peer-to-peer gossip based membership implementation. 
 
 ### Basic Requirements
 
-- Use buckets for quickly selecting gossip to transmit. One bucket for the number of time a gossip message was gossiped.
-  No need to sort, messages are moved from bucket to bucket and the dropped when the maximum number of transmission is
-  reached.
-- The gossip message queue does not have to sort all gossip ascending by transmission count. With 8k messages in the
-  queue, this gets really slow and is also not necessary as we will never be able to put 8k gossip messages into
-  the piggyback. We should use algorithms like quickselect to quickly find the 100 lowest gossip messages and then
-  only sort them. The number of gossip to sort could be dynamically derived from the highest Get() calls done in the
-  past. That way we could improve the performance significantly.
-- Look into the performance of the gossip message queue. The implementation was incorrect and was fixed with a
-  conservative and slow approach.
-
+- The number a gossip is gossiped needs to be dynamically adjusted to the size of the member cluster.
 - Add metrics to expose what is happening.
 - Add encryption and support multiple encryption keys for key rollover. The first key is always used for encryption, all
   keys are used for decryption.
 - Shutdown of the membership should send a faulty message to propagate the not existing member.
-- The number a gossip is gossiped needs to be dynamically adjusted to the size of the member cluster.
 - Improve test coverage
 - Do not trigger callbacks through go routines, as this might not be required by users. Instead, trigger the callback
   inline while holding the lock on the mutex and document that users who need to call into the membership list from
@@ -35,9 +24,6 @@ This Go library provides a peer-to-peer gossip based membership implementation. 
 - How should we deal with incarnation number wrap-around?
 - Provide an auto round-trip timeout which is derived from the 99th percentile of past network messages and use +10%
 - Support more than one direct probes during the protocol period
-- Member.LastStateChange is only needed to mark a suspect as faulty. We should get rid of it. We also don't want to
-  have timeouts in the core logic of the implementation to have the possibility to drive tests without having to wait
-  for timeouts. We might need to replace the LastStateChange with a period counter.
 - Can we drop the interface for Message and collapse all message types into a single message which has all fields any
   message could have? That way we could be able to drop the interface and prevent memory allocations due to interface
   conversion.

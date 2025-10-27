@@ -46,24 +46,6 @@ func NewMessageQueue2(maxTransmissionCount int) *MessageQueue2 {
 	}
 }
 
-// MessageQueueEntry is a helper struct making up each entry in the queue.
-type MessageQueueEntry struct {
-	// Message is the message to gossip about.
-	Message Message
-
-	// TransmissionCount is the number of times the message has been gossiped.
-	TransmissionCount int
-}
-
-// Message is the interface all gossip network messages need to implement.
-type Message interface {
-	AppendToBuffer(buffer []byte) ([]byte, int, error)
-	FromBuffer(buffer []byte) (int, error)
-	GetAddress() encoding.Address
-	GetType() encoding.MessageType
-	GetIncarnationNumber() int
-}
-
 // Len returns the number of entries currently stored in the queue.
 func (q *MessageQueue2) Len() int {
 	return len(q.queue)
@@ -277,8 +259,9 @@ func (q *MessageQueue2) ensureBucketAvailable(bucketIndex int) {
 	}
 }
 
-// Validate reports if the internal state is valid. This is helpful for automated tests.
-func (q *MessageQueue2) Validate() error {
+// ValidateInternalState reports if the internal state is valid.
+// This function is expensive and should not be called outside of tests.
+func (q *MessageQueue2) ValidateInternalState() error {
 	// Make sure that end of bucket indices are always equal or bigger than the one before.
 	for i := 0; i < len(q.endOfBucketIndices)-1; i++ {
 		if q.endOfBucketIndices[i] > q.endOfBucketIndices[i+1] {

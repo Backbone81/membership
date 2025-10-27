@@ -30,7 +30,7 @@ var _ = Describe("MessageQueue2", func() {
 
 		Expect(queue.Len()).To(Equal(1))
 		Expect(queue.Get(0)).To(Equal(&gossipMessage))
-		Expect(queue.Validate()).To(Succeed())
+		Expect(queue.ValidateInternalState()).To(Succeed())
 	})
 
 	It("should add gossip with different address", func() {
@@ -49,7 +49,7 @@ var _ = Describe("MessageQueue2", func() {
 		Expect(queue.Len()).To(Equal(2))
 		Expect(queue.Get(0)).To(Equal(&gossipMessage1))
 		Expect(queue.Get(1)).To(Equal(&gossipMessage2))
-		Expect(queue.Validate()).To(Succeed())
+		Expect(queue.ValidateInternalState()).To(Succeed())
 	})
 
 	It("should not add duplicate gossip", func() {
@@ -67,7 +67,7 @@ var _ = Describe("MessageQueue2", func() {
 
 		Expect(queue.Len()).To(Equal(1))
 		Expect(queue.Get(0)).To(Equal(&gossipMessage1))
-		Expect(queue.Validate()).To(Succeed())
+		Expect(queue.ValidateInternalState()).To(Succeed())
 	})
 
 	DescribeTable("Messages should overwrite in the correct priority",
@@ -80,7 +80,7 @@ var _ = Describe("MessageQueue2", func() {
 			} else {
 				Expect(gossipQueue.Get(0)).To(Equal(message1))
 			}
-			Expect(queue.Validate()).To(Succeed())
+			Expect(queue.ValidateInternalState()).To(Succeed())
 		},
 		Entry("Alive with lower incarnation number should NOT overwrite alive",
 			&gossip.MessageAlive{
@@ -448,7 +448,7 @@ var _ = Describe("MessageQueue2", func() {
 		Expect(queue.Get(0)).To(Equal(message3))
 		Expect(queue.Get(1)).To(Equal(message2))
 		Expect(queue.Get(2)).To(Equal(message1))
-		Expect(queue.Validate()).To(Succeed())
+		Expect(queue.ValidateInternalState()).To(Succeed())
 	})
 
 	It("should correctly prioritize suspect gossip when preparing", func() {
@@ -481,7 +481,7 @@ var _ = Describe("MessageQueue2", func() {
 		Expect(queue.Get(0)).To(Equal(message1))
 		Expect(queue.Get(1)).To(Equal(message3))
 		Expect(queue.Get(2)).To(Equal(message2))
-		Expect(queue.Validate()).To(Succeed())
+		Expect(queue.ValidateInternalState()).To(Succeed())
 	})
 
 	It("should correctly prioritize faulty gossip when preparing", func() {
@@ -514,7 +514,7 @@ var _ = Describe("MessageQueue2", func() {
 		Expect(queue.Get(0)).To(Equal(message1))
 		Expect(queue.Get(1)).To(Equal(message3))
 		Expect(queue.Get(2)).To(Equal(message2))
-		Expect(queue.Validate()).To(Succeed())
+		Expect(queue.ValidateInternalState()).To(Succeed())
 	})
 
 	It("should correctly prioritize alive gossip when preparing", func() {
@@ -546,7 +546,7 @@ var _ = Describe("MessageQueue2", func() {
 		Expect(queue.Get(0)).To(Equal(message3))
 		Expect(queue.Get(1)).To(Equal(message2))
 		Expect(queue.Get(2)).To(Equal(message1))
-		Expect(queue.Validate()).To(Succeed())
+		Expect(queue.ValidateInternalState()).To(Succeed())
 	})
 
 	It("should correctly remove messages which were transmitted enough", func() {
@@ -569,7 +569,7 @@ var _ = Describe("MessageQueue2", func() {
 		gossipQueue.MarkFirstNMessagesTransmitted(1)
 		gossipQueue.PrioritizeForAddress(encoding.Address{})
 		Expect(gossipQueue.Len()).To(Equal(0))
-		Expect(queue.Validate()).To(Succeed())
+		Expect(queue.ValidateInternalState()).To(Succeed())
 	})
 
 	It("internal state should always be valid", func() {
@@ -590,7 +590,7 @@ var _ = Describe("MessageQueue2", func() {
 			case selection < 100: // 75% of the time we mark 3 messages as transmitted
 				queue.MarkFirstNMessagesTransmitted(rand.Intn(3))
 			}
-			Expect(queue.Validate()).To(Succeed())
+			Expect(queue.ValidateInternalState()).To(Succeed())
 		}
 	})
 })

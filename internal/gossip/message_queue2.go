@@ -91,11 +91,13 @@ func (q *MessageQueue2) Get(index int) Message {
 
 func (q *MessageQueue2) PrioritizeForAddress(address encoding.Address) {
 	queueIndex, found := q.indexByAddress[address]
-	if found &&
-		(q.queue[queueIndex].Message.GetType() == encoding.MessageTypeSuspect ||
-			q.queue[queueIndex].Message.GetType() == encoding.MessageTypeFaulty) {
-		q.priorityQueueIndex = queueIndex
-		return
+	if found {
+		messageType := q.queue[queueIndex].Message.GetType()
+		if messageType == encoding.MessageTypeSuspect ||
+			messageType == encoding.MessageTypeFaulty {
+			q.priorityQueueIndex = queueIndex
+			return
+		}
 	}
 	q.priorityQueueIndex = -1
 }
@@ -150,25 +152,30 @@ func (q *MessageQueue2) trimEmptyBuckets() {
 func (q *MessageQueue2) Add(message Message) {
 	queueIndex, ok := q.indexByAddress[message.GetAddress()]
 	if ok {
+		queueEntry := &q.queue[queueIndex]
+
 		// The queue already contains a message for that address. Let's check if we need to overwrite it.
-		if message.GetIncarnationNumber() < q.queue[queueIndex].Message.GetIncarnationNumber() {
+		newIncarnationNumber := message.GetIncarnationNumber()
+		existingIncarnationNumber := queueEntry.Message.GetIncarnationNumber()
+		if newIncarnationNumber < existingIncarnationNumber {
 			// No need to overwrite when the incarnation number is lower.
 			return
 		}
-		if message.GetIncarnationNumber() == q.queue[queueIndex].Message.GetIncarnationNumber() &&
+		if newIncarnationNumber == existingIncarnationNumber &&
 			(message.GetType() == encoding.MessageTypeAlive ||
-				message.GetType() == encoding.MessageTypeSuspect && q.queue[queueIndex].Message.GetType() != encoding.MessageTypeAlive ||
-				message.GetType() == encoding.MessageTypeFaulty && q.queue[queueIndex].Message.GetType() != encoding.MessageTypeAlive && q.queue[queueIndex].Message.GetType() != encoding.MessageTypeSuspect) {
+				message.GetType() == encoding.MessageTypeSuspect && queueEntry.Message.GetType() != encoding.MessageTypeAlive ||
+				message.GetType() == encoding.MessageTypeFaulty && queueEntry.Message.GetType() != encoding.MessageTypeAlive && queueEntry.Message.GetType() != encoding.MessageTypeSuspect) {
 			// No need to overwrite with the same incarnation number and the wrong priorities.
 			return
 		}
 
 		// Either we have the same incarnation number with the right priorities, or the incarnation number is bigger.
-		q.queue[queueIndex].Message = message
-		if q.queue[queueIndex].TransmissionCount != 0 {
-			queueIndex = q.moveBackwardToBucket(q.queue[queueIndex].TransmissionCount, 0, queueIndex)
+		queueEntry.Message = message
+		if queueEntry.TransmissionCount != 0 {
+			queueIndex = q.moveBackwardToBucket(queueEntry.TransmissionCount, 0, queueIndex)
+			queueEntry = &q.queue[queueIndex]
 		}
-		q.queue[queueIndex].TransmissionCount = 0
+		queueEntry.TransmissionCount = 0
 		q.trimEmptyBuckets()
 		return
 	}
@@ -184,14 +191,17 @@ func (q *MessageQueue2) insertIntoBucket(targetBucketIndex int, message Message)
 		Message:           message,
 		TransmissionCount: targetBucketIndex,
 	})
-	queueIndex := len(q.queue) - 1
-	q.indexByAddress[message.GetAddress()] = queueIndex
+	// Note: We deliberately do not set indexByAddress here, because the index is set at the end of
+	// moveBackwardToBucket anyway.
 	q.endOfBucketIndices[len(q.endOfBucketIndices)-1]++
 
 	// Move the new element backwards through all buckets until it has reached the desired bucket.
-	q.moveBackwardToBucket(len(q.endOfBucketIndices)-1, targetBucketIndex, queueIndex)
+	q.moveBackwardToBucket(len(q.endOfBucketIndices)-1, targetBucketIndex, len(q.queue)-1)
 }
 
+// moveBackwardToBucket moves the element at queueIndex from sourceBucketIndex to destinationBucketIndex.
+// destinationBucketIndex needs to be smaller or equal to sourceBucketIndex.
+// Returns the new queueIndex the element was moved to.
 func (q *MessageQueue2) moveBackwardToBucket(sourceBucketIndex int, destinationBucketIndex int, queueIndex int) int {
 	currentBucketIndex := sourceBucketIndex
 	for currentBucketIndex > destinationBucketIndex {
@@ -203,30 +213,17 @@ func (q *MessageQueue2) moveBackwardToBucket(sourceBucketIndex int, destinationB
 		q.queue[queueIndex], q.queue[newQueueIndex] = q.queue[newQueueIndex], q.queue[queueIndex]
 
 		// We need to update the indices for the swapped elements. Otherwise, they would point to the wrong element.
+		// As our queueIndex element potentially moves through multiple buckets, we only update the index for the
+		// element we swapped in. The other element is updated at the end of the function.
 		q.indexByAddress[q.queue[queueIndex].Message.GetAddress()] = queueIndex
-		q.indexByAddress[q.queue[newQueueIndex].Message.GetAddress()] = newQueueIndex
 
 		currentBucketIndex--
 		queueIndex = newQueueIndex
 	}
+
+	// When we are done moving our element through all buckets, we update indexByAddress with the final index.
+	q.indexByAddress[q.queue[queueIndex].Message.GetAddress()] = queueIndex
 	return queueIndex
-}
-
-func (q *MessageQueue2) removeFromBucket(queueIndex int) {
-	// We temporarily add a new bucket at the end. We then move the element through all buckets into the last bucket.
-	// Afterward, we drop that bucket again.
-
-	// Create the new bucket.
-	q.ensureBucketAvailable(len(q.endOfBucketIndices))
-
-	// Move the element to the new bucket at the end.
-	sourceBucketIndex := q.queue[queueIndex].TransmissionCount
-	queueIndex = q.moveForwardToBucket(sourceBucketIndex, len(q.endOfBucketIndices)-1, queueIndex)
-
-	// Drop the bucket and shorten the queue
-	delete(q.indexByAddress, q.queue[queueIndex].Message.GetAddress())
-	q.endOfBucketIndices = q.endOfBucketIndices[:len(q.endOfBucketIndices)-1]
-	q.queue = q.queue[:len(q.queue)-1]
 }
 
 func (q *MessageQueue2) moveForwardToBucket(sourceBucketIndex int, destinationBucketIndex int, queueIndex int) int {
@@ -239,12 +236,16 @@ func (q *MessageQueue2) moveForwardToBucket(sourceBucketIndex int, destinationBu
 		q.queue[queueIndex], q.queue[newQueueIndex] = q.queue[newQueueIndex], q.queue[queueIndex]
 
 		// We need to update the indices for the swapped elements. Otherwise, they would point to the wrong element.
+		// As our queueIndex element potentially moves through multiple buckets, we only update the index for the
+		// element we swapped in. The other element is updated at the end of the function.
 		q.indexByAddress[q.queue[queueIndex].Message.GetAddress()] = queueIndex
-		q.indexByAddress[q.queue[newQueueIndex].Message.GetAddress()] = newQueueIndex
 
 		currentBucketIndex++
 		queueIndex = newQueueIndex
 	}
+
+	// When we are done moving our element through all buckets, we update indexByAddress with the final index.
+	q.indexByAddress[q.queue[queueIndex].Message.GetAddress()] = queueIndex
 	return queueIndex
 }
 

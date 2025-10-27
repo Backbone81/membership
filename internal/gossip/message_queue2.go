@@ -42,6 +42,7 @@ func NewMessageQueue2(maxTransmissionCount int) *MessageQueue2 {
 		endOfBucketIndices:   make([]int, 0, 64),
 		indexByAddress:       make(map[encoding.Address]int, 1024),
 		maxTransmissionCount: maxTransmissionCount,
+		priorityQueueIndex:   -1,
 	}
 }
 
@@ -75,80 +76,7 @@ func (q *MessageQueue2) Clear() {
 	clear(q.indexByAddress)
 }
 
-// Get returns the message at the given index within the queue.
-func (q *MessageQueue2) Get(index int) Message {
-	if q.priorityQueueIndex == -1 {
-		return q.queue[index].Message
-	}
-	if index == 0 {
-		return q.queue[q.priorityQueueIndex].Message
-	}
-	if index <= q.priorityQueueIndex {
-		return q.queue[index-1].Message
-	}
-	return q.queue[index].Message
-}
-
-func (q *MessageQueue2) PrioritizeForAddress(address encoding.Address) {
-	queueIndex, found := q.indexByAddress[address]
-	if found {
-		messageType := q.queue[queueIndex].Message.GetType()
-		if messageType == encoding.MessageTypeSuspect ||
-			messageType == encoding.MessageTypeFaulty {
-			q.priorityQueueIndex = queueIndex
-			return
-		}
-	}
-	q.priorityQueueIndex = -1
-}
-
-// MarkFirstNMessagesTransmitted increases the transmission counter for the first count messages in the queue by
-// one, moving them to buckets of higher tiers. When the maximum transmission count is reached, it discards them.
-func (q *MessageQueue2) MarkFirstNMessagesTransmitted(count int) {
-	count = min(count, len(q.queue))
-	for queueIndex := count - 1; 0 <= queueIndex; queueIndex-- {
-		// Make sure we have at least one more bucket behind the bucket of our element. This is where we move the
-		// element to.
-		bucketIndex := q.queue[queueIndex].TransmissionCount
-		q.ensureBucketAvailable(bucketIndex + 1)
-
-		// Move the element by one bucket
-		q.queue[queueIndex].TransmissionCount++
-		q.moveForwardToBucket(bucketIndex, bucketIndex+1, queueIndex)
-	}
-
-	q.trimMessages()
-	q.trimEmptyBuckets()
-}
-
-func (q *MessageQueue2) trimMessages() {
-	// Drop all buckets which contain messages which have reached the maximum transmission count.
-	for bucketIndex := len(q.endOfBucketIndices) - 1; q.maxTransmissionCount <= bucketIndex; bucketIndex-- {
-		startOfBucketIndex := q.endOfBucketIndices[bucketIndex-1]
-		endOfBucketIndex := q.endOfBucketIndices[bucketIndex]
-
-		// Remove all elements we are about to drop from the indexByAddress map
-		for queueIndex := startOfBucketIndex; queueIndex < endOfBucketIndex; queueIndex++ {
-			delete(q.indexByAddress, q.queue[queueIndex].Message.GetAddress())
-		}
-
-		// Shorten queue and buckets
-		q.queue = q.queue[:startOfBucketIndex]
-		q.endOfBucketIndices = q.endOfBucketIndices[:len(q.endOfBucketIndices)-1]
-	}
-}
-
-func (q *MessageQueue2) trimEmptyBuckets() {
-	for bucketIndex := len(q.endOfBucketIndices) - 1; bucketIndex > 0; bucketIndex-- {
-		if q.endOfBucketIndices[bucketIndex] != q.endOfBucketIndices[bucketIndex-1] {
-			return
-		}
-		q.endOfBucketIndices = q.endOfBucketIndices[:bucketIndex]
-	}
-}
-
-// Add adds a new message to the gossip message queue. Always adds to the first bucket, as this message was never
-// transmitted.
+// Add adds a new message to the gossip message queue.
 func (q *MessageQueue2) Add(message Message) {
 	queueIndex, ok := q.indexByAddress[message.GetAddress()]
 	if ok {
@@ -161,10 +89,13 @@ func (q *MessageQueue2) Add(message Message) {
 			// No need to overwrite when the incarnation number is lower.
 			return
 		}
+
+		newMessageType := message.GetType()
+		existingMessageType := queueEntry.Message.GetType()
 		if newIncarnationNumber == existingIncarnationNumber &&
-			(message.GetType() == encoding.MessageTypeAlive ||
-				message.GetType() == encoding.MessageTypeSuspect && queueEntry.Message.GetType() != encoding.MessageTypeAlive ||
-				message.GetType() == encoding.MessageTypeFaulty && queueEntry.Message.GetType() != encoding.MessageTypeAlive && queueEntry.Message.GetType() != encoding.MessageTypeSuspect) {
+			(newMessageType == encoding.MessageTypeAlive ||
+				newMessageType == encoding.MessageTypeSuspect && existingMessageType != encoding.MessageTypeAlive ||
+				newMessageType == encoding.MessageTypeFaulty && existingMessageType != encoding.MessageTypeAlive && existingMessageType != encoding.MessageTypeSuspect) {
 			// No need to overwrite with the same incarnation number and the wrong priorities.
 			return
 		}
@@ -176,27 +107,31 @@ func (q *MessageQueue2) Add(message Message) {
 			queueEntry = &q.queue[queueIndex]
 		}
 		queueEntry.TransmissionCount = 0
+
+		// As we might have moved the last element from the last bucket to the front, we need to get rid of empty
+		// buckets at the end.
 		q.trimEmptyBuckets()
 		return
 	}
 	q.insertIntoBucket(0, message)
 }
 
-func (q *MessageQueue2) insertIntoBucket(targetBucketIndex int, message Message) {
+// insertIntoBucket inserts the given message into the bucket.
+func (q *MessageQueue2) insertIntoBucket(destinationBucketIndex int, message Message) {
 	// Make sure we have enough end of bucket indices in place to deal with the target bucket index.
-	q.ensureBucketAvailable(targetBucketIndex)
+	q.ensureBucketAvailable(destinationBucketIndex)
 
 	// Append the new element at the end of the queue and extend the last bucket to hold the new element.
 	q.queue = append(q.queue, MessageQueueEntry{
 		Message:           message,
-		TransmissionCount: targetBucketIndex,
+		TransmissionCount: destinationBucketIndex,
 	})
 	// Note: We deliberately do not set indexByAddress here, because the index is set at the end of
 	// moveBackwardToBucket anyway.
 	q.endOfBucketIndices[len(q.endOfBucketIndices)-1]++
 
 	// Move the new element backwards through all buckets until it has reached the desired bucket.
-	q.moveBackwardToBucket(len(q.endOfBucketIndices)-1, targetBucketIndex, len(q.queue)-1)
+	q.moveBackwardToBucket(len(q.endOfBucketIndices)-1, destinationBucketIndex, len(q.queue)-1)
 }
 
 // moveBackwardToBucket moves the element at queueIndex from sourceBucketIndex to destinationBucketIndex.
@@ -226,6 +161,91 @@ func (q *MessageQueue2) moveBackwardToBucket(sourceBucketIndex int, destinationB
 	return queueIndex
 }
 
+// PrioritizeForAddress marks a gossip for the given address for priority. If such a message exists, it will always be
+// returns with Get(0). Otherwise, this method has no effect.
+func (q *MessageQueue2) PrioritizeForAddress(address encoding.Address) {
+	queueIndex, found := q.indexByAddress[address]
+	if found {
+		messageType := q.queue[queueIndex].Message.GetType()
+		if messageType == encoding.MessageTypeSuspect ||
+			messageType == encoding.MessageTypeFaulty {
+			q.priorityQueueIndex = queueIndex
+			return
+		}
+	}
+	q.priorityQueueIndex = -1
+}
+
+// Get returns the message at the given index within the queue. If PrioritizeForAddress was called before, the
+// message for that address is always returned by Get(0).
+// index needs to be between 0 and Len() exclusive.
+func (q *MessageQueue2) Get(index int) Message {
+	if q.priorityQueueIndex == -1 {
+		return q.queue[index].Message
+	}
+	if index == 0 {
+		return q.queue[q.priorityQueueIndex].Message
+	}
+	if index <= q.priorityQueueIndex {
+		return q.queue[index-1].Message
+	}
+	return q.queue[index].Message
+}
+
+// MarkFirstNMessagesTransmitted increases the transmission counter for the first count messages in the queue by
+// one, moving them to buckets of higher tiers. When the maximum transmission count is reached, it discards them.
+func (q *MessageQueue2) MarkFirstNMessagesTransmitted(count int) {
+	count = min(count, len(q.queue))
+
+	// We move backwards through the first count elements to avoid swapping with an element which is part of the first
+	// count elements.
+	for queueIndex := count - 1; 0 <= queueIndex; queueIndex-- {
+		// Make sure we have at least one more bucket behind the bucket of our element. This is where we move the
+		// element to.
+		bucketIndex := q.queue[queueIndex].TransmissionCount
+		q.ensureBucketAvailable(bucketIndex + 1)
+
+		// Move the element by one bucket
+		q.queue[queueIndex].TransmissionCount++
+		q.moveForwardToBucket(bucketIndex, bucketIndex+1, queueIndex)
+	}
+
+	q.trimMessages()
+	q.trimEmptyBuckets()
+}
+
+// trimMessages removes all messages from the end of the queue which have reached the maximum transmission count.
+func (q *MessageQueue2) trimMessages() {
+	// Drop all buckets which contain messages which have reached the maximum transmission count.
+	// We are iterating from the back to the front to not remove buckets which need to stay.
+	for bucketIndex := len(q.endOfBucketIndices) - 1; q.maxTransmissionCount <= bucketIndex; bucketIndex-- {
+		startOfBucketIndex := q.endOfBucketIndices[bucketIndex-1]
+		endOfBucketIndex := q.endOfBucketIndices[bucketIndex]
+
+		// Remove all elements we are about to drop from the indexByAddress map
+		for queueIndex := startOfBucketIndex; queueIndex < endOfBucketIndex; queueIndex++ {
+			delete(q.indexByAddress, q.queue[queueIndex].Message.GetAddress())
+		}
+
+		// Shorten queue and buckets
+		q.queue = q.queue[:startOfBucketIndex]
+		q.endOfBucketIndices = q.endOfBucketIndices[:len(q.endOfBucketIndices)-1]
+	}
+}
+
+// trimEmptyBuckets removes all buckets from the end which are empty. The first bucket always stays.
+func (q *MessageQueue2) trimEmptyBuckets() {
+	for bucketIndex := len(q.endOfBucketIndices) - 1; bucketIndex > 0; bucketIndex-- {
+		if q.endOfBucketIndices[bucketIndex] != q.endOfBucketIndices[bucketIndex-1] {
+			return
+		}
+		q.endOfBucketIndices = q.endOfBucketIndices[:bucketIndex]
+	}
+}
+
+// moveForwardToBucket moves the element at queueIndex from sourceBucketIndex to destinationBucketIndex.
+// destinationBucketIndex needs to be bigger or equal to sourceBucketIndex.
+// Returns the new queueIndex the element was moved to.
 func (q *MessageQueue2) moveForwardToBucket(sourceBucketIndex int, destinationBucketIndex int, queueIndex int) int {
 	currentBucketIndex := sourceBucketIndex
 	for currentBucketIndex < destinationBucketIndex {
@@ -249,6 +269,8 @@ func (q *MessageQueue2) moveForwardToBucket(sourceBucketIndex int, destinationBu
 	return queueIndex
 }
 
+// ensureBucketAvailable creates buckets if needed. Allowing other code to safely access the bucket without worrying
+// if the index is valid or not.
 func (q *MessageQueue2) ensureBucketAvailable(bucketIndex int) {
 	for len(q.endOfBucketIndices) <= bucketIndex {
 		q.endOfBucketIndices = append(q.endOfBucketIndices, len(q.queue))
@@ -258,7 +280,7 @@ func (q *MessageQueue2) ensureBucketAvailable(bucketIndex int) {
 // Validate reports if the internal state is valid. This is helpful for automated tests.
 func (q *MessageQueue2) Validate() error {
 	// Make sure that end of bucket indices are always equal or bigger than the one before.
-	for i := 0; i < len(q.endOfBucketIndices)-2; i++ {
+	for i := 0; i < len(q.endOfBucketIndices)-1; i++ {
 		if q.endOfBucketIndices[i] > q.endOfBucketIndices[i+1] {
 			return fmt.Errorf("end of bucket index %d is bigger than %d", i, i+1)
 		}
@@ -267,8 +289,8 @@ func (q *MessageQueue2) Validate() error {
 	// Make sure that every entry in the queue has an associated bucket
 	for queueIndex, entry := range q.queue {
 		bucketIndex := entry.TransmissionCount
-		if bucketIndex > len(q.endOfBucketIndices)+1 {
-			return fmt.Errorf("invalid bucket index for entry %q", queueIndex)
+		if bucketIndex >= len(q.endOfBucketIndices) {
+			return fmt.Errorf("invalid bucket index for entry %d", queueIndex)
 		}
 		if queueIndex >= q.endOfBucketIndices[bucketIndex] {
 			return fmt.Errorf("queue index %d does not fit into bucket %d", queueIndex, bucketIndex)

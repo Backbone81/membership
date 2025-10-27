@@ -641,7 +641,7 @@ func BenchmarkMessageQueue2_Add(b *testing.B) {
 }
 
 func BenchmarkMessageQueue2_PrioritizeForAddress(b *testing.B) {
-	for gossipCount := 1; gossipCount <= 16*1024; gossipCount *= 2 {
+	for gossipCount := 1024; gossipCount <= 16*1024; gossipCount *= 2 {
 		gossipQueue := gossip.NewMessageQueue2(math.MaxInt)
 		for i := range gossipCount {
 			gossipQueue.Add(&gossip.MessageAlive{
@@ -661,7 +661,7 @@ func BenchmarkMessageQueue2_PrioritizeForAddress(b *testing.B) {
 }
 
 func BenchmarkMessageQueue2_Get(b *testing.B) {
-	for gossipCount := 1; gossipCount <= 16*1024; gossipCount *= 2 {
+	for gossipCount := 1024; gossipCount <= 16*1024; gossipCount *= 2 {
 		gossipQueue := gossip.NewMessageQueue2(math.MaxInt)
 		for i := range gossipCount {
 			gossipQueue.Add(&gossip.MessageAlive{
@@ -687,7 +687,7 @@ func BenchmarkMessageQueue2_MarkFirstNMessagesTransmitted(b *testing.B) {
 				IncarnationNumber: 0,
 			})
 		}
-		for messagesTransmitted := 1; messagesTransmitted <= 512; messagesTransmitted *= 2 {
+		for messagesTransmitted := 1; messagesTransmitted <= 128; messagesTransmitted *= 2 {
 			b.Run(fmt.Sprintf("%d gossip with %d transmissions", gossipCount, messagesTransmitted), func(b *testing.B) {
 				for b.Loop() {
 					gossipQueue.MarkFirstNMessagesTransmitted(messagesTransmitted)

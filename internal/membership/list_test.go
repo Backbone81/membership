@@ -23,7 +23,7 @@ var _ = Describe("List", func() {
 		list = membership.NewList(
 			membership.WithLogger(GinkgoLogr),
 			membership.WithUDPClient(&transport.Discard{}),
-			membership.WithTCPClient(&transport.Discard{}),q
+			membership.WithTCPClient(&transport.Discard{}),
 			membership.WithAdvertisedAddress(TestAddress),
 		)
 		list.GetGossip().Clear()

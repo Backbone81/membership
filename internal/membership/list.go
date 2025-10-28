@@ -277,6 +277,8 @@ func (l *List) EndOfProtocolPeriod() error {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
 
+	maxTransmissionCount := DisseminationPeriods(3, len(l.members)) // TODO: the safety factors needs to be configurable
+	l.gossipQueue.SetMaxTransmissionCount(int(math.Ceil(maxTransmissionCount)))
 	l.markSuspectsAsFaulty()
 	l.processFailedProbes()
 	return nil

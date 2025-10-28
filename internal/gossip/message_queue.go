@@ -41,9 +41,15 @@ func NewMessageQueue(maxTransmissionCount int) *MessageQueue {
 		queue:                make([]MessageQueueEntry, 0, 1024),
 		endOfBucketIndices:   make([]int, 0, 64),
 		indexByAddress:       make(map[encoding.Address]int, 1024),
-		maxTransmissionCount: maxTransmissionCount,
+		maxTransmissionCount: maxTransmissionCount, // TODO: there should be an option to configure it at the start.
 		priorityQueueIndex:   -1,
 	}
+}
+
+// SetMaxTransmissionCount updates the max transmission count to the new value. The new value will be used on the next
+// call to MarkFirstNMessagesTransmitted.
+func (q *MessageQueue) SetMaxTransmissionCount(maxTransmissionCount int) {
+	q.maxTransmissionCount = max(1, maxTransmissionCount)
 }
 
 // Len returns the number of entries currently stored in the queue.

@@ -2,6 +2,7 @@ package membership_test
 
 import (
 	"fmt"
+	"math"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -22,7 +23,7 @@ var _ = Describe("List", func() {
 		list = membership.NewList(
 			membership.WithLogger(GinkgoLogr),
 			membership.WithUDPClient(&transport.Discard{}),
-			membership.WithTCPClient(&transport.Discard{}),
+			membership.WithTCPClient(&transport.Discard{}),q
 			membership.WithAdvertisedAddress(TestAddress),
 		)
 		list.GetGossip().Clear()
@@ -890,6 +891,52 @@ var _ = Describe("List", func() {
 
 		// TODO: implementation
 
+	})
+
+	FIt("should reach consensus about the members after a limited number of protocol periods", func() {
+		memoryTransport := transport.NewMemory()
+		memberCount := 16
+		var lists []*membership.List
+		for i := range memberCount {
+			address := encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i)
+			options := []membership.Option{
+				membership.WithLogger(GinkgoLogr.WithValues("node", address)),
+				membership.WithAdvertisedAddress(address),
+				membership.WithUDPClient(memoryTransport.Client()),
+				membership.WithTCPClient(memoryTransport.Client()),
+			}
+			if i > 0 {
+				options = append(options,
+					membership.WithBootstrapMember(encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024)),
+				)
+			}
+			newList := membership.NewList(options...)
+			memoryTransport.AddTarget(address, newList)
+			lists = append(lists, newList)
+		}
+
+		periodCount := int(math.Ceil(membership.DisseminationPeriods(1, len(lists))))
+		for range periodCount {
+			for _, list := range lists {
+				Expect(list.DirectPing()).To(Succeed())
+			}
+			Expect(memoryTransport.FlushAllPendingSends()).To(Succeed())
+			Expect(memoryTransport.FlushAllPendingSends()).To(Succeed())
+
+			for _, list := range lists {
+				Expect(list.IndirectPing()).To(Succeed())
+			}
+			Expect(memoryTransport.FlushAllPendingSends()).To(Succeed())
+			Expect(memoryTransport.FlushAllPendingSends()).To(Succeed())
+
+			for _, list := range lists {
+				Expect(list.EndOfProtocolPeriod()).To(Succeed())
+			}
+		}
+
+		for _, list := range lists {
+			Expect(list.Get()).To(HaveLen(memberCount - 1))
+		}
 	})
 })
 

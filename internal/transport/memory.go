@@ -56,7 +56,6 @@ func (m *Memory) acquireBuffer(length int) []byte {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	length = max(1024, length)
 	if len(m.bufferPool) == 0 {
 		return make([]byte, length)
 	}

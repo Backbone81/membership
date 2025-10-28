@@ -2,6 +2,7 @@ package membership
 
 import (
 	"github.com/backbone81/membership/internal/encoding"
+	"github.com/backbone81/membership/internal/transport"
 	"github.com/go-logr/logr"
 )
 
@@ -17,10 +18,10 @@ type Config struct {
 	AdvertisedAddress encoding.Address
 
 	// UDPClient is the transport for sending unreliable UDP network messages.
-	UDPClient Transport
+	UDPClient transport.Transport
 
 	// TCPClient is the transport for sending reliable TCP network messages.
-	TCPClient Transport
+	TCPClient transport.Transport
 
 	// MaxDatagramLengthSend is the maximum length in bytes we should not exceed for sending UDP network messages.
 	MaxDatagramLengthSend int

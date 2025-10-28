@@ -13,6 +13,9 @@ type UDPClient struct {
 	maxDatagramLength int
 }
 
+// UDPClient implements Transport
+var _ Transport = (*UDPClient)(nil)
+
 // NewUDPClient creates a new UDPClient transport.
 func NewUDPClient(maxDatagramLength int) *UDPClient {
 	return &UDPClient{
@@ -23,15 +26,15 @@ func NewUDPClient(maxDatagramLength int) *UDPClient {
 // Send transmits the given buffer to the member with the given address. The length of the buffer is validated against
 // the max datagram length provided during construction. If the length exceeds the maximum length, no data is sent
 // and an error is returned.
-func (t *UDPClient) Send(address encoding.Address, buffer []byte) error {
-	if err := t.send(address, buffer); err != nil {
+func (c *UDPClient) Send(address encoding.Address, buffer []byte) error {
+	if err := c.send(address, buffer); err != nil {
 		return fmt.Errorf("UDP client transport send: %w", err)
 	}
 	return nil
 }
 
-func (t *UDPClient) send(address encoding.Address, buffer []byte) error {
-	if len(buffer) > t.maxDatagramLength {
+func (c *UDPClient) send(address encoding.Address, buffer []byte) error {
+	if len(buffer) > c.maxDatagramLength {
 		return errors.New("buffer length exceeds maximum datagram length")
 	}
 

@@ -1,4 +1,4 @@
-package membership
+package transport
 
 import "github.com/backbone81/membership/internal/encoding"
 

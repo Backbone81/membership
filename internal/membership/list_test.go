@@ -10,6 +10,7 @@ import (
 	"github.com/backbone81/membership/internal/encoding"
 	"github.com/backbone81/membership/internal/gossip"
 	"github.com/backbone81/membership/internal/membership"
+	"github.com/backbone81/membership/internal/transport"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -20,8 +21,8 @@ var _ = Describe("List", func() {
 	BeforeEach(func() {
 		list = membership.NewList(
 			membership.WithLogger(GinkgoLogr),
-			membership.WithUDPClient(&DiscardClient{}),
-			membership.WithTCPClient(&DiscardClient{}),
+			membership.WithUDPClient(&transport.Discard{}),
+			membership.WithTCPClient(&transport.Discard{}),
 			membership.WithAdvertisedAddress(TestAddress),
 		)
 		list.GetGossip().Clear()
@@ -39,8 +40,8 @@ var _ = Describe("List", func() {
 
 		list := membership.NewList(
 			membership.WithLogger(GinkgoLogr),
-			membership.WithUDPClient(&DiscardClient{}),
-			membership.WithTCPClient(&DiscardClient{}),
+			membership.WithUDPClient(&transport.Discard{}),
+			membership.WithTCPClient(&transport.Discard{}),
 			membership.WithMemberAddedCallback(func(address encoding.Address) {
 				membersAdded.Add(1)
 				callbacks.Done()
@@ -83,11 +84,11 @@ var _ = Describe("List", func() {
 	})
 
 	It("should not do a ping without members", func() {
-		var storeClient StoreClient
+		var storeClient transport.Store
 		list := membership.NewList(
 			membership.WithLogger(GinkgoLogr),
 			membership.WithUDPClient(&storeClient),
-			membership.WithTCPClient(&DiscardClient{}),
+			membership.WithTCPClient(&transport.Discard{}),
 			membership.WithAdvertisedAddress(TestAddress),
 		)
 		list.GetGossip().Clear()
@@ -97,11 +98,11 @@ var _ = Describe("List", func() {
 	})
 
 	It("should do round robin direct pings", func() {
-		var storeClient StoreClient
+		var storeClient transport.Store
 		list := membership.NewList(
 			membership.WithLogger(GinkgoLogr),
 			membership.WithUDPClient(&storeClient),
-			membership.WithTCPClient(&DiscardClient{}),
+			membership.WithTCPClient(&transport.Discard{}),
 			membership.WithAdvertisedAddress(TestAddress),
 		)
 		list.GetGossip().Clear()
@@ -197,8 +198,8 @@ var _ = Describe("List", func() {
 	DescribeTable("Gossip should update the memberlist correctly",
 		func(beforeMembers []encoding.Member, beforeFaultyMembers []encoding.Member, message gossip.Message, afterMembers []encoding.Member, afterFaultyMembers []encoding.Member) {
 			list := membership.NewList(
-				membership.WithUDPClient(&DiscardClient{}),
-				membership.WithTCPClient(&DiscardClient{}),
+				membership.WithUDPClient(&transport.Discard{}),
+				membership.WithTCPClient(&transport.Discard{}),
 			)
 			list.GetGossip().Clear()
 			list.SetMembers(beforeMembers)
@@ -1028,8 +1029,8 @@ func executeFunctionWithMembers(b *testing.B, f func(list *membership.List)) {
 
 func createListWithMembers(memberCount int) *membership.List {
 	list := membership.NewList(
-		membership.WithUDPClient(&DiscardClient{}),
-		membership.WithTCPClient(&DiscardClient{}),
+		membership.WithUDPClient(&transport.Discard{}),
+		membership.WithTCPClient(&transport.Discard{}),
 	)
 
 	for i := range memberCount {

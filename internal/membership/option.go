@@ -2,6 +2,7 @@ package membership
 
 import (
 	"github.com/backbone81/membership/internal/encoding"
+	"github.com/backbone81/membership/internal/transport"
 	"github.com/go-logr/logr"
 )
 
@@ -35,13 +36,13 @@ func WithAdvertisedAddress(address encoding.Address) Option {
 	}
 }
 
-func WithUDPClient(transport Transport) Option {
+func WithUDPClient(transport transport.Transport) Option {
 	return func(config *Config) {
 		config.UDPClient = transport
 	}
 }
 
-func WithTCPClient(transport Transport) Option {
+func WithTCPClient(transport transport.Transport) Option {
 	return func(config *Config) {
 		config.TCPClient = transport
 	}

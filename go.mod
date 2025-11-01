@@ -2,7 +2,7 @@ module github.com/backbone81/membership
 
 go 1.25
 
-toolchain go1.25.1
+toolchain go1.25.3
 
 require (
 	github.com/go-logr/logr v1.4.3

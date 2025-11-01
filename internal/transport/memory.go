@@ -123,7 +123,11 @@ func (m *Memory) Addresses() []encoding.Address {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	return slices.Collect(maps.Keys(m.targets))
+	addresses := slices.Collect(maps.Keys(m.targets))
+	slices.SortFunc(addresses, func(a, b encoding.Address) int {
+		return encoding.CompareAddress(a, b)
+	})
+	return addresses
 }
 
 // getPendingSends returns all byte buffers which are waiting to be sent to the given target. It will remove those

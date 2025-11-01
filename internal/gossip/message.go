@@ -9,4 +9,5 @@ type Message interface {
 	GetAddress() encoding.Address
 	GetType() encoding.MessageType
 	GetIncarnationNumber() int
+	String() string
 }

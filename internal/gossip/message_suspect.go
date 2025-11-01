@@ -2,6 +2,7 @@ package gossip
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/backbone81/membership/internal/encoding"
 )
@@ -18,6 +19,10 @@ type MessageSuspect struct {
 	// IncarnationNumber is the incarnation which source saw and based its decision on. This helps in identifying
 	// outdated messages.
 	IncarnationNumber int
+}
+
+func (m *MessageSuspect) String() string {
+	return fmt.Sprintf("Suspect %s (by %s, incarnation %d)", m.Destination, m.Source, m.IncarnationNumber)
 }
 
 // AppendToBuffer appends the message to the provided buffer encoded for network transfer.

@@ -3,6 +3,7 @@ package membership
 import (
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"math"
 	"math/rand"
@@ -145,11 +146,25 @@ func (l *List) SetFaultyMembers(members []encoding.Member) {
 	l.faultyMembers = append(l.faultyMembers[:0], members...)
 }
 
+func (l *List) AdvertiseAddress() encoding.Address {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	return l.config.AdvertisedAddress
+}
+
 func (l *List) GetGossip() *gossip.MessageQueue {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
 
 	return l.gossipQueue
+}
+
+func (l *List) ClearGossip() {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	l.gossipQueue.Clear()
 }
 
 func (l *List) Startup() error {
@@ -1049,7 +1064,7 @@ func (l *List) getNextMember() *encoding.Member {
 
 	randomIndex := l.nextRandomIndex
 	l.nextRandomIndex++
-	return &l.members[randomIndex]
+	return &l.members[l.randomIndexes[randomIndex]]
 }
 
 func (l *List) getRandomMember() *encoding.Member {
@@ -1058,13 +1073,18 @@ func (l *List) getRandomMember() *encoding.Member {
 }
 
 func (l *List) addMember(member encoding.Member) {
+	if member.Address.Equal(l.self) {
+		// We do not add ourselves to the member list
+		return
+	}
+
 	l.logger.Info(
 		"Member added",
 		"address", member.Address,
 		"incarnation-number", member.IncarnationNumber,
 	)
 
-	// We append the new member always at the end of the member list. Remember the index for later.
+	// Insert the new member at the correct ordered location. Remember the index for later.
 	memberIndex, found := slices.BinarySearchFunc(
 		l.members,
 		member,
@@ -1144,4 +1164,44 @@ func (l *List) removeMemberByIndex(index int) {
 
 	l.members = slices.Delete(l.members, index, index+1)
 	l.randomIndexes = slices.Delete(l.randomIndexes, randomIndex, randomIndex+1)
+}
+
+func (l *List) WriteInternalDebugState(writer io.Writer) error {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	if _, err := fmt.Fprintf(writer, "Membership List %s\n", l.self); err != nil {
+		return err
+	}
+
+	if _, err := fmt.Fprintf(writer, "Members (%d)\n", len(l.members)); err != nil {
+		return err
+	}
+	for _, member := range l.members {
+		if _, err := fmt.Fprintf(writer, "  - %s\n", member.Address); err != nil {
+			return err
+		}
+	}
+
+	if _, err := fmt.Fprintf(writer, "Next Direct Pings\n"); err != nil {
+		return err
+	}
+	for i := l.nextRandomIndex; i < len(l.randomIndexes); i++ {
+		if _, err := fmt.Fprintf(writer, "  - %s\n", l.members[l.randomIndexes[i]].Address); err != nil {
+			return err
+		}
+	}
+
+	if _, err := fmt.Fprintf(writer, "Gossip (%d)\n", l.gossipQueue.Len()); err != nil {
+		return err
+	}
+	// Make sure we are not prioritizing for the state dump
+	l.gossipQueue.PrioritizeForAddress(encoding.Address{})
+	for i := range l.gossipQueue.Len() {
+		gossipMessage := l.gossipQueue.Get(i)
+		if _, err := fmt.Fprintf(writer, "  - %s\n", gossipMessage); err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -49,7 +49,7 @@ func NewMessageQueue(maxTransmissionCount int) *MessageQueue {
 // SetMaxTransmissionCount updates the max transmission count to the new value. The new value will be used on the next
 // call to MarkFirstNMessagesTransmitted.
 func (q *MessageQueue) SetMaxTransmissionCount(maxTransmissionCount int) {
-	q.maxTransmissionCount = max(1, maxTransmissionCount)
+	q.maxTransmissionCount = max(3, maxTransmissionCount)
 }
 
 // Len returns the number of entries currently stored in the queue.

@@ -7,12 +7,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/backbone81/membership/internal/utility"
 	"github.com/backbone81/membership/pkg/membership"
-	"github.com/go-logr/logr"
-	"github.com/go-logr/zapr"
 	"github.com/spf13/cobra"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 )
 
 var (
@@ -37,7 +34,7 @@ var rootCmd = &cobra.Command{
 		ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 		defer cancel()
 
-		logger, zapLogger, err := createLogger(verbosity)
+		logger, zapLogger, err := utility.CreateLogger(verbosity)
 		if err != nil {
 			return err
 		}
@@ -171,33 +168,4 @@ This should be the usual round-trip time between members.`,
 Hostname will be resolved to ip address on startup.
 Can be specified multiple times to configure several members.`,
 	)
-}
-
-func createLogger(verbosity int) (logr.Logger, *zap.Logger, error) {
-	zapConfig := zap.Config{
-		Level:       zap.NewAtomicLevelAt(zapcore.Level(-verbosity)),
-		Development: true,
-		Encoding:    "console",
-		EncoderConfig: zapcore.EncoderConfig{
-			TimeKey:        "T",
-			LevelKey:       "L",
-			NameKey:        "N",
-			CallerKey:      zapcore.OmitKey,
-			FunctionKey:    zapcore.OmitKey,
-			MessageKey:     "M",
-			StacktraceKey:  "S",
-			LineEnding:     zapcore.DefaultLineEnding,
-			EncodeLevel:    zapcore.CapitalLevelEncoder,
-			EncodeTime:     zapcore.TimeEncoderOfLayout("15:04:05"),
-			EncodeDuration: zapcore.StringDurationEncoder,
-			EncodeCaller:   zapcore.ShortCallerEncoder,
-		},
-		OutputPaths:      []string{"stdout"},
-		ErrorOutputPaths: []string{"stderr"},
-	}
-	zapLogger, err := zapConfig.Build()
-	if err != nil {
-		return logr.Logger{}, nil, err
-	}
-	return zapr.NewLogger(zapLogger), zapLogger, nil
 }

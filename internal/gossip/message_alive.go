@@ -2,6 +2,7 @@ package gossip
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/backbone81/membership/internal/encoding"
 )
@@ -14,6 +15,10 @@ type MessageAlive struct {
 
 	// IncarnationNumber is the incarnation to distinguish an outdated alive message from a new one.
 	IncarnationNumber int
+}
+
+func (m *MessageAlive) String() string {
+	return fmt.Sprintf("Alive %s (incarnation %d)", m.Source, m.IncarnationNumber)
 }
 
 // AppendToBuffer appends the message to the provided buffer encoded for network transfer.

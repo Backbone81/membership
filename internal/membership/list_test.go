@@ -893,49 +893,72 @@ var _ = Describe("List", func() {
 
 	})
 
-	FIt("should reach consensus about the members after a limited number of protocol periods", func() {
-		memoryTransport := transport.NewMemory()
-		memberCount := 16
-		var lists []*membership.List
-		for i := range memberCount {
-			address := encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i)
+	It("newly joined member should propagate after a limited number of protocol periods", func() {
+		for memberCount := 1; memberCount <= 256; memberCount *= 2 {
+			memoryTransport := transport.NewMemory()
+			var lists []*membership.List
+			for i := range memberCount {
+				address := encoding.NewAddress(net.IPv4(255, 255, 255, 255), i+1)
+				options := []membership.Option{
+					membership.WithLogger(GinkgoLogr.WithValues("list", address)),
+					membership.WithAdvertisedAddress(address),
+					membership.WithUDPClient(memoryTransport.Client()),
+					membership.WithTCPClient(memoryTransport.Client()),
+				}
+				for j := range memberCount {
+					options = append(options,
+						membership.WithBootstrapMember(encoding.NewAddress(net.IPv4(255, 255, 255, 255), j+1)),
+					)
+				}
+				newList := membership.NewList(options...)
+				newList.ClearGossip()
+				memoryTransport.AddTarget(address, newList)
+				lists = append(lists, newList)
+			}
+			for _, list := range lists {
+				Expect(list.Get()).To(HaveLen(memberCount - 1))
+			}
+
+			address := encoding.NewAddress(net.IPv4(255, 255, 255, 255), math.MaxUint16)
 			options := []membership.Option{
-				membership.WithLogger(GinkgoLogr.WithValues("node", address)),
+				membership.WithLogger(GinkgoLogr.WithValues("list", address)),
 				membership.WithAdvertisedAddress(address),
 				membership.WithUDPClient(memoryTransport.Client()),
 				membership.WithTCPClient(memoryTransport.Client()),
 			}
-			if i > 0 {
-				options = append(options,
-					membership.WithBootstrapMember(encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024)),
-				)
-			}
+			options = append(options,
+				membership.WithBootstrapMember(encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1)),
+			)
 			newList := membership.NewList(options...)
 			memoryTransport.AddTarget(address, newList)
 			lists = append(lists, newList)
-		}
 
-		periodCount := int(math.Ceil(membership.DisseminationPeriods(1, len(lists))))
-		for range periodCount {
-			for _, list := range lists {
-				Expect(list.DirectPing()).To(Succeed())
+			periodCount := int(math.Ceil(membership.DisseminationPeriods(3, len(lists))))
+			for i := range periodCount {
+				GinkgoLogr.Info("> Start of protocol period", "period", i)
+				GinkgoLogr.Info("> Executing direct pings")
+				for _, list := range lists {
+					Expect(list.DirectPing()).To(Succeed())
+				}
+				Expect(memoryTransport.FlushAllPendingSends()).To(Succeed())
+				Expect(memoryTransport.FlushAllPendingSends()).To(Succeed())
+
+				GinkgoLogr.Info("> Executing indirect pings")
+				for _, list := range lists {
+					Expect(list.IndirectPing()).To(Succeed())
+				}
+				Expect(memoryTransport.FlushAllPendingSends()).To(Succeed())
+				Expect(memoryTransport.FlushAllPendingSends()).To(Succeed())
+
+				GinkgoLogr.Info("> Executing end of protocol period")
+				for _, list := range lists {
+					Expect(list.EndOfProtocolPeriod()).To(Succeed())
+				}
 			}
-			Expect(memoryTransport.FlushAllPendingSends()).To(Succeed())
-			Expect(memoryTransport.FlushAllPendingSends()).To(Succeed())
 
-			for _, list := range lists {
-				Expect(list.IndirectPing()).To(Succeed())
+			for _, list := range lists[:len(lists)-1] {
+				Expect(list.Get()).To(HaveLen(memberCount))
 			}
-			Expect(memoryTransport.FlushAllPendingSends()).To(Succeed())
-			Expect(memoryTransport.FlushAllPendingSends()).To(Succeed())
-
-			for _, list := range lists {
-				Expect(list.EndOfProtocolPeriod()).To(Succeed())
-			}
-		}
-
-		for _, list := range lists {
-			Expect(list.Get()).To(HaveLen(memberCount - 1))
 		}
 	})
 })

@@ -51,9 +51,6 @@ func NewList(options ...Option) *List {
 }
 
 func (l *List) Startup() error {
-	if err := l.Startup(); err != nil {
-		return err
-	}
 	if err := l.udpServerTransport.Startup(); err != nil {
 		return err
 	}
@@ -74,9 +71,6 @@ func (l *List) Shutdown() error {
 		return err
 	}
 	if err := l.udpServerTransport.Shutdown(); err != nil {
-		return err
-	}
-	if err := l.Shutdown(); err != nil {
 		return err
 	}
 	return nil

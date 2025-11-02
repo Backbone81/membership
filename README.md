@@ -13,10 +13,10 @@ This Go library provides a peer-to-peer gossip based membership implementation. 
   keys are used for decryption.
 - Shutdown of the membership should send a faulty message to propagate the not existing member.
 - Improve test coverage
-- Do not trigger callbacks through go routines, as this might not be required by users. Instead, trigger the callback
-  inline while holding the lock on the mutex and document that users who need to call into the membership list from
-  their callback should spawn a go routine on their own. Therefore, you only get what you ask for.
 - Check where we can replace a slices.Delete with a switch-with-last and reduce size by one.
+- The performance characteristics of the gossip queue is suboptimal. When creating a cluster with 16k members, the
+  creating of the cluster alone without any gossip takes excessive amount of time. Look into a ringbuffer
+  implementation.
 
 ### More Advanced Topics
 

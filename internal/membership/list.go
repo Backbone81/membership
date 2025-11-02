@@ -39,8 +39,6 @@ type List struct {
 	pendingDirectProbes     []DirectProbeRecord
 	pendingDirectProbesNext []DirectProbeRecord
 	pendingIndirectProbes   []IndirectProbeRecord
-
-	callbackWaitGroup sync.WaitGroup
 }
 
 // DirectProbeRecord provides bookkeeping for a direct probe which is still active.
@@ -165,23 +163,6 @@ func (l *List) ClearGossip() {
 	defer l.mutex.Unlock()
 
 	l.gossipQueue.Clear()
-}
-
-func (l *List) Startup() error {
-	l.mutex.Lock()
-	defer l.mutex.Unlock()
-
-	l.logger.Info("List startup")
-	return nil
-}
-
-func (l *List) Shutdown() error {
-	l.mutex.Lock()
-	defer l.mutex.Unlock()
-
-	l.logger.Info("List shutdown")
-	l.callbackWaitGroup.Wait()
-	return nil
 }
 
 func (l *List) DirectPing() error {
@@ -1117,10 +1098,7 @@ func (l *List) addMember(member encoding.Member) {
 
 	// Trigger the callback if set.
 	if l.config.MemberAddedCallback != nil {
-		address := member.Address
-		l.callbackWaitGroup.Go(func() {
-			l.config.MemberAddedCallback(address)
-		})
+		l.config.MemberAddedCallback(member.Address)
 	}
 }
 
@@ -1145,10 +1123,7 @@ func (l *List) removeMemberByIndex(index int) {
 
 	// Trigger the callback if set.
 	if l.config.MemberRemovedCallback != nil {
-		address := l.members[index].Address
-		l.callbackWaitGroup.Go(func() {
-			l.config.MemberRemovedCallback(address)
-		})
+		l.config.MemberRemovedCallback(l.members[index].Address)
 	}
 
 	// If we remove the element from the slice, all indexes after that element need to be decremented by one.

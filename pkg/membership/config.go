@@ -42,9 +42,21 @@ type Config struct {
 	ListRequestInterval time.Duration
 
 	// MemberAddedCallback is the callback which is triggered when a new member is added to the list.
+	// This callback executes under the lock of the membership list. If you call any method on the membership list
+	// during that callback, you create a deadlock. If you need to call the membership list during your callback,
+	// create a go routine which executes what you want to do.
+	// This design decision was done, because most callback situations will not require calling the membership list.
+	// That way the overhead of starting and managing a go routine is left to the user, and he only needs to pay that
+	// price when necessary.
 	MemberAddedCallback func(address encoding.Address)
 
 	// MemberRemovedCallback is the callback which is triggered when a member is removed from the list.
+	// This callback executes under the lock of the membership list. If you call any method on the membership list
+	// during that callback, you create a deadlock. If you need to call the membership list during your callback,
+	// create a go routine which executes what you want to do.
+	// This design decision was done, because most callback situations will not require calling the membership list.
+	// That way the overhead of starting and managing a go routine is left to the user, and he only needs to pay that
+	// price when necessary.
 	MemberRemovedCallback func(address encoding.Address)
 }
 

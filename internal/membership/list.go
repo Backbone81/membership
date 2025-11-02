@@ -1072,7 +1072,8 @@ func (l *List) addMember(member encoding.Member) {
 		encoding.CompareMember,
 	)
 	if found {
-		// Update the existing member
+		// Update the existing member. Note that we do not count this towards the add member metric. Otherwise, the
+		// number of members could not be calculated by subtracting remove member metric from add member metric.
 		l.members[memberIndex] = member
 		return
 	}
@@ -1100,6 +1101,7 @@ func (l *List) addMember(member encoding.Member) {
 	if l.config.MemberAddedCallback != nil {
 		l.config.MemberAddedCallback(member.Address)
 	}
+	AddMemberTotal.Inc()
 }
 
 func (l *List) removeMemberByAddress(address encoding.Address) {
@@ -1139,6 +1141,7 @@ func (l *List) removeMemberByIndex(index int) {
 
 	l.members = slices.Delete(l.members, index, index+1)
 	l.randomIndexes = slices.Delete(l.randomIndexes, randomIndex, randomIndex+1)
+	RemoveMemberTotal.Inc()
 }
 
 func (l *List) WriteInternalDebugState(writer io.Writer) error {

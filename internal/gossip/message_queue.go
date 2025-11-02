@@ -97,11 +97,14 @@ func (q *MessageQueue) Add(message Message) {
 		queueEntry.TransmissionCount = 0
 
 		// As we might have moved the last element from the last bucket to the front, we need to get rid of empty
-		// buckets at the end.
+		// buckets at the end. Note that we do not count this towards the add message metric. Otherwise, the
+		// number of gossip messages could not be calculated by subtracting remove gossip message metric from add gossip
+		// message metric.
 		q.trimEmptyBuckets()
 		return
 	}
 	q.insertIntoBucket(0, message)
+	AddMessageTotal.Inc()
 }
 
 // insertIntoBucket inserts the given message into the bucket.
@@ -218,6 +221,7 @@ func (q *MessageQueue) trimMessages() {
 		// Shorten queue and buckets
 		q.queue = q.queue[:startOfBucketIndex]
 		q.endOfBucketIndices = q.endOfBucketIndices[:len(q.endOfBucketIndices)-1]
+		RemoveMessageTotal.Add(float64(endOfBucketIndex - startOfBucketIndex))
 	}
 }
 

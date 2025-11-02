@@ -56,10 +56,9 @@ func FailureDetectionFalsePositiveProbability(networkReliability float64, member
 
 // DisseminationPeriods returns the number of protocol periods required to disseminate a new information over all
 // members.
-// safetyFactor is a multiplier which describes the safety margin we want to have. A safetyFactor of 1.0 wil return the
-// minimal number of periods required in a perfect world. A factor of 2.0 will double the number of periods. Small
-// values between 1.0 and 3.0 should usually be a safe bet for calculating the number of times to gossip an information
-// or how long to wait until a suspicion should be converted to a confirmation.
+// safetyFactor is a multiplier which describes the safety margin for disseminating gossip and declaring a suspect
+// as faulty. A factor of 1.0 wil return the minimal number of periods required in a perfect world. A factor of 2.0
+// will double the number of periods. Small values between 2.0 and 4.0 should usually be a safe value.
 func DisseminationPeriods(safetyFactor float64, memberCount int) float64 {
 	return safetyFactor * math.Log(float64(memberCount))
 }

@@ -79,3 +79,9 @@ func WithMemberRemovedCallback(memberRemovedCallback func(address encoding.Addre
 		config.MemberRemovedCallback = memberRemovedCallback
 	}
 }
+
+func WithSafetyFactor(safetyFactor float64) Option {
+	return func(config *Config) {
+		config.SafetyFactor = safetyFactor
+	}
+}

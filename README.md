@@ -7,7 +7,6 @@ This Go library provides a peer-to-peer gossip based membership implementation. 
 
 ### Basic Requirements
 
-- The number a gossip is gossiped needs to be dynamically adjusted to the size of the member cluster.
 - Add metrics to expose what is happening.
 - Add encryption and support multiple encryption keys for key rollover. The first key is always used for encryption, all
   keys are used for decryption.

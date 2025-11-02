@@ -43,8 +43,14 @@ type Config struct {
 	// That way the overhead of starting and managing a go routine is left to the user, and he only needs to pay that
 	// price when necessary.
 	MemberRemovedCallback func(address encoding.Address)
+
+	// SafetyFactor is a multiplier which describes the safety margin for disseminating gossip and declaring a suspect
+	// as faulty. A factor of 1.0 wil return the minimal number of periods required in a perfect world. A factor of 2.0
+	// will double the number of periods. Small values between 2.0 and 4.0 should usually be a safe value.
+	SafetyFactor float64
 }
 
 var DefaultConfig = Config{
 	MaxDatagramLengthSend: 512,
+	SafetyFactor:          3,
 }

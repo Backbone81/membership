@@ -71,7 +71,7 @@ var rootCmd = &cobra.Command{
 		memoryTransport.AddTarget(address, newList)
 		lists = append(lists, newList)
 
-		periodCount := int(math.Ceil(membership.DisseminationPeriods(3, len(lists))))
+		periodCount := int(math.Ceil(membership.DisseminationPeriods(membership.DefaultConfig.SafetyFactor, len(lists))))
 		for i := range periodCount {
 			logger.Info("> Start of protocol period", "period", i)
 			if err := dumpClusterState(lists, i); err != nil {

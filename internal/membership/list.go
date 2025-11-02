@@ -273,15 +273,15 @@ func (l *List) EndOfProtocolPeriod() error {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
 
-	maxTransmissionCount := DisseminationPeriods(3, len(l.members)) // TODO: the safety factors needs to be configurable
-	l.gossipQueue.SetMaxTransmissionCount(int(math.Ceil(maxTransmissionCount)))
+	maxTransmissionCount := l.requiredDisseminationPeriods()
+	l.gossipQueue.SetMaxTransmissionCount(maxTransmissionCount)
 	l.markSuspectsAsFaulty()
 	l.processFailedProbes()
 	return nil
 }
 
 func (l *List) markSuspectsAsFaulty() {
-	suspicionPeriodThreshold := int(math.Ceil(DisseminationPeriods(3, len(l.members))))
+	suspicionPeriodThreshold := l.requiredDisseminationPeriods()
 
 	// As we are potentially removing elements from the member list, we need to iterate from the back to the front in
 	// order to not skip a member when the content changes.
@@ -1179,4 +1179,8 @@ func (l *List) WriteInternalDebugState(writer io.Writer) error {
 		}
 	}
 	return nil
+}
+
+func (l *List) requiredDisseminationPeriods() int {
+	return int(math.Ceil(DisseminationPeriods(l.config.SafetyFactor, len(l.members))))
 }

@@ -10,7 +10,6 @@ This Go library provides a peer-to-peer gossip based membership implementation. 
 - Add metrics to expose what is happening.
 - Add encryption and support multiple encryption keys for key rollover. The first key is always used for encryption, all
   keys are used for decryption.
-- Shutdown of the membership should send a faulty message to propagate the not existing member.
 - Improve test coverage
 - Check where we can replace a slices.Delete with a switch-with-last and reduce size by one.
 - The performance characteristics of the gossip queue is suboptimal. When creating a cluster with 16k members, the
@@ -28,6 +27,8 @@ This Go library provides a peer-to-peer gossip based membership implementation. 
   conversion.
 - We should find a mechanic which tells a member the last known incarnation number to allow joining members without
   having to remember the incarnation number.
+- Replicate the benchmarks about reliability of the protocol from the SWIM paper and papers improving it to have a
+  comparison between implementations.
 
 ### Nice to Have
 

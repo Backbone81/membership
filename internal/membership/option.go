@@ -71,3 +71,9 @@ func WithSafetyFactor(safetyFactor float64) Option {
 		config.SafetyFactor = safetyFactor
 	}
 }
+
+func WithShutdownMemberCount(memberCount int) Option {
+	return func(config *Config) {
+		config.ShutdownMemberCount = memberCount
+	}
+}

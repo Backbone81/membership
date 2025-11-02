@@ -73,6 +73,9 @@ func (l *List) Shutdown() error {
 	if err := l.udpServerTransport.Shutdown(); err != nil {
 		return err
 	}
+	if err := l.list.BroadcastShutdown(); err != nil {
+		return err
+	}
 	return nil
 }
 

@@ -1184,3 +1184,46 @@ func (l *List) WriteInternalDebugState(writer io.Writer) error {
 func (l *List) requiredDisseminationPeriods() int {
 	return int(math.Ceil(DisseminationPeriods(l.config.SafetyFactor, len(l.members))))
 }
+
+func (l *List) BroadcastShutdown() error {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	faultyMessage := gossip.MessageFaulty{
+		Source:            l.self,
+		Destination:       l.self,
+		IncarnationNumber: l.incarnationNumber,
+	}
+
+	members := l.pickShutdownMembers(l.config.ShutdownMemberCount)
+	for _, member := range members {
+		l.logger.Info(
+			"Broadcasting shutdown",
+			"address", member.Address,
+		)
+		// We send our broadcast with the gossip we have, to help disseminate that information before we are gone.
+		if err := l.sendWithGossip(member.Address, &faultyMessage); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (l *List) pickShutdownMembers(memberCount int) []*encoding.Member {
+	candidateIndexes := make([]int, 0, len(l.members))
+	for index := range l.members {
+		candidateIndexes = append(candidateIndexes, index)
+	}
+
+	rand.Shuffle(len(candidateIndexes), func(i, j int) {
+		candidateIndexes[i], candidateIndexes[j] = candidateIndexes[j], candidateIndexes[i]
+	})
+
+	// Pick the first few candidates.
+	candidateIndexes = candidateIndexes[:min(memberCount, len(candidateIndexes))]
+	result := make([]*encoding.Member, len(candidateIndexes))
+	for i := range candidateIndexes {
+		result[i] = &l.members[candidateIndexes[i]]
+	}
+	return result
+}

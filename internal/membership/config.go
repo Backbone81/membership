@@ -48,9 +48,15 @@ type Config struct {
 	// as faulty. A factor of 1.0 wil return the minimal number of periods required in a perfect world. A factor of 2.0
 	// will double the number of periods. Small values between 2.0 and 4.0 should usually be a safe value.
 	SafetyFactor float64
+
+	// ShutdownMemberCount is the number of members which are informed about this member shutting down. This helps in
+	// disseminating the missing member quicker to all other members, as we do not have to rely on direct and indirect
+	// pings failing against this member.
+	ShutdownMemberCount int
 }
 
 var DefaultConfig = Config{
 	MaxDatagramLengthSend: 512,
 	SafetyFactor:          3,
+	ShutdownMemberCount:   3,
 }

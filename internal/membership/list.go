@@ -13,6 +13,7 @@ import (
 
 	"github.com/backbone81/membership/internal/encoding"
 	"github.com/backbone81/membership/internal/gossip"
+	"github.com/backbone81/membership/internal/utility"
 	"github.com/go-logr/logr"
 )
 
@@ -539,7 +540,7 @@ func (l *List) handleDirectAckForPendingDirectProbes(pendingDirectProbes []Direc
 	}
 
 	pendingDirectProbe := pendingDirectProbes[pendingDirectProbeIndex]
-	pendingDirectProbes = slices.Delete(pendingDirectProbes, pendingDirectProbeIndex, pendingDirectProbeIndex+1)
+	pendingDirectProbes = utility.SwapDelete(pendingDirectProbes, pendingDirectProbeIndex)
 
 	if pendingDirectProbe.MessageIndirectPing.IsZero() {
 		// The direct probe was NOT done in a response to a request for an indirect probe, so we are done here.
@@ -565,7 +566,7 @@ func (l *List) handleDirectAckForPendingIndirectProbes(directAck MessageDirectAc
 	if pendingIndirectProbeIndex == -1 {
 		return
 	}
-	l.pendingIndirectProbes = slices.Delete(l.pendingIndirectProbes, pendingIndirectProbeIndex, pendingIndirectProbeIndex+1)
+	l.pendingIndirectProbes = utility.SwapDelete(l.pendingIndirectProbes, pendingIndirectProbeIndex)
 }
 
 func (l *List) handleIndirectPing(indirectPing MessageIndirectPing) error {
@@ -613,7 +614,7 @@ func (l *List) handleIndirectAckForPendingDirectProbes(indirectAck MessageIndire
 		return
 	}
 
-	l.pendingDirectProbes = slices.Delete(l.pendingDirectProbes, pendingDirectProbeIndex, pendingDirectProbeIndex+1)
+	l.pendingDirectProbes = utility.SwapDelete(l.pendingDirectProbes, pendingDirectProbeIndex)
 }
 
 func (l *List) handleIndirectAckForPendingIndirectProbes(indirectAck MessageIndirectAck) {
@@ -625,7 +626,7 @@ func (l *List) handleIndirectAckForPendingIndirectProbes(indirectAck MessageIndi
 	if pendingIndirectProbeIndex == -1 {
 		return
 	}
-	l.pendingIndirectProbes = slices.Delete(l.pendingIndirectProbes, pendingIndirectProbeIndex, pendingIndirectProbeIndex+1)
+	l.pendingIndirectProbes = utility.SwapDelete(l.pendingIndirectProbes, pendingIndirectProbeIndex)
 }
 
 func (l *List) handleSuspect(suspect gossip.MessageSuspect) {

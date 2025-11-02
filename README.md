@@ -8,7 +8,6 @@ This Go library provides a peer-to-peer gossip based membership implementation. 
 ### Basic Requirements
 
 - Improve test coverage
-- Check where we can replace a slices.Delete with a switch-with-last and reduce size by one.
 
 ### More Advanced Topics
 

@@ -79,18 +79,18 @@ func (m *Memory) AddPendingSend(address encoding.Address, buffer []byte) {
 
 // FlushPendingSends dispatches all pending send to the target with the given address. If no target is registered for
 // the given address, all pending sends are dropped.
-func (m *Memory) FlushPendingSends(address encoding.Address) error {
+func (m *Memory) FlushPendingSends(address encoding.Address) (bool, error) {
 	// We are deliberately not locking the mutex here, because this might lead to a deadlock situation.
 	// getPendingSends will acquire the lock on its own
 	pendingSends := m.getPendingSends(address)
 	if pendingSends == nil {
-		return nil
+		return false, nil
 	}
 
 	// target will acquire the lock on its own
 	target := m.target(address)
 	if target == nil {
-		return nil
+		return false, nil
 	}
 	var joinedError error
 	for _, pendingSend := range pendingSends {
@@ -104,15 +104,21 @@ func (m *Memory) FlushPendingSends(address encoding.Address) error {
 	defer m.mutex.Unlock()
 	m.bufferPool = append(m.bufferPool, pendingSends...)
 
-	return joinedError
+	return true, joinedError
 }
 
 // FlushAllPendingSends flushes all messages for all registered targets.
 func (m *Memory) FlushAllPendingSends() error {
 	var joinedError error
-	for _, target := range m.Addresses() {
-		if err := m.FlushPendingSends(target); err != nil {
-			joinedError = errors.Join(joinedError, err)
+	repeatFlush := true
+	for repeatFlush {
+		repeatFlush = false
+		for _, target := range m.Addresses() {
+			sent, err := m.FlushPendingSends(target)
+			if err != nil {
+				joinedError = errors.Join(joinedError, err)
+			}
+			repeatFlush = repeatFlush || sent
 		}
 	}
 	return joinedError

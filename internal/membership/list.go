@@ -25,7 +25,6 @@ type List struct {
 
 	nextSequenceNumber           int
 	incarnationNumber            int
-	failureDetectionSubgroupSize int
 
 	members       []encoding.Member
 	faultyMembers []encoding.Member
@@ -226,7 +225,7 @@ func (l *List) IndirectPing() error {
 		}
 
 		// Send the indirect probes to the indirect probe members and join up all errors which might occur.
-		members := l.pickIndirectProbes(l.failureDetectionSubgroupSize, directProbe.Destination)
+		members := l.pickIndirectProbes(l.config.IndirectPingMemberCount, directProbe.Destination)
 		l.pendingIndirectProbes = append(l.pendingIndirectProbes, IndirectProbeRecord{
 			Timestamp:           time.Now(),
 			MessageIndirectPing: indirectPing,

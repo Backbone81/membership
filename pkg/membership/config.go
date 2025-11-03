@@ -68,6 +68,10 @@ type Config struct {
 	// disseminating the missing member quicker to all other members, as we do not have to rely on direct and indirect
 	// pings failing against this member.
 	ShutdownMemberCount int
+
+	// IndirectPingMemberCount is the number of members to request a ping of some other member which did not respond
+	// in time.
+	IndirectPingMemberCount int
 }
 
 var DefaultConfig = Config{
@@ -80,4 +84,5 @@ var DefaultConfig = Config{
 	ListRequestInterval:      scheduler.DefaultConfig.ListRequestInterval,
 	SafetyFactor:             intmembership.DefaultConfig.SafetyFactor,
 	ShutdownMemberCount:      intmembership.DefaultConfig.ShutdownMemberCount,
+	IndirectPingMemberCount:  intmembership.DefaultConfig.IndirectPingMemberCount,
 }

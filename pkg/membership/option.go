@@ -91,3 +91,9 @@ func WithShutdownMemberCount(memberCount int) Option {
 		config.ShutdownMemberCount = memberCount
 	}
 }
+
+func WithIndirectPingMemberCount(memberCount int) Option {
+	return func(config *Config) {
+		config.IndirectPingMemberCount = memberCount
+	}
+}

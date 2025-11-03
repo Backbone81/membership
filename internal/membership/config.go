@@ -53,10 +53,15 @@ type Config struct {
 	// disseminating the missing member quicker to all other members, as we do not have to rely on direct and indirect
 	// pings failing against this member.
 	ShutdownMemberCount int
+
+	// IndirectPingMemberCount is the number of members to request a ping of some other member which did not respond
+	// in time.
+	IndirectPingMemberCount int
 }
 
 var DefaultConfig = Config{
-	MaxDatagramLengthSend: 512,
-	SafetyFactor:          3,
-	ShutdownMemberCount:   3,
+	MaxDatagramLengthSend:   512,
+	SafetyFactor:            3,
+	ShutdownMemberCount:     3,
+	IndirectPingMemberCount: 3,
 }

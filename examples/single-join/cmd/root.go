@@ -87,18 +87,12 @@ var rootCmd = &cobra.Command{
 			if err := memoryTransport.FlushAllPendingSends(); err != nil {
 				return err
 			}
-			if err := memoryTransport.FlushAllPendingSends(); err != nil {
-				return err
-			}
 
 			logger.Info("> Executing indirect pings")
 			for _, list := range lists {
 				if err := list.IndirectPing(); err != nil {
 					return err
 				}
-			}
-			if err := memoryTransport.FlushAllPendingSends(); err != nil {
-				return err
 			}
 			if err := memoryTransport.FlushAllPendingSends(); err != nil {
 				return err

@@ -941,13 +941,11 @@ var _ = Describe("List", func() {
 					Expect(list.DirectPing()).To(Succeed())
 				}
 				Expect(memoryTransport.FlushAllPendingSends()).To(Succeed())
-				Expect(memoryTransport.FlushAllPendingSends()).To(Succeed())
 
 				GinkgoLogr.Info("> Executing indirect pings")
 				for _, list := range lists {
 					Expect(list.IndirectPing()).To(Succeed())
 				}
-				Expect(memoryTransport.FlushAllPendingSends()).To(Succeed())
 				Expect(memoryTransport.FlushAllPendingSends()).To(Succeed())
 
 				GinkgoLogr.Info("> Executing end of protocol period")

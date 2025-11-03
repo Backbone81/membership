@@ -8,7 +8,6 @@ This Go library provides a peer-to-peer gossip based membership implementation. 
 ### Basic Requirements
 
 - Improve test coverage
-- Activate RequestList functionality again.
 - The performance characteristics of the gossip queue is suboptimal. When creating a cluster with 16k members, the
   creating of the cluster alone without any gossip takes excessive amount of time. Look into a ringbuffer
   implementation.

@@ -270,6 +270,14 @@ func (l *List) pickIndirectProbes(failureDetectionSubgroupSize int, directProbeA
 	return result
 }
 
+func (l *List) pickListRequestMember() *encoding.Member {
+	members := l.pickIndirectProbes(1, encoding.Address{})
+	if len(members) < 0 {
+		return nil
+	}
+	return members[0]
+}
+
 func (l *List) EndOfProtocolPeriod() error {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
@@ -366,31 +374,27 @@ func (l *List) processFailedProbes() {
 }
 
 func (l *List) RequestList() error {
-	// Disabled for now.
-	return nil
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
 
-	//if time.Since(l.lastListRequest) <= l.listRequestInterval {
-	//	// No need to request another member list, as we already have a quite up-to-date list from somebody else.
-	//	return nil
-	//}
-	//
-	//l.lastListRequest = time.Now()
-	//listRequest := MessageListRequest{
-	//	Source: l.self,
-	//}
-	//
-	//members := l.pickIndirectProbes(1, Address{})
-	//var joinedErr error
-	//for _, member := range members {
-	//	l.logger.V(1).Info(
-	//		"Requesting member list",
-	//		"destination", member.Address,
-	//	)
-	//	if err := l.sendWithGossip(member.Address, &listRequest); err != nil {
-	//		joinedErr = errors.Join(joinedErr, err)
-	//	}
-	//}
-	//return joinedErr
+	member := l.pickListRequestMember()
+	if member == nil {
+		// We could not pick a member to request the member list from. There probably is no other member at all.
+		return nil
+	}
+
+	listRequest := MessageListRequest{
+		Source: l.self,
+	}
+
+	l.logger.V(1).Info(
+		"Requesting member list",
+		"destination", member.Address,
+	)
+	if err := l.sendWithGossip(member.Address, &listRequest); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (l *List) DispatchDatagram(buffer []byte) error {

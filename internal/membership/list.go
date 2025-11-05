@@ -23,8 +23,8 @@ type List struct {
 	config Config
 	logger logr.Logger
 
-	nextSequenceNumber           int
-	incarnationNumber            int
+	nextSequenceNumber int
+	incarnationNumber  int
 
 	members       []encoding.Member
 	faultyMembers []encoding.Member
@@ -283,8 +283,8 @@ func (l *List) EndOfProtocolPeriod() error {
 
 	maxTransmissionCount := l.requiredDisseminationPeriods()
 	l.gossipQueue.SetMaxTransmissionCount(maxTransmissionCount)
-	l.markSuspectsAsFaulty()
 	l.processFailedProbes()
+	l.markSuspectsAsFaulty()
 	return nil
 }
 

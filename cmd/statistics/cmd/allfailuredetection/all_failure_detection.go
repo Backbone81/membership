@@ -1,8 +1,10 @@
-package firstdetection
+package allfailuredetection
 
 import (
 	"fmt"
+	"math"
 	"net"
+	"slices"
 
 	"github.com/backbone81/membership/internal/encoding"
 	"github.com/backbone81/membership/internal/membership"
@@ -11,9 +13,10 @@ import (
 	"github.com/go-logr/logr"
 )
 
-// FirstFailureDetection measures the time in protocol periods in which a failed member is detected by any other member.
-func FirstFailureDetection(logger logr.Logger) error {
-	logger.Info("The number of protocol periods between a member failure and its first detection at some non-faulty member.")
+// AllFailureDetection measures the time in protocol periods in which a failed member is known to all other members.
+// Either by ping other by gossip.
+func AllFailureDetection(logger logr.Logger) error {
+	logger.Info("The number of protocol periods between a member failure and its propagation to all non-faulty member.")
 	for memberCount := range utility.ClusterSize(2, 64, 512) {
 		memoryTransport := transport.NewMemory()
 
@@ -62,7 +65,12 @@ func buildCluster(memberCount int, memoryTransport *transport.Memory) ([]*member
 }
 
 func runProtocol(logger logr.Logger, lists []*membership.List, memoryTransport *transport.Memory, memberCount int) error {
-	for i := range 1024 {
+	detected := make([]int, len(lists))
+	for i := range len(detected) {
+		detected[i] = math.MaxInt
+	}
+	var detectedCount int
+	for protocolPeriod := range 1024 {
 		for _, list := range lists {
 			if err := list.DirectPing(); err != nil {
 				return err
@@ -86,13 +94,29 @@ func runProtocol(logger logr.Logger, lists []*membership.List, memoryTransport *
 				return err
 			}
 		}
-		for _, list := range lists {
+		for listIndex, list := range lists {
 			if list.Len() == memberCount-1 {
 				continue
 			}
-			logger.Info("Member failure detected", "cluster-size", memberCount, "protocol-periods", i+1)
-			return nil
+			if protocolPeriod < detected[listIndex] {
+				detected[listIndex] = protocolPeriod
+				detectedCount++
+			}
+		}
+		if detectedCount == len(detected) {
+			break
 		}
 	}
-	return fmt.Errorf("max number of protocol periods exceeded")
+	if detectedCount != len(detected) {
+		return fmt.Errorf("max number of protocol periods exceeded")
+	}
+	slices.Sort(detected)
+	logger.Info(
+		"Member failure detected",
+		"cluster-size", memberCount,
+		"min", detected[0]+1,
+		"median", detected[len(detected)/2]+1,
+		"max", detected[len(detected)-1]+1,
+	)
+	return nil
 }

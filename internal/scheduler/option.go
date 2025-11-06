@@ -23,13 +23,6 @@ func WithProtocolPeriod(protocolPeriod time.Duration) Option {
 	}
 }
 
-// WithDirectPingTimeout sets the given direct ping timeout for the scheduler.
-func WithDirectPingTimeout(directPingTimeout time.Duration) Option {
-	return func(config *Config) {
-		config.DirectPingTimeout = directPingTimeout
-	}
-}
-
 // WithMaxSleepDuration sets the given max sleep duration for the scheduler.
 func WithMaxSleepDuration(maxSleepDuration time.Duration) Option {
 	return func(config *Config) {

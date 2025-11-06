@@ -68,7 +68,6 @@ var rootCmd = &cobra.Command{
 
 		membershipList := membership.NewList(
 			membership.WithLogger(logger),
-			membership.WithDirectPingTimeout(directPingTimeout),
 			membership.WithProtocolPeriod(protocolPeriod),
 			membership.WithBootstrapMembers(resolvedBootstrapMembers),
 			membership.WithAdvertisedAddress(resolveAdvertiseAddress),

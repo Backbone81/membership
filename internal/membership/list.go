@@ -13,6 +13,7 @@ import (
 
 	"github.com/backbone81/membership/internal/encoding"
 	"github.com/backbone81/membership/internal/gossip"
+	"github.com/backbone81/membership/internal/roundtriptime"
 	"github.com/backbone81/membership/internal/utility"
 	"github.com/go-logr/logr"
 )
@@ -39,10 +40,15 @@ type List struct {
 	pendingDirectProbes     []DirectProbeRecord
 	pendingDirectProbesNext []DirectProbeRecord
 	pendingIndirectProbes   []IndirectProbeRecord
+
+	rttTracker *roundtriptime.Tracker
 }
 
 // DirectProbeRecord provides bookkeeping for a direct probe which is still active.
 type DirectProbeRecord struct {
+	// Timestamp is the point in time the direct probe was initiated.
+	Timestamp time.Time
+
 	// Destination is the address which the direct probe was sent to.
 	Destination encoding.Address
 
@@ -75,6 +81,7 @@ func NewList(options ...Option) *List {
 		self:           config.AdvertisedAddress,
 		gossipQueue:    gossip.NewMessageQueue(10), // TODO: The max gossip count needs to be adjusted for the number of members during runtime.
 		datagramBuffer: make([]byte, 0, config.MaxDatagramLengthSend),
+		rttTracker:     roundtriptime.NewTracker(),
 	}
 
 	// We need to gossip our own alive. Otherwise, nobody will pick us up into their own member list.
@@ -108,6 +115,13 @@ func (l *List) Get() []encoding.Address {
 		result = append(result, member.Address)
 	}
 	return result
+}
+
+func (l *List) ExpectedRoundTripTime() time.Duration {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	return l.rttTracker.GetCalculated()
 }
 
 func (l *List) GetMembers() []encoding.Member {
@@ -188,6 +202,7 @@ func (l *List) DirectPing() error {
 		"sequence-number", directPing.SequenceNumber,
 	)
 	l.pendingDirectProbes = append(l.pendingDirectProbes, DirectProbeRecord{
+		Timestamp:         time.Now(),
 		Destination:       destination,
 		MessageDirectPing: directPing,
 	})
@@ -271,7 +286,7 @@ func (l *List) pickIndirectProbes(failureDetectionSubgroupSize int, directProbeA
 
 func (l *List) pickListRequestMember() *encoding.Member {
 	members := l.pickIndirectProbes(1, encoding.Address{})
-	if len(members) < 0 {
+	if len(members) < 1 {
 		return nil
 	}
 	return members[0]
@@ -285,6 +300,7 @@ func (l *List) EndOfProtocolPeriod() error {
 	l.gossipQueue.SetMaxTransmissionCount(maxTransmissionCount)
 	l.processFailedProbes()
 	l.markSuspectsAsFaulty()
+	l.rttTracker.UpdateCalculated()
 	return nil
 }
 
@@ -545,6 +561,9 @@ func (l *List) handleDirectAckForPendingDirectProbes(pendingDirectProbes []Direc
 	pendingDirectProbe := pendingDirectProbes[pendingDirectProbeIndex]
 	pendingDirectProbes = utility.SwapDelete(pendingDirectProbes, pendingDirectProbeIndex)
 
+	// We note down the round trip time for the direct probe.
+	l.rttTracker.AddObserved(time.Since(pendingDirectProbe.Timestamp))
+
 	if pendingDirectProbe.MessageIndirectPing.IsZero() {
 		// The direct probe was NOT done in a response to a request for an indirect probe, so we are done here.
 		return pendingDirectProbes, nil
@@ -586,6 +605,7 @@ func (l *List) handleIndirectPing(indirectPing MessageIndirectPing) error {
 	l.nextSequenceNumber = (l.nextSequenceNumber + 1) % math.MaxUint16
 
 	l.pendingDirectProbesNext = append(l.pendingDirectProbesNext, DirectProbeRecord{
+		Timestamp:           time.Now(),
 		Destination:         indirectPing.Destination,
 		MessageDirectPing:   directPing,
 		MessageIndirectPing: indirectPing,
@@ -629,6 +649,11 @@ func (l *List) handleIndirectAckForPendingIndirectProbes(indirectAck MessageIndi
 	if pendingIndirectProbeIndex == -1 {
 		return
 	}
+
+	// We note down the round trip time for the indirect probe. Note that we divide by 2 because the indirect probe
+	// consists of two round trips.
+	l.rttTracker.AddObserved(time.Since(l.pendingIndirectProbes[pendingIndirectProbeIndex].Timestamp) / 2)
+
 	l.pendingIndirectProbes = utility.SwapDelete(l.pendingIndirectProbes, pendingIndirectProbeIndex)
 }
 

@@ -11,7 +11,6 @@ This Go library provides a peer-to-peer gossip based membership implementation. 
 - The performance characteristics of the gossip queue is suboptimal. When creating a cluster with 16k members, the
   creating of the cluster alone without any gossip takes excessive amount of time. Look into a ringbuffer
   implementation.
-- Provide an auto round-trip timeout which is derived from the 99th percentile of past network messages and use +10%
 - Support more than one direct probes during the protocol period
 
 ### More Advanced Topics

@@ -21,6 +21,7 @@ type TestTarget struct {
 	IndirectPingTimes        []time.Time
 	EndOfProtocolPeriodTimes []time.Time
 	RequestListTimes         []time.Time
+	RTT                      time.Duration
 }
 
 // TestTarget implements scheduler.Target
@@ -44,4 +45,8 @@ func (t *TestTarget) EndOfProtocolPeriod() error {
 func (t *TestTarget) RequestList() error {
 	t.RequestListTimes = append(t.RequestListTimes, time.Now())
 	return nil
+}
+
+func (t *TestTarget) ExpectedRoundTripTime() time.Duration {
+	return t.RTT
 }

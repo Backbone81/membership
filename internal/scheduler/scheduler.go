@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"math"
 	"sync"
 	"time"
 
@@ -59,6 +60,7 @@ func (s *Scheduler) protocolPeriodTask() {
 	s.logger.Info("Protocol period background task started")
 	defer s.logger.Info("Protocol period background task finished")
 
+	var lastExpectedRoundTripTime time.Duration
 	directPingAt := time.Now()
 	for {
 		s.measure("Direct ping completed", func() {
@@ -67,10 +69,24 @@ func (s *Scheduler) protocolPeriodTask() {
 			}
 		})
 
-		indirectPingAt := directPingAt.Add(s.config.DirectPingTimeout)
-		if indirectPingAt.Sub(time.Now()) < s.config.DirectPingTimeout/2 {
+		// Adjust the timeout for the direct ping to what we observed can be expected. We always use the current value
+		// for the timeout, but we also want to create a log entry, when the timeout changes significantly. Therefore,
+		// we only log when we move at least 10% away of the last time we logged.
+		currExpectedRoundTripTime := s.target.ExpectedRoundTripTime()
+		logThreshold := lastExpectedRoundTripTime / 10
+		if math.Abs(float64(currExpectedRoundTripTime)-float64(lastExpectedRoundTripTime)) > float64(logThreshold) {
 			s.logger.Info(
-				"WARNING: The time between the direct ping and indirect ping is less than 50% of the configured timeout. " +
+				"Direct ping timeout adjusted",
+				"was", lastExpectedRoundTripTime,
+				"is", currExpectedRoundTripTime,
+			)
+			lastExpectedRoundTripTime = currExpectedRoundTripTime
+		}
+
+		indirectPingAt := directPingAt.Add(currExpectedRoundTripTime)
+		if indirectPingAt.Sub(time.Now()) < currExpectedRoundTripTime/2 {
+			s.logger.Info(
+				"WARNING: The time between the direct ping and indirect ping is less than 50% of the expected round trip time. " +
 					"This is a strong indication that the system is overloaded. " +
 					"Members declared as suspect or faulty by this member are probably false positives.",
 			)

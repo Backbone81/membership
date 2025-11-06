@@ -36,7 +36,6 @@ func NewList(options ...Option) *List {
 		list,
 		intscheduler.WithLogger(config.Logger),
 		intscheduler.WithProtocolPeriod(config.ProtocolPeriod),
-		intscheduler.WithDirectPingTimeout(config.DirectPingTimeout),
 		intscheduler.WithMaxSleepDuration(config.MaxSleepDuration),
 		intscheduler.WithListRequestInterval(config.ListRequestInterval),
 	)

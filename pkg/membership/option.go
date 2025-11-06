@@ -23,13 +23,6 @@ func WithProtocolPeriod(protocolPeriod time.Duration) Option {
 	}
 }
 
-// WithDirectPingTimeout sets the given direct ping timeout for the list.
-func WithDirectPingTimeout(directPingTimeout time.Duration) Option {
-	return func(config *Config) {
-		config.DirectPingTimeout = directPingTimeout
-	}
-}
-
 func WithBootstrapMember(address encoding.Address) Option {
 	return func(config *Config) {
 		config.BootstrapMembers = append(config.BootstrapMembers, address)

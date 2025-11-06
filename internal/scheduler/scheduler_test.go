@@ -15,12 +15,12 @@ var _ = Describe("Scheduler", func() {
 		directPingTimeout := 3 * time.Millisecond
 		listRequestInterval := 3 * protocolPeriod
 		maxSleepDuration := 100 * time.Microsecond
+		target.RTT = directPingTimeout
 
 		myScheduler := scheduler.New(
 			&target,
 			scheduler.WithLogger(GinkgoLogr),
 			scheduler.WithProtocolPeriod(protocolPeriod),
-			scheduler.WithDirectPingTimeout(directPingTimeout),
 			scheduler.WithMaxSleepDuration(maxSleepDuration),
 			scheduler.WithListRequestInterval(listRequestInterval),
 		)

@@ -16,10 +16,6 @@ type Config struct {
 	// Note that the protocol period must be at least three times the round-trip time.
 	ProtocolPeriod time.Duration
 
-	// DirectPingTimeout is the time to wait for a direct ping response. If there is no response within this duration,
-	// we need to start indirect pings.
-	DirectPingTimeout time.Duration
-
 	// MaxSleepDuration is the maximum duration which the scheduler is allowed to sleep. Making this value bigger will
 	// result in delays during shutdown. Making this value smaller will wake the scheduler more often to check for
 	// a shutdown in progress which will cause more load during runtime.
@@ -32,7 +28,6 @@ type Config struct {
 // DefaultConfig provides a scheduler configuration with sane defaults for most situations.
 var DefaultConfig = Config{
 	ProtocolPeriod:      1 * time.Second,
-	DirectPingTimeout:   100 * time.Millisecond,
 	MaxSleepDuration:    100 * time.Millisecond,
 	ListRequestInterval: 1 * time.Minute,
 }

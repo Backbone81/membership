@@ -685,7 +685,7 @@ func (l *List) handleSuspectForSelf(suspect gossip.MessageSuspect) bool {
 
 	// We need to refute the suspect about ourselves. Add a new alive message to gossip.
 	// Also make sure that our incarnation number is bigger than before.
-	l.incarnationNumber = max(l.incarnationNumber+1, suspect.IncarnationNumber+1)
+	l.incarnationNumber = max(l.incarnationNumber+1, suspect.IncarnationNumber+1) % math.MaxUint16
 	l.gossipQueue.Add(&gossip.MessageAlive{
 		Source:            l.self,
 		IncarnationNumber: l.incarnationNumber,
@@ -886,7 +886,7 @@ func (l *List) handleFaultyForSelf(faulty gossip.MessageFaulty) bool {
 
 	// We need to re-join. Add a new alive message to gossip.
 	// Also make sure that our incarnation number is bigger than before.
-	l.incarnationNumber = max(l.incarnationNumber+1, faulty.IncarnationNumber+1)
+	l.incarnationNumber = max(l.incarnationNumber+1, faulty.IncarnationNumber+1) % math.MaxUint16
 	l.gossipQueue.Add(&gossip.MessageAlive{
 		Source:            l.self,
 		IncarnationNumber: l.incarnationNumber,

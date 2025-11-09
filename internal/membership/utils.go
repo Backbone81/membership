@@ -72,3 +72,13 @@ func DisseminationPeriods(safetyFactor float64, memberCount int) float64 {
 func SuspicionTimeout(protocolPeriod time.Duration, safetyFactor float64, memberCount int) time.Duration {
 	return time.Duration(protocolPeriod.Seconds() * DisseminationPeriods(safetyFactor, memberCount) * float64(time.Second))
 }
+
+// IsIncarnationNumberNewer reports of the new incarnation number is bigger than the old one and therefore newer. It
+// considers the wraparound of an unsigned 16-bit integer correctly. The implementation is inspired by TCP in RFC 1323,
+func IsIncarnationNumberNewer(old int, new int) bool {
+	const maxValue = 1 << 16
+	const halfSpace = 1 << 15
+
+	diff := (new - old + maxValue) % maxValue
+	return diff > 0 && diff < halfSpace
+}

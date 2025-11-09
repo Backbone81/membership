@@ -52,10 +52,6 @@ is picked and the full membership list is requested.
 ### Basic Requirements
 
 - Improve test coverage
-- The performance characteristics of the gossip queue is suboptimal. When creating a cluster with 16k members, the
-  creating of the cluster alone without any gossip takes excessive amount of time. Look into a ringbuffer
-  implementation.
-- Being pinged by an unknown node can be taken as alive.
 - Investigate how we can increase the suspicion timeout when we are under high CPU load. High CPU load can be detected
   by the scheduler as the times between direct pings, indirect pings and end of protocol are either significant shorter
   than expected or even overshot immediately.
@@ -69,7 +65,6 @@ is picked and the full membership list is requested.
 
 ### More Advanced Topics
 
-- How should we deal with sequence number wrap-around?
 - How should we deal with incarnation number wrap-around?
 - We should find a mechanic which tells a member the last known incarnation number to allow joining members without
   having to remember the incarnation number.
@@ -82,6 +77,7 @@ is picked and the full membership list is requested.
 
 ### Nice to Have
 
+- A ring buffer implementation for the gossip queue might perform better than the current bucket implementation.
 - Should the FromBuffer functions return the remaining buffer to make it easier and less error-prone to work with?
 - Make sure we provide enough context for all error returns.
 - Check if we really need to use panic anywhere.

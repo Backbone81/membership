@@ -74,18 +74,18 @@ func WithSafetyFactor(safetyFactor float64) Option {
 
 func WithShutdownMemberCount(memberCount int) Option {
 	return func(config *Config) {
-		config.ShutdownMemberCount = memberCount
+		config.ShutdownMemberCount = max(1, min(memberCount, 64))
 	}
 }
 
 func WithDirectPingMemberCount(memberCount int) Option {
 	return func(config *Config) {
-		config.DirectPingMemberCount = memberCount
+		config.DirectPingMemberCount = max(1, min(memberCount, 64))
 	}
 }
 
 func WithIndirectPingMemberCount(memberCount int) Option {
 	return func(config *Config) {
-		config.IndirectPingMemberCount = memberCount
+		config.IndirectPingMemberCount = max(1, min(memberCount, 64))
 	}
 }

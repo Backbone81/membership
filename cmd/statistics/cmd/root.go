@@ -3,6 +3,8 @@ package cmd
 import (
 	"os"
 
+	"github.com/backbone81/membership/cmd/statistics/cmd/allfailuredetection"
+	"github.com/backbone81/membership/cmd/statistics/cmd/firstdetection"
 	"github.com/backbone81/membership/cmd/statistics/cmd/packetlossjoin"
 	"github.com/backbone81/membership/internal/utility"
 	"github.com/spf13/cobra"
@@ -21,13 +23,13 @@ var rootCmd = &cobra.Command{
 		}
 		defer zapLogger.Sync()
 
-		//if err := firstdetection.FirstFailureDetection(logger); err != nil {
-		//	return err
-		//}
-		//
-		//if err := allfailuredetection.AllFailureDetection(logger); err != nil {
-		//	return err
-		//}
+		if err := firstdetection.FirstFailureDetection(logger); err != nil {
+			return err
+		}
+
+		if err := allfailuredetection.AllFailureDetection(logger); err != nil {
+			return err
+		}
 
 		if err := packetlossjoin.PacketLossJoin(logger); err != nil {
 			return err

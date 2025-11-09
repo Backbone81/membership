@@ -57,8 +57,6 @@ is picked and the full membership list is requested.
   implementation.
 - Support more than one direct probes during the protocol period
 - Being pinged by an unknown node can be taken as alive.
-- Investigate what bounds we need for log n and the security factor to ensure a guaranteed dissemination. And do we use
-  math.Log, math.Log2 or math.Log10?
 - Investigate how we can increase the suspicion timeout when we are under high CPU load. High CPU load can be detected
   by the scheduler as the times between direct pings, indirect pings and end of protocol are either significant shorter
   than expected or even overshot immediately.
@@ -68,6 +66,7 @@ is picked and the full membership list is requested.
 - Investigate how we can detect network issues on the own member side? Is a high suspicious rate an indicator?
 - Cleanup the faulty member list after some time to avoid endless growth in situations where members are very dynamic.
 - Serialize the current state on shutdown and allow that state to be re-used during startup.
+- We might want to separate gossip count from suspect timeout
 
 ### More Advanced Topics
 

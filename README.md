@@ -1,7 +1,51 @@
 # Membership
 
-This Go library provides a peer-to-peer gossip based membership implementation. It implements
-[SWIM: Scalable Weakly-consistent Infection-style Process Group Membership Protocol](https://doi.org/10.1109/DSN.2002.1028914).
+This Go library provides a membership list for distributed processes based on the
+[SWIM: Scalable Weakly-consistent Infection-style Process Group Membership Protocol](https://doi.org/10.1109/DSN.2002.1028914)
+with improvements from
+[Lifeguard: Local Health Awareness for More Accurate Failure Detection](https://doi.org/10.48550/arXiv.1707.00788).
+
+## Features
+
+- Peer-to-peer without a single point of failure.
+- Joining the cluster requires knowledge of at least one other cluster member.
+- Eventual consistency through gossip based propagation of changes.
+- Constant low CPU and network load for each member independent of the cluster size (except for the periodic full list
+  sync).
+- Pings and their responses with gossip piggybacked are sent as UDP messages.
+- Each member will ping some other member every n-1 protocol periods on average and every 2n-1 protocol periods in the
+  worst case, where n is the size of the cluster.
+- The timeout for a direct ping which triggers an indirect ping is dynamically adjusted according to the round trip
+  times of past network messages.
+- A periodic full synchronization between two members is done over TCP to address situations where bad luck resulted in
+  an inconsistent state which would not self-heal anymore.
+- Failure detection at any member happens in constant time.
+- Dissemination of changes to the whole cluster happens in logarithmic time on the cluster size.
+- Changes which were gossiped the least are prioritized over changes which were gossipped more when deciding on what
+  to gossip next.
+- Gossip about a member is always gossipped to that member with priority to allow quicker corrections of false suspects.
+- A graceful shutdown will propagate the failure of the node shutting down, reducing the detection time.
+
+## Mechanic
+
+The library works in cycles called protocol periods. One protocol period is usually one second.
+
+Each protocol period starts out with picking one other known member at random and sending a ping message. Once the
+destination receives that ping message, it responds with an acknowledgment message.
+
+If the destination does not respond within some timeout, some other member is randomly chosen and sent a message which
+requests that member to ping the not responding member. If that indirect ping is answered until the end of the protocol
+period, the member stays alive. If no answer is received, the member is marked as being suspected to have failed.
+
+If the member stays suspect for a few protocol periods, it is declared failed and removed from the membership list.
+
+All changes about members being alive, suspect or faulty are piggybacked on the ping and acknowledge messages which
+disseminates the changes throughout the cluster. After some maximum number of times of having been disseminated, the
+gossip is dropped.
+
+Situations can arise where some member might not receive a specific change and the change is not gossiped any more by
+other members. To tackle this issue, there is a full exchange of membership list at a low frequency. A random member
+is picked and the full membership list is requested.
 
 ## TODOs
 
@@ -12,6 +56,18 @@ This Go library provides a peer-to-peer gossip based membership implementation. 
   creating of the cluster alone without any gossip takes excessive amount of time. Look into a ringbuffer
   implementation.
 - Support more than one direct probes during the protocol period
+- Being pinged by an unknown node can be taken as alive.
+- Investigate what bounds we need for log n and the security factor to ensure a guaranteed dissemination. And do we use
+  math.Log, math.Log2 or math.Log10?
+- Investigate how we can increase the suspicion timeout when we are under high CPU load. High CPU load can be detected
+  by the scheduler as the times between direct pings, indirect pings and end of protocol are either significant shorter
+  than expected or even overshot immediately.
+- How can a member re-join when it was disconnected through a network partition from everybody else for a long time?
+  We probably need to deal with the bootstrap members in a way where we try to contact them periodically when they
+  dropped out of our member list.
+- Investigate how we can detect network issues on the own member side? Is a high suspicious rate an indicator?
+- Cleanup the faulty member list after some time to avoid endless growth in situations where members are very dynamic.
+- Serialize the current state on shutdown and allow that state to be re-used during startup.
 
 ### More Advanced Topics
 
@@ -35,3 +91,6 @@ This Go library provides a peer-to-peer gossip based membership implementation. 
 - The message setup in the message tests are quite repetitive. We should consolidate them.
 - Introduce jitter into the scheduler to avoid spikes in network traffic.
 - Regularly log the statistical information about ping chance and time until all know about gossip
+- Do a TCP ping when the UDP ping times out for networks which do not correctly route UDP.
+- Look into out of bounds gossip messages in situations where more gossip is in the gossip queue than can sensibly
+  propagated in the near future. Or would dynamically increase the number of direct ping targets solve the same issue?

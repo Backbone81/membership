@@ -183,31 +183,28 @@ func (l *List) DirectPing() error {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
 
-	if len(l.members) < 1 {
-		// As long as there are no other members, we don't have to probe anyone.
-		return nil
-	}
+	for range min(len(l.members), l.config.DirectPingMemberCount) {
+		directPing := MessageDirectPing{
+			Source:         l.self,
+			SequenceNumber: l.nextSequenceNumber,
+		}
+		l.nextSequenceNumber = (l.nextSequenceNumber + 1) % math.MaxUint16
 
-	directPing := MessageDirectPing{
-		Source:         l.self,
-		SequenceNumber: l.nextSequenceNumber,
-	}
-	l.nextSequenceNumber = (l.nextSequenceNumber + 1) % math.MaxUint16
-
-	destination := l.getNextMember().Address
-	l.logger.V(1).Info(
-		"Direct probe",
-		"source", l.self,
-		"destination", destination,
-		"sequence-number", directPing.SequenceNumber,
-	)
-	l.pendingDirectProbes = append(l.pendingDirectProbes, DirectProbeRecord{
-		Timestamp:         time.Now(),
-		Destination:       destination,
-		MessageDirectPing: directPing,
-	})
-	if err := l.sendWithGossip(destination, &directPing); err != nil {
-		return err
+		destination := l.getNextMember().Address
+		l.logger.V(1).Info(
+			"Direct probe",
+			"source", l.self,
+			"destination", destination,
+			"sequence-number", directPing.SequenceNumber,
+		)
+		l.pendingDirectProbes = append(l.pendingDirectProbes, DirectProbeRecord{
+			Timestamp:         time.Now(),
+			Destination:       destination,
+			MessageDirectPing: directPing,
+		})
+		if err := l.sendWithGossip(destination, &directPing); err != nil {
+			return err
+		}
 	}
 	return nil
 }

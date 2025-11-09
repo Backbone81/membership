@@ -54,6 +54,9 @@ type Config struct {
 	// pings failing against this member.
 	ShutdownMemberCount int
 
+	// DirectPingMemberCount is the number of members to ping directly.
+	DirectPingMemberCount int
+
 	// IndirectPingMemberCount is the number of members to request a ping of some other member which did not respond
 	// in time.
 	IndirectPingMemberCount int
@@ -63,5 +66,6 @@ var DefaultConfig = Config{
 	MaxDatagramLengthSend:   512,
 	SafetyFactor:            3,
 	ShutdownMemberCount:     3,
+	DirectPingMemberCount:   1,
 	IndirectPingMemberCount: 3,
 }

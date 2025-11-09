@@ -55,7 +55,6 @@ is picked and the full membership list is requested.
 - The performance characteristics of the gossip queue is suboptimal. When creating a cluster with 16k members, the
   creating of the cluster alone without any gossip takes excessive amount of time. Look into a ringbuffer
   implementation.
-- Support more than one direct probes during the protocol period
 - Being pinged by an unknown node can be taken as alive.
 - Investigate how we can increase the suspicion timeout when we are under high CPU load. High CPU load can be detected
   by the scheduler as the times between direct pings, indirect pings and end of protocol are either significant shorter

@@ -65,6 +65,9 @@ type Config struct {
 	// pings failing against this member.
 	ShutdownMemberCount int
 
+	// DirectPingMemberCount is the number of members to ping directly.
+	DirectPingMemberCount int
+
 	// IndirectPingMemberCount is the number of members to request a ping of some other member which did not respond
 	// in time.
 	IndirectPingMemberCount int
@@ -79,5 +82,6 @@ var DefaultConfig = Config{
 	ListRequestInterval:      scheduler.DefaultConfig.ListRequestInterval,
 	SafetyFactor:             intmembership.DefaultConfig.SafetyFactor,
 	ShutdownMemberCount:      intmembership.DefaultConfig.ShutdownMemberCount,
+	DirectPingMemberCount:    intmembership.DefaultConfig.DirectPingMemberCount,
 	IndirectPingMemberCount:  intmembership.DefaultConfig.IndirectPingMemberCount,
 }

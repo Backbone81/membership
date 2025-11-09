@@ -29,6 +29,10 @@ func NewList(options ...Option) *List {
 		intmembership.WithTCPClient(inttransport.NewTCPClient()),
 		intmembership.WithMemberAddedCallback(config.MemberAddedCallback),
 		intmembership.WithMemberRemovedCallback(config.MemberRemovedCallback),
+		intmembership.WithSafetyFactor(config.SafetyFactor),
+		intmembership.WithShutdownMemberCount(config.ShutdownMemberCount),
+		intmembership.WithDirectPingMemberCount(config.DirectPingMemberCount),
+		intmembership.WithIndirectPingMemberCount(config.IndirectPingMemberCount),
 	)
 	udpServerTransport := inttransport.NewUDPServer(config.Logger, list, config.BindAddress, config.MaxDatagramLengthReceive)
 	tcpServerTransport := inttransport.NewTCPServer(config.Logger, list, config.BindAddress)

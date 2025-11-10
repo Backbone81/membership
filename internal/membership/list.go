@@ -678,7 +678,7 @@ func (l *List) handleSuspectForSelf(suspect gossip.MessageSuspect) bool {
 		return false
 	}
 
-	if suspect.IncarnationNumber < l.incarnationNumber {
+	if IncarnationLessThan(suspect.IncarnationNumber, l.incarnationNumber) {
 		// We have a more up-to-date state than the gossip. Nothing to do.
 		return true
 	}
@@ -879,7 +879,7 @@ func (l *List) handleFaultyForSelf(faulty gossip.MessageFaulty) bool {
 		return false
 	}
 
-	if faulty.IncarnationNumber < l.incarnationNumber {
+	if IncarnationLessThan(faulty.IncarnationNumber, l.incarnationNumber) {
 		// We have a more up-to-date state than the gossip. Nothing to do.
 		return true
 	}

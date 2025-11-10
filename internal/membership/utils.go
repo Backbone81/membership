@@ -73,12 +73,13 @@ func SuspicionTimeout(protocolPeriod time.Duration, safetyFactor float64, member
 	return time.Duration(protocolPeriod.Seconds() * DisseminationPeriods(safetyFactor, memberCount) * float64(time.Second))
 }
 
-// IsIncarnationNumberNewer reports of the new incarnation number is bigger than the old one and therefore newer. It
-// considers the wraparound of an unsigned 16-bit integer correctly. The implementation is inspired by TCP in RFC 1323,
-func IsIncarnationNumberNewer(old int, new int) bool {
+// IncarnationLessThan reports if the left hand side incarnation number is less than the right hand side incarnation
+// number. It correctly deals with wraparound of incarnation numbers for a 16-bit unsigned integer. The implementation
+// is inspired by TCP in RFC 1323.
+func IncarnationLessThan(lhs int, rhs int) bool {
 	const maxValue = 1 << 16
 	const halfSpace = 1 << 15
 
-	diff := (new - old + maxValue) % maxValue
+	diff := (rhs - lhs + maxValue) % maxValue
 	return diff > 0 && diff < halfSpace
 }

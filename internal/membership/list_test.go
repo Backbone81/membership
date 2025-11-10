@@ -933,7 +933,7 @@ var _ = Describe("List", func() {
 			memoryTransport.AddTarget(address, newList)
 			lists = append(lists, newList)
 
-			periodCount := int(math.Ceil(membership.DisseminationPeriods(membership.DefaultConfig.SafetyFactor*6, len(lists))))
+			periodCount := int(math.Ceil(membership.DisseminationPeriods(membership.DefaultConfig.SafetyFactor*8, len(lists))))
 			for i := range periodCount {
 				GinkgoLogr.Info("> Start of protocol period", "period", i)
 				GinkgoLogr.Info("> Executing direct pings")

@@ -65,7 +65,6 @@ is picked and the full membership list is requested.
 
 ### More Advanced Topics
 
-- How should we deal with incarnation number wrap-around?
 - We should find a mechanic which tells a member the last known incarnation number to allow joining members without
   having to remember the incarnation number.
 - Add encryption and support multiple encryption keys for key rollover. The first key is always used for encryption, all

@@ -3,8 +3,9 @@ package membership
 import (
 	"time"
 
-	"github.com/backbone81/membership/internal/encoding"
 	"github.com/go-logr/logr"
+
+	"github.com/backbone81/membership/internal/encoding"
 )
 
 type Option func(config *Config)
@@ -31,9 +32,7 @@ func WithBootstrapMember(address encoding.Address) Option {
 
 func WithBootstrapMembers(addresses []encoding.Address) Option {
 	return func(config *Config) {
-		for _, address := range addresses {
-			config.BootstrapMembers = append(config.BootstrapMembers, address)
-		}
+		config.BootstrapMembers = append(config.BootstrapMembers, addresses...)
 	}
 }
 

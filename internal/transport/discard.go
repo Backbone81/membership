@@ -6,7 +6,7 @@ import "github.com/backbone81/membership/internal/encoding"
 // tests and benchmarks, when we do not want to send network messages for real.
 type Discard struct{}
 
-// Discard implements Transport
+// Discard implements Transport.
 var _ Transport = (*Discard)(nil)
 
 func (d *Discard) Send(address encoding.Address, buffer []byte) error {

@@ -3,14 +3,15 @@ package cmd
 import (
 	"os"
 
+	"github.com/spf13/cobra"
+
 	"github.com/backbone81/membership/cmd/statistics/cmd/allfailuredetection"
 	"github.com/backbone81/membership/cmd/statistics/cmd/firstdetection"
 	"github.com/backbone81/membership/cmd/statistics/cmd/packetlossjoin"
 	"github.com/backbone81/membership/internal/utility"
-	"github.com/spf13/cobra"
 )
 
-// rootCmd represents the base command when called without any subcommands
+// rootCmd represents the base command when called without any subcommands.
 var rootCmd = &cobra.Command{
 	Use:          "statistics",
 	Short:        "Outputs some statistics about membership clusters in different sizes.",

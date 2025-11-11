@@ -13,7 +13,7 @@ type UDPClient struct {
 	maxDatagramLength int
 }
 
-// UDPClient implements Transport
+// UDPClient implements Transport.
 var _ Transport = (*UDPClient)(nil)
 
 // NewUDPClient creates a new UDPClient transport.

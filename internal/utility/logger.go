@@ -9,7 +9,7 @@ import (
 
 func CreateLogger(verbosity int) (logr.Logger, *zap.Logger, error) {
 	zapConfig := zap.Config{
-		Level:       zap.NewAtomicLevelAt(zapcore.Level(-verbosity)),
+		Level:       zap.NewAtomicLevelAt(zapcore.Level(-verbosity)), //nolint:gosec
 		Development: true,
 		Encoding:    "console",
 		EncoderConfig: zapcore.EncoderConfig{

@@ -9,7 +9,7 @@ type Store struct {
 	Buffers   [][]byte
 }
 
-// Store implements Transport
+// Store implements Transport.
 var _ Transport = (*Store)(nil)
 
 func (s *Store) Send(address encoding.Address, buffer []byte) error {

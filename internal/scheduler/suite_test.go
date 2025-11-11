@@ -4,9 +4,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/backbone81/membership/internal/scheduler"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/backbone81/membership/internal/scheduler"
 )
 
 func TestSuite(t *testing.T) {
@@ -24,7 +25,7 @@ type TestTarget struct {
 	RTT                      time.Duration
 }
 
-// TestTarget implements scheduler.Target
+// TestTarget implements scheduler.Target.
 var _ scheduler.Target = (*TestTarget)(nil)
 
 func (t *TestTarget) DirectPing() error {

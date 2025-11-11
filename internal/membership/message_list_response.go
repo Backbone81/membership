@@ -74,7 +74,7 @@ func (m *MessageListResponse) FromBuffer(buffer []byte) (int, error) {
 	}
 
 	var memberN int
-	for i := 0; i < count; i++ {
+	for range count {
 		member, n, err := encoding.MemberFromBuffer(buffer[messageTypeN+sourceN+countN+memberN:])
 		if err != nil {
 			return 0, err

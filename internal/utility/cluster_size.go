@@ -6,7 +6,7 @@ import (
 )
 
 // ClusterSize returns a range over function type which returns a linear sequence of integers from minMemberCount to
-// linearCutoff and afterward doubles until maxMemberCount is reached. This allows for easy iteration over several cluster sizes
+// linearCutoff and afterward doubles until maxMemberCount is reached. This allows for easy iteration over several cluster sizes.
 func ClusterSize(minMemberCount int, linearCutoff int, maxMemberCount int) iter.Seq[int] {
 	if minMemberCount < 1 {
 		panic("the min member count needs to be a positive integer")

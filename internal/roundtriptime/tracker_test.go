@@ -4,9 +4,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/backbone81/membership/internal/roundtriptime"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/backbone81/membership/internal/roundtriptime"
 )
 
 var _ = Describe("Tracker", func() {

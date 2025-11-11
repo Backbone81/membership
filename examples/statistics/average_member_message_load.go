@@ -6,10 +6,11 @@ import (
 	"os"
 	"text/tabwriter"
 
+	"github.com/go-logr/logr"
+
 	"github.com/backbone81/membership/internal/encoding"
 	"github.com/backbone81/membership/internal/membership"
 	"github.com/backbone81/membership/internal/transport"
-	"github.com/go-logr/logr"
 )
 
 // AverageMemberMessageLoad calculates the average member message load per protocol period with average sends and

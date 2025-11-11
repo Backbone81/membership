@@ -3,9 +3,10 @@ package transport_test
 import (
 	"testing"
 
-	"github.com/backbone81/membership/internal/transport"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/backbone81/membership/internal/transport"
 )
 
 func TestSuite(t *testing.T) {
@@ -19,7 +20,7 @@ type TestTarget struct {
 	DataReceived []byte
 }
 
-// TestTarget implements scheduler.Target
+// TestTarget implements scheduler.Target.
 var _ transport.Target = (*TestTarget)(nil)
 
 func (t *TestTarget) DispatchDatagram(buffer []byte) error {

@@ -18,7 +18,7 @@ type Unreliable struct {
 	Reliability float64
 }
 
-// Unreliable implements Transport
+// Unreliable implements Transport.
 var _ Transport = (*Unreliable)(nil)
 
 func (u *Unreliable) Send(address encoding.Address, buffer []byte) error {

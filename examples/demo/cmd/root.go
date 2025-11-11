@@ -7,9 +7,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/spf13/cobra"
+
 	"github.com/backbone81/membership/internal/utility"
 	"github.com/backbone81/membership/pkg/membership"
-	"github.com/spf13/cobra"
 )
 
 var (
@@ -24,7 +25,7 @@ var (
 	members           []string
 )
 
-// rootCmd represents the base command when called without any subcommands
+// rootCmd represents the base command when called without any subcommands.
 var rootCmd = &cobra.Command{
 	Use:          "demo",
 	Short:        "Demonstrates the use of the membership library.",

@@ -6,11 +6,12 @@ import (
 	"net"
 	"os"
 
+	"github.com/spf13/cobra"
+
 	"github.com/backbone81/membership/internal/encoding"
 	"github.com/backbone81/membership/internal/membership"
 	"github.com/backbone81/membership/internal/transport"
 	"github.com/backbone81/membership/internal/utility"
-	"github.com/spf13/cobra"
 )
 
 var (
@@ -20,7 +21,7 @@ var (
 	memberCount              int
 )
 
-// rootCmd represents the base command when called without any subcommands
+// rootCmd represents the base command when called without any subcommands.
 var rootCmd = &cobra.Command{
 	Use:          "single-join",
 	Short:        "Lets a single new member join an established cluster.",

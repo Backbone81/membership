@@ -4,10 +4,11 @@ import (
 	"net"
 	"testing"
 
-	"github.com/backbone81/membership/internal/encoding"
-	"github.com/backbone81/membership/internal/gossip"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/backbone81/membership/internal/encoding"
+	"github.com/backbone81/membership/internal/gossip"
 )
 
 var testMessageFaulty = gossip.MessageFaulty{

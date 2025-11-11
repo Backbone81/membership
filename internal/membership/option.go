@@ -1,9 +1,10 @@
 package membership
 
 import (
+	"github.com/go-logr/logr"
+
 	"github.com/backbone81/membership/internal/encoding"
 	"github.com/backbone81/membership/internal/transport"
-	"github.com/go-logr/logr"
 )
 
 // Option is the function signature for all list options to implement.
@@ -24,9 +25,7 @@ func WithBootstrapMember(address encoding.Address) Option {
 
 func WithBootstrapMembers(addresses []encoding.Address) Option {
 	return func(config *Config) {
-		for _, address := range addresses {
-			config.BootstrapMembers = append(config.BootstrapMembers, address)
-		}
+		config.BootstrapMembers = append(config.BootstrapMembers, addresses...)
 	}
 }
 

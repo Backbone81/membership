@@ -53,7 +53,7 @@ var _ = Describe("Encryption", func() {
 		Expect(err).ToNot(HaveOccurred())
 
 		wrongKey := encryption.NewRandomKey()
-		plaintext, err = encryption.Decrypt(wrongKey, ciphertext)
+		_, err = encryption.Decrypt(wrongKey, ciphertext)
 		Expect(err).To(HaveOccurred())
 	})
 
@@ -66,7 +66,7 @@ var _ = Describe("Encryption", func() {
 
 		ciphertext[3]++
 
-		plaintext, err = encryption.Decrypt(key, ciphertext)
+		_, err = encryption.Decrypt(key, ciphertext)
 		Expect(err).To(HaveOccurred())
 	})
 

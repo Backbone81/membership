@@ -11,11 +11,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-logr/logr"
+
 	"github.com/backbone81/membership/internal/encoding"
 	"github.com/backbone81/membership/internal/gossip"
 	"github.com/backbone81/membership/internal/roundtriptime"
 	"github.com/backbone81/membership/internal/utility"
-	"github.com/go-logr/logr"
 )
 
 type List struct {
@@ -782,10 +783,7 @@ func (l *List) handleAlive(alive gossip.MessageAlive) {
 }
 
 func (l *List) handleAliveForSelf(alive gossip.MessageAlive) bool {
-	if !alive.Source.Equal(l.self) {
-		return false
-	}
-	return true
+	return alive.Source.Equal(l.self)
 }
 
 func (l *List) handleAliveForFaultyMembers(alive gossip.MessageAlive) bool {
@@ -1037,7 +1035,7 @@ func (l *List) sendWithGossip(address encoding.Address, message Message) error {
 
 	l.gossipQueue.PrioritizeForAddress(address)
 	var gossipAdded int
-	for i := 0; i < l.gossipQueue.Len(); i++ {
+	for i := range l.gossipQueue.Len() {
 		var gossipN int
 		l.datagramBuffer, gossipN, err = l.gossipQueue.Get(i).AppendToBuffer(l.datagramBuffer)
 		if err != nil {
@@ -1072,11 +1070,6 @@ func (l *List) getNextMember() *encoding.Member {
 	randomIndex := l.nextRandomIndex
 	l.nextRandomIndex++
 	return &l.members[l.randomIndexes[randomIndex]]
-}
-
-func (l *List) getRandomMember() *encoding.Member {
-	randomIndex := rand.Intn(len(l.members))
-	return &l.members[randomIndex]
 }
 
 func (l *List) addMember(member encoding.Member) {

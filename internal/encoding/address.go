@@ -21,7 +21,6 @@ var ZeroAddress Address
 // Panics if the ip or port are out of range.
 func NewAddress(ip net.IP, port int) Address {
 	if ip.IsUnspecified() || port < 0 || port > math.MaxUint16 {
-
 		// TODO: Do we really want to panic here?
 
 		panic("invalid address")
@@ -93,7 +92,7 @@ func AddressFromBuffer(buffer []byte) (Address, int, error) {
 			return Address{}, 0, errors.New("address buffer too small")
 		}
 		copy(result[:], IPv4InIPv6Prefix)
-		copy(result[len(IPv4InIPv6Prefix):], buffer[:])
+		copy(result[len(IPv4InIPv6Prefix):], buffer)
 		return result, 1 + len(result[len(IPv4InIPv6Prefix):]), nil
 	} else {
 		if len(buffer) < len(result) {

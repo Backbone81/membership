@@ -3,9 +3,10 @@ package scheduler_test
 import (
 	"time"
 
-	"github.com/backbone81/membership/internal/scheduler"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/backbone81/membership/internal/scheduler"
 )
 
 var _ = Describe("Scheduler", func() {

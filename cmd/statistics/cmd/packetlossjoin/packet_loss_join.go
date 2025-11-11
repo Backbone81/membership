@@ -4,11 +4,12 @@ import (
 	"math"
 	"net"
 
+	"github.com/go-logr/logr"
+
 	"github.com/backbone81/membership/internal/encoding"
 	"github.com/backbone81/membership/internal/membership"
 	"github.com/backbone81/membership/internal/transport"
 	"github.com/backbone81/membership/internal/utility"
-	"github.com/go-logr/logr"
 )
 
 // PacketLossJoin measures the cluster size during member joins with an unreliable transport.

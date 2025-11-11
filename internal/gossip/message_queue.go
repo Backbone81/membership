@@ -273,7 +273,7 @@ func (q *MessageQueue) ensureBucketAvailable(bucketIndex int) {
 // This function is expensive and should not be called outside of tests.
 func (q *MessageQueue) ValidateInternalState() error {
 	// Make sure that end of bucket indices are always equal or bigger than the one before.
-	for i := 0; i < len(q.endOfBucketIndices)-1; i++ {
+	for i := range len(q.endOfBucketIndices) - 1 {
 		if q.endOfBucketIndices[i] > q.endOfBucketIndices[i+1] {
 			return fmt.Errorf("end of bucket index %d is bigger than %d", i, i+1)
 		}

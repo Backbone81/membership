@@ -84,7 +84,7 @@ func (s *Scheduler) protocolPeriodTask() {
 		}
 
 		indirectPingAt := directPingAt.Add(currExpectedRoundTripTime)
-		if indirectPingAt.Sub(time.Now()) < currExpectedRoundTripTime/2 {
+		if time.Until(indirectPingAt) < currExpectedRoundTripTime/2 {
 			s.logger.Info(
 				"WARNING: The time between the direct ping and indirect ping is less than 50% of the expected round trip time. " +
 					"This is a strong indication that the system is overloaded. " +

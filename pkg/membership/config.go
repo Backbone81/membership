@@ -3,10 +3,11 @@ package membership
 import (
 	"time"
 
+	"github.com/go-logr/logr"
+
 	"github.com/backbone81/membership/internal/encoding"
 	intmembership "github.com/backbone81/membership/internal/membership"
 	"github.com/backbone81/membership/internal/scheduler"
-	"github.com/go-logr/logr"
 )
 
 type Config struct {

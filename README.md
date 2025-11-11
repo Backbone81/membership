@@ -52,31 +52,36 @@ is picked and the full membership list is requested.
 ### Basic Requirements
 
 - Improve test coverage
-- Investigate how we can increase the suspicion timeout when we are under high CPU load. High CPU load can be detected
-  by the scheduler as the times between direct pings, indirect pings and end of protocol are either significant shorter
-  than expected or even overshot immediately.
-- How can a member re-join when it was disconnected through a network partition from everybody else for a long time?
-  We probably need to deal with the bootstrap members in a way where we try to contact them periodically when they
-  dropped out of our member list.
-- Investigate how we can detect network issues on the own member side? Is a high suspicious rate an indicator?
 - Cleanup the faulty member list after some time to avoid endless growth in situations where members are very dynamic.
 - Serialize the current state on shutdown and allow that state to be re-used during startup.
 - We might want to separate gossip count from suspect timeout
+- We should find a mechanic which tells a member the last known incarnation number to allow joining members without
+  having to remember the incarnation number. This could be done with the full list sync. We would need to update our
+  own incarnation number when we learn about ourselves.
+- Extend metrics for better insights.
 
 ### More Advanced Topics
 
-- We should find a mechanic which tells a member the last known incarnation number to allow joining members without
-  having to remember the incarnation number.
-- Add encryption and support multiple encryption keys for key rollover. The first key is always used for encryption, all
-  keys are used for decryption.
-- Extend metrics for better insights.
+- A ring buffer implementation for the gossip queue might perform better than the current bucket implementation.
 - Can we drop the interface for Message and collapse all message types into a single message which has all fields any
   message could have? That way we could be able to drop the interface and prevent memory allocations due to interface
   conversion.
+- Add encryption and support multiple encryption keys for key rollover. The first key is always used for encryption, all
+  keys are used for decryption.
+- Investigate how we can increase the suspicion timeout when we are under high CPU load. High CPU load can be detected
+  by the scheduler as the times between direct pings, indirect pings and end of protocol are either significant shorter
+  than expected or even overshot immediately.
+- What should we do when a large amount of gossip is piling up in the gossip queue? We should have a way to speed up
+  dissemination to quicker reach a stable state again. We could increase the number of direct pings dynamically when the
+  number of gossip in the gossip queue is larger than what can usually be piggybacked in one ping.
+- How can a member re-join when it was disconnected through a network partition from everybody else for a long time?
+  We probably need to deal with the bootstrap members in a way where we try to contact them periodically when they
+  dropped out of our member list. Depending on a configuration, bootstrap members could be re-added regularly again
+  under the assumption that the bootstrap members are always there. If bootstrap members are ephemeral, this should be
+  disabled.
 
 ### Nice to Have
 
-- A ring buffer implementation for the gossip queue might perform better than the current bucket implementation.
 - Should the FromBuffer functions return the remaining buffer to make it easier and less error-prone to work with?
 - Make sure we provide enough context for all error returns.
 - Check if we really need to use panic anywhere.
@@ -85,5 +90,3 @@ is picked and the full membership list is requested.
 - Introduce jitter into the scheduler to avoid spikes in network traffic.
 - Regularly log the statistical information about ping chance and time until all know about gossip
 - Do a TCP ping when the UDP ping times out for networks which do not correctly route UDP.
-- Look into out of bounds gossip messages in situations where more gossip is in the gossip queue than can sensibly
-  propagated in the near future. Or would dynamically increase the number of direct ping targets solve the same issue?

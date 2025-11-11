@@ -168,7 +168,7 @@ type MemoryClient struct {
 	memory *Memory
 }
 
-// MemoryClient implements Transport
+// MemoryClient implements Transport.
 var _ Transport = (*MemoryClient)(nil)
 
 func (m *MemoryClient) Send(address encoding.Address, buffer []byte) error {

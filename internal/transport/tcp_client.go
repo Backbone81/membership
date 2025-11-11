@@ -12,7 +12,7 @@ import (
 // TCPClient provides reliable transport for sending data to a member.
 type TCPClient struct{}
 
-// TCPClient implements Transport
+// TCPClient implements Transport.
 var _ Transport = (*TCPClient)(nil)
 
 // NewTCPClient creates a new TCPClient transport.

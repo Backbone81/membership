@@ -3,9 +3,10 @@ package encoding_test
 import (
 	"testing"
 
-	"github.com/backbone81/membership/internal/encoding"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/backbone81/membership/internal/encoding"
 )
 
 var _ = Describe("MemberState", func() {

@@ -1,16 +1,18 @@
 package allfailuredetection
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"net"
 	"slices"
 
+	"github.com/go-logr/logr"
+
 	"github.com/backbone81/membership/internal/encoding"
 	"github.com/backbone81/membership/internal/membership"
 	"github.com/backbone81/membership/internal/transport"
 	"github.com/backbone81/membership/internal/utility"
-	"github.com/go-logr/logr"
 )
 
 // AllFailureDetection measures the time in protocol periods in which a failed member is known to all other members.
@@ -66,7 +68,7 @@ func buildCluster(memberCount int, memoryTransport *transport.Memory) ([]*member
 
 func runProtocol(logger logr.Logger, lists []*membership.List, memoryTransport *transport.Memory, memberCount int) error {
 	detected := make([]int, len(lists))
-	for i := range len(detected) {
+	for i := range detected {
 		detected[i] = math.MaxInt
 	}
 	var detectedCount int
@@ -108,7 +110,7 @@ func runProtocol(logger logr.Logger, lists []*membership.List, memoryTransport *
 		}
 	}
 	if detectedCount != len(detected) {
-		return fmt.Errorf("max number of protocol periods exceeded")
+		return errors.New("max number of protocol periods exceeded")
 	}
 	slices.Sort(detected)
 	logger.Info(

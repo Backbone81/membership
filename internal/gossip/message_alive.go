@@ -46,6 +46,9 @@ func (m *MessageAlive) AppendToBuffer(buffer []byte) ([]byte, int, error) {
 // Returns the number of bytes read and any error which occurred.
 func (m *MessageAlive) FromBuffer(buffer []byte) (int, error) {
 	messageType, messageTypeN, err := encoding.MessageTypeFromBuffer(buffer)
+	if err != nil {
+		return 0, err
+	}
 	if messageType != encoding.MessageTypeAlive {
 		return 0, errors.New("invalid message type")
 	}

@@ -7,8 +7,9 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/backbone81/membership/internal/encoding"
 	"github.com/go-logr/logr"
+
+	"github.com/backbone81/membership/internal/encoding"
 )
 
 // TCPServer provides reliable transport for receiving data from members.

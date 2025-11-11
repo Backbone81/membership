@@ -1,9 +1,10 @@
 package membership_test
 
 import (
-	"github.com/backbone81/membership/internal/membership"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/backbone81/membership/internal/membership"
 )
 
 var _ = Describe("Utils", func() {

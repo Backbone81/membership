@@ -1,6 +1,8 @@
 package gossip
 
 import (
+	"iter"
+
 	"github.com/backbone81/membership/internal/encoding"
 )
 
@@ -137,15 +139,29 @@ func (q *RingBufferQueue) PrioritizeForAddress(address encoding.Address) {
 //	           ^start of bucket 1
 //	     ^start of bucket 2
 func (q *RingBufferQueue) Get(logicalIndex int) Message {
-	// TODO: Replace this Get() with an iterator function. This will perform better.
-	// We need to handle a priority element if set.
-	if q.priorityIndex >= 0 {
-		if logicalIndex == 0 {
-			return q.ring[q.priorityIndex].Message
+	// TODO: This function should be dropped, as we do not want to use the queue this way. If we need it for tests,
+	// introduce a test function which does what we do here.
+	for i, msg := range q.All() {
+		if i == logicalIndex {
+			return msg
 		}
-		// As we are not accessing with index 0 anymore, we need to decrement once to not skip the real first element
-		// in the queue.
-		logicalIndex--
+	}
+	panic("ring buffer queue index out of bounds")
+}
+
+func (q *RingBufferQueue) All() iter.Seq2[int, Message] {
+	return q.all
+}
+
+func (q *RingBufferQueue) all(yield func(int, Message) bool) {
+	logicalIndex := 0
+
+	// We need to handle the priority element if set.
+	if q.priorityIndex >= 0 {
+		if !yield(logicalIndex, q.ring[q.priorityIndex].Message) {
+			return
+		}
+		logicalIndex++
 	}
 
 	for i := range q.bucketStarts {
@@ -160,38 +176,17 @@ func (q *RingBufferQueue) Get(logicalIndex int) Message {
 			bucketEnd = q.bucketStarts[i-1]
 		}
 
-		// We need the size of the current bucket.
-		bucketLength := (bucketEnd - bucketStart + len(q.ring)) % len(q.ring)
-		if bucketLength == 0 {
-			// This bucket is empty, look into the next one.
-			continue
-		}
-
-		// We need to make sure that we skip the priority element in case we move over it. Otherwise, we would return
-		// it twice during iteration.
-		if q.priorityIndex >= 0 {
-			for j := 0; j < min(logicalIndex, bucketLength); j++ {
-				ringIndex := (bucketStart + j) % len(q.ring)
-				if ringIndex == q.priorityIndex {
-					// Adjust the offset back again, as we now crossed the priority element. No need to continue
-					// looping as the priority element only occurs once.
-					logicalIndex++
-					break
-				}
+		for ringIndex := bucketStart; ringIndex != bucketEnd; ringIndex = (ringIndex + 1) % len(q.ring) {
+			if ringIndex == q.priorityIndex {
+				// Skip the element if this is the priority index. We already returned that one as the first element.
+				continue
 			}
+			if !yield(logicalIndex, q.ring[ringIndex].Message) {
+				return
+			}
+			logicalIndex++
 		}
-
-		if logicalIndex < bucketLength {
-			// The logical index is located in the current bucket. Return the message.
-			ringIndex := (bucketStart + logicalIndex) % len(q.ring)
-			return q.ring[ringIndex].Message
-		}
-
-		// The logical index was not located in the current bucket, so we subtract the bucket length from the logical
-		// index and have a look at the next bucket.
-		logicalIndex -= bucketLength
 	}
-	panic("ring buffer queue index out of bounds")
 }
 
 func (q *RingBufferQueue) MarkFirstNMessagesTransmitted(count int) {

@@ -1,14 +1,16 @@
 package gossip
 
-import "github.com/backbone81/membership/internal/encoding"
+import (
+	"github.com/backbone81/membership/internal/encoding"
+)
 
 type RingBufferQueue struct {
 	ring []MessageQueueEntry
 
-	// head provides the position of the next write
+	// head provides the index into the ring of the next write
 	head int
 
-	// tail provides the position of the next read
+	// tail provides the index into the ring of the next read
 	tail int
 
 	// bucketStarts provides the index into the ring where the bucket starts.
@@ -19,23 +21,23 @@ type RingBufferQueue struct {
 	// Bucket n: [tail, bucketStarts[n-1])
 	bucketStarts []int
 
-	// indexByAddress is correlating the position within queue with the address. This helps in making checks for
+	// indexByAddress provides the index into the ring for a given address. This helps in making checks for
 	// existing gossip faster.
 	indexByAddress map[encoding.Address]int
 
-	// priorityQueueIndex is the queue index which should be returned with priority and always with Get(0). This allows
+	// priorityIndex is the ring index which should be returned with priority and always with Get(0). This allows
 	// us to prioritize suspect and faulty gossip when we are talking to that node right now.
-	priorityQueueIndex int
+	priorityIndex int
 }
 
 // NewRingBufferQueue creates a new gossip message queue.
 func NewRingBufferQueue(maxTransmissionCount int) *RingBufferQueue {
 	maxTransmissionCount = max(1, maxTransmissionCount)
 	return &RingBufferQueue{
-		ring:               make([]MessageQueueEntry, 0, 1024),
-		bucketStarts:       make([]int, maxTransmissionCount),
-		indexByAddress:     make(map[encoding.Address]int, 1024),
-		priorityQueueIndex: -1,
+		ring:           make([]MessageQueueEntry, 1024),
+		bucketStarts:   make([]int, maxTransmissionCount),
+		indexByAddress: make(map[encoding.Address]int, 1024),
+		priorityIndex:  -1,
 	}
 }
 
@@ -44,9 +46,8 @@ func NewRingBufferQueue(maxTransmissionCount int) *RingBufferQueue {
 func (q *RingBufferQueue) SetMaxTransmissionCount(maxTransmissionCount int) {
 	maxTransmissionCount = max(1, maxTransmissionCount)
 	if maxTransmissionCount < len(q.bucketStarts) {
-		// Note that we drop the bucket here, but the elements stay around between tail and the new last bucket until
-		// MarkFirstNMessagesTransmitted is called the next time which will then clean up those elements.
 		q.bucketStarts = q.bucketStarts[:maxTransmissionCount]
+		q.cleanupTail()
 	} else {
 		for len(q.bucketStarts) < maxTransmissionCount {
 			// New buckets start always at the same index as the last bucket to create a zero length bucket.
@@ -65,24 +66,24 @@ func (q *RingBufferQueue) Clear() {
 	clear(q.indexByAddress)
 	q.head = 0
 	q.tail = 0
-	q.priorityQueueIndex = -1
+	q.priorityIndex = -1
 }
 
 func (q *RingBufferQueue) Add(message Message) {
-	queueIndex, found := q.indexByAddress[message.GetAddress()]
+	ringIndex, found := q.indexByAddress[message.GetAddress()]
 	if found {
-		queueEntry := &q.ring[queueIndex]
+		entry := &q.ring[ringIndex]
 
 		// The queue already contains a message for that address. Let's check if we need to overwrite it.
 		newIncarnationNumber := message.GetIncarnationNumber()
-		existingIncarnationNumber := queueEntry.Message.GetIncarnationNumber()
+		existingIncarnationNumber := entry.Message.GetIncarnationNumber()
 		if newIncarnationNumber < existingIncarnationNumber {
 			// No need to overwrite when the incarnation number is lower.
 			return
 		}
 
 		newMessageType := message.GetType()
-		existingMessageType := queueEntry.Message.GetType()
+		existingMessageType := entry.Message.GetType()
 		if newIncarnationNumber == existingIncarnationNumber &&
 			(newMessageType == encoding.MessageTypeAlive ||
 				newMessageType == encoding.MessageTypeSuspect && existingMessageType != encoding.MessageTypeAlive ||
@@ -92,13 +93,10 @@ func (q *RingBufferQueue) Add(message Message) {
 		}
 
 		// Either we have the same incarnation number with the right priorities, or the incarnation number is bigger.
-		queueEntry.Message = message
-		if queueEntry.TransmissionCount != 0 {
-			queueIndex = q.moveToFirstBucket(queueIndex)
-			queueEntry = &q.ring[queueIndex]
-			queueEntry.TransmissionCount = 0
+		entry.Message = message
+		if entry.TransmissionCount != 0 {
+			ringIndex = q.moveToFirstBucket(ringIndex)
 		}
-		// TODO: We need to update the existing message
 		return
 	}
 
@@ -118,16 +116,16 @@ func (q *RingBufferQueue) Add(message Message) {
 }
 
 func (q *RingBufferQueue) PrioritizeForAddress(address encoding.Address) {
-	queueIndex, found := q.indexByAddress[address]
+	ringIndex, found := q.indexByAddress[address]
 	if found {
-		messageType := q.ring[queueIndex].Message.GetType()
+		messageType := q.ring[ringIndex].Message.GetType()
 		if messageType == encoding.MessageTypeSuspect ||
 			messageType == encoding.MessageTypeFaulty {
-			q.priorityQueueIndex = queueIndex
+			q.priorityIndex = ringIndex
 			return
 		}
 	}
-	q.priorityQueueIndex = -1
+	q.priorityIndex = -1
 }
 
 // Get returns the element at the logical index.
@@ -139,10 +137,11 @@ func (q *RingBufferQueue) PrioritizeForAddress(address encoding.Address) {
 //	           ^start of bucket 1
 //	     ^start of bucket 2
 func (q *RingBufferQueue) Get(logicalIndex int) Message {
+	// TODO: Replace this Get() with an iterator function. This will perform better.
 	// We need to handle a priority element if set.
-	if q.priorityQueueIndex >= 0 {
+	if q.priorityIndex >= 0 {
 		if logicalIndex == 0 {
-			return q.ring[q.priorityQueueIndex].Message
+			return q.ring[q.priorityIndex].Message
 		}
 		// As we are not accessing with index 0 anymore, we need to decrement once to not skip the real first element
 		// in the queue.
@@ -170,10 +169,10 @@ func (q *RingBufferQueue) Get(logicalIndex int) Message {
 
 		// We need to make sure that we skip the priority element in case we move over it. Otherwise, we would return
 		// it twice during iteration.
-		if q.priorityQueueIndex >= 0 {
+		if q.priorityIndex >= 0 {
 			for j := 0; j < min(logicalIndex, bucketLength); j++ {
 				ringIndex := (bucketStart + j) % len(q.ring)
-				if ringIndex == q.priorityQueueIndex {
+				if ringIndex == q.priorityIndex {
 					// Adjust the offset back again, as we now crossed the priority element. No need to continue
 					// looping as the priority element only occurs once.
 					logicalIndex++
@@ -198,7 +197,7 @@ func (q *RingBufferQueue) Get(logicalIndex int) Message {
 func (q *RingBufferQueue) MarkFirstNMessagesTransmitted(count int) {
 	count = min(count, q.Len())
 
-	previousBucketStart := q.head
+	bucketEnd := q.head
 	for i := range q.bucketStarts {
 		if count == 0 {
 			// We already moved everything. We can stop here.
@@ -207,10 +206,10 @@ func (q *RingBufferQueue) MarkFirstNMessagesTransmitted(count int) {
 
 		// See where the bucket starts and how many elements it contains.
 		bucketStart := q.bucketStarts[i]
-		bucketSize := (previousBucketStart - bucketStart + len(q.ring)) % len(q.ring)
+		bucketSize := (bucketEnd - bucketStart + len(q.ring)) % len(q.ring)
 		if bucketSize == 0 {
 			// The bucket is empty. Look at the next bucket.
-			previousBucketStart = bucketStart
+			// Because the bucket is empty, we do not need to update bucketEnd as this will never change.
 			continue
 		}
 
@@ -223,17 +222,21 @@ func (q *RingBufferQueue) MarkFirstNMessagesTransmitted(count int) {
 		// Move the start of the bucket to the right. This effectively makes the moved elements part of the next bucket.
 		q.bucketStarts[i] = (bucketStart + moveCount) % len(q.ring)
 		count -= moveCount
-		previousBucketStart = bucketStart
+		bucketEnd = bucketStart
 	}
+	q.cleanupTail()
+}
 
+func (q *RingBufferQueue) cleanupTail() {
 	// All elements between q.tail and the last bucket start have exceeded their maximum transmission count and are
 	// now dropped.
 	for q.tail != q.bucketStarts[len(q.bucketStarts)-1] {
 		delete(q.indexByAddress, q.ring[q.tail].Message.GetAddress())
-		if q.priorityQueueIndex == q.tail {
-			q.priorityQueueIndex = -1
+		if q.priorityIndex == q.tail {
+			q.priorityIndex = -1
 		}
 		q.tail = (q.tail + 1) % len(q.ring)
+		RemoveMessageTotal.Inc()
 	}
 }
 
@@ -256,11 +259,11 @@ func (q *RingBufferQueue) grow() {
 	for i := range q.bucketStarts {
 		q.bucketStarts[i] = q.adjustIndexAfterGrow(q.bucketStarts[i], q.tail, q.head, n)
 	}
-	for address, index := range q.indexByAddress {
-		q.indexByAddress[address] = q.adjustIndexAfterGrow(index, q.tail, q.head, n)
+	for address, ringIndex := range q.indexByAddress {
+		q.indexByAddress[address] = q.adjustIndexAfterGrow(ringIndex, q.tail, q.head, n)
 	}
-	if q.priorityQueueIndex >= 0 {
-		q.priorityQueueIndex = q.adjustIndexAfterGrow(q.priorityQueueIndex, q.tail, q.head, n)
+	if q.priorityIndex >= 0 {
+		q.priorityIndex = q.adjustIndexAfterGrow(q.priorityIndex, q.tail, q.head, n)
 	}
 
 	// At ethe end update our ring buffer bookkeeping. Make sure to overwrite q.ring last, otherwise the length will be
@@ -271,22 +274,95 @@ func (q *RingBufferQueue) grow() {
 }
 
 // adjustIndexAfterGrow returns the new index after the ring buffer was grown to a bigger size.
-func (q *RingBufferQueue) adjustIndexAfterGrow(oldIndex int, oldTail int, oldHead int, n int) int {
+func (q *RingBufferQueue) adjustIndexAfterGrow(oldRingIndex int, oldTail int, oldHead int, n int) int {
 	if oldTail <= oldHead {
 		// There was no wraparound over ring buffer boundaries. The content was simply copied to the first position
 		// in the new ring buffer. All indices are adjusted by the oldTail offset to match their new location.
-		return oldIndex - oldTail
+		return oldRingIndex - oldTail
 	}
 
-	if oldTail <= oldIndex {
+	if oldTail <= oldRingIndex {
 		// The content did wrap around over ring buffer boundaries. The content until the end of the ring buffer was
 		// simply copied to the first position in the new ring buffer. All indices are adjusted by the oldTail offset
 		// to match their new location.
-		return oldIndex - oldTail
+		return oldRingIndex - oldTail
 	}
 
 	// The content did wrap around over ring buffer boundaries. The content from the start of the ring buffer was copied
 	// after the rest of the content in the new ring buffer. All indices are adjusted by the n offset to match their new
 	// location.
-	return oldIndex + n
+	return oldRingIndex + n
+}
+
+func (q *RingBufferQueue) moveToFirstBucket(ringIndex int) int {
+	found := false
+	// Note that we do not loop into bucket 0, because when we swapped the element from bucket 1 into bucket 0, we don't
+	// have to do anything in bucket 0 anymore.
+	for i := len(q.bucketStarts) - 1; i > 0; i-- {
+		bucketStart := q.bucketStarts[i]
+		bucketEnd := q.bucketStarts[i-1]
+
+		// Skip buckets until we found the first bucket which contains the element.
+		if !found {
+			if !q.inBucket(ringIndex, bucketStart, bucketEnd) {
+				continue
+			}
+			found = true
+		}
+
+		// Move the element forward by one bucket. We do this by swapping it with the last element in the current bucket
+		// and adjusting the bucket start of the next bucket.
+		newRingIndex := bucketEnd - 1
+		if newRingIndex < 0 {
+			newRingIndex += len(q.ring)
+		}
+		q.swapElements(ringIndex, newRingIndex)
+		q.bucketStarts[i-1] = newRingIndex
+		ringIndex = newRingIndex
+	}
+	q.ring[ringIndex].TransmissionCount = 0
+	return ringIndex
+}
+
+func (q *RingBufferQueue) inBucket(ringIndex int, bucketStart int, bucketEnd int) bool {
+	if bucketStart == bucketEnd {
+		// The bucket is empty, it cannot hold any elements.
+		return false
+	}
+
+	if bucketStart < bucketEnd {
+		// The bucket does not wrap around
+		return bucketStart <= ringIndex && ringIndex < bucketEnd
+	}
+
+	// The bucket does wrap around
+	return bucketStart <= ringIndex || ringIndex < bucketEnd
+}
+
+func (q *RingBufferQueue) swapElements(ringIndex1 int, ringIndex2 int) {
+	if ringIndex1 == ringIndex2 {
+		// Shortcut for when the element is already at the desired place.
+		return
+	}
+
+	// Swap the elements
+	q.ring[ringIndex1], q.ring[ringIndex2] = q.ring[ringIndex2], q.ring[ringIndex1]
+
+	// Update the index by address bookkeeping
+	q.indexByAddress[q.ring[ringIndex1].Message.GetAddress()] = ringIndex1
+	q.indexByAddress[q.ring[ringIndex2].Message.GetAddress()] = ringIndex2
+
+	// Fix priority queue index
+	if q.priorityIndex == ringIndex1 {
+		q.priorityIndex = ringIndex2
+	} else if q.priorityIndex == ringIndex2 {
+		q.priorityIndex = ringIndex1
+	}
+}
+
+// ValidateInternalState reports if the internal state is valid.
+// This function is expensive and should not be called outside of tests.
+func (q *RingBufferQueue) ValidateInternalState() error {
+	// TODO: How to validate internal state?
+	return nil
 }

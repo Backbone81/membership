@@ -4,6 +4,7 @@ import (
 	"net"
 	"testing"
 
+	"github.com/backbone81/membership/internal/gossip"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -19,4 +20,13 @@ var (
 func TestSuite(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Gossip Suite")
+}
+
+func GetMessageAt(queue *gossip.Queue, index int) gossip.Message {
+	for i, msg := range queue.All() {
+		if i == index {
+			return msg
+		}
+	}
+	panic("index out of bounds")
 }

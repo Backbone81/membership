@@ -13,11 +13,11 @@ import (
 	"github.com/backbone81/membership/internal/gossip"
 )
 
-var _ = Describe("RingBufferQueue", func() {
-	var queue *gossip.RingBufferQueue
+var _ = Describe("Queue", func() {
+	var queue *gossip.Queue
 
 	BeforeEach(func() {
-		queue = gossip.NewRingBufferQueue(10)
+		queue = gossip.NewQueue()
 		Expect(queue.Len()).To(Equal(0))
 	})
 
@@ -29,7 +29,7 @@ var _ = Describe("RingBufferQueue", func() {
 		queue.Add(&gossipMessage)
 
 		Expect(queue.Len()).To(Equal(1))
-		Expect(queue.Get(0)).To(Equal(&gossipMessage))
+		Expect(GetMessageAt(queue, 0)).To(Equal(&gossipMessage))
 		Expect(queue.ValidateInternalState()).To(Succeed())
 	})
 
@@ -47,8 +47,8 @@ var _ = Describe("RingBufferQueue", func() {
 		queue.Add(&gossipMessage2)
 
 		Expect(queue.Len()).To(Equal(2))
-		Expect(queue.Get(0)).To(Equal(&gossipMessage1))
-		Expect(queue.Get(1)).To(Equal(&gossipMessage2))
+		Expect(GetMessageAt(queue, 0)).To(Equal(&gossipMessage1))
+		Expect(GetMessageAt(queue, 1)).To(Equal(&gossipMessage2))
 		Expect(queue.ValidateInternalState()).To(Succeed())
 	})
 
@@ -66,19 +66,19 @@ var _ = Describe("RingBufferQueue", func() {
 		queue.Add(&gossipMessage2)
 
 		Expect(queue.Len()).To(Equal(1))
-		Expect(queue.Get(0)).To(Equal(&gossipMessage1))
+		Expect(GetMessageAt(queue, 0)).To(Equal(&gossipMessage1))
 		Expect(queue.ValidateInternalState()).To(Succeed())
 	})
 
 	DescribeTable("Messages should overwrite in the correct priority",
 		func(message1 gossip.Message, message2 gossip.Message, overwrite bool) {
-			gossipQueue := gossip.NewRingBufferQueue(10)
-			gossipQueue.Add(message1)
-			gossipQueue.Add(message2)
+			queue := gossip.NewQueue()
+			queue.Add(message1)
+			queue.Add(message2)
 			if overwrite {
-				Expect(gossipQueue.Get(0)).To(Equal(message2))
+				Expect(GetMessageAt(queue, 0)).To(Equal(message2))
 			} else {
-				Expect(gossipQueue.Get(0)).To(Equal(message1))
+				Expect(GetMessageAt(queue, 0)).To(Equal(message1))
 			}
 			Expect(queue.ValidateInternalState()).To(Succeed())
 		},
@@ -445,9 +445,9 @@ var _ = Describe("RingBufferQueue", func() {
 		queue.MarkFirstNMessagesTransmitted(3)
 
 		queue.PrioritizeForAddress(encoding.Address{})
-		Expect(queue.Get(0)).To(Equal(message3))
-		Expect(queue.Get(1)).To(Equal(message2))
-		Expect(queue.Get(2)).To(Equal(message1))
+		Expect(GetMessageAt(queue, 0)).To(Equal(message3))
+		Expect(GetMessageAt(queue, 1)).To(Equal(message2))
+		Expect(GetMessageAt(queue, 2)).To(Equal(message1))
 		Expect(queue.ValidateInternalState()).To(Succeed())
 	})
 
@@ -478,9 +478,9 @@ var _ = Describe("RingBufferQueue", func() {
 		queue.MarkFirstNMessagesTransmitted(3)
 
 		queue.PrioritizeForAddress(TestAddress)
-		Expect(queue.Get(0)).To(Equal(message1))
-		Expect(queue.Get(1)).To(Equal(message3))
-		Expect(queue.Get(2)).To(Equal(message2))
+		Expect(GetMessageAt(queue, 0)).To(Equal(message1))
+		Expect(GetMessageAt(queue, 1)).To(Equal(message3))
+		Expect(GetMessageAt(queue, 2)).To(Equal(message2))
 		Expect(queue.ValidateInternalState()).To(Succeed())
 	})
 
@@ -511,9 +511,9 @@ var _ = Describe("RingBufferQueue", func() {
 		queue.MarkFirstNMessagesTransmitted(3)
 
 		queue.PrioritizeForAddress(TestAddress)
-		Expect(queue.Get(0)).To(Equal(message1))
-		Expect(queue.Get(1)).To(Equal(message3))
-		Expect(queue.Get(2)).To(Equal(message2))
+		Expect(GetMessageAt(queue, 0)).To(Equal(message1))
+		Expect(GetMessageAt(queue, 1)).To(Equal(message3))
+		Expect(GetMessageAt(queue, 2)).To(Equal(message2))
 		Expect(queue.ValidateInternalState()).To(Succeed())
 	})
 
@@ -543,39 +543,39 @@ var _ = Describe("RingBufferQueue", func() {
 		queue.MarkFirstNMessagesTransmitted(3)
 
 		queue.PrioritizeForAddress(TestAddress)
-		Expect(queue.Get(0)).To(Equal(message3))
-		Expect(queue.Get(1)).To(Equal(message2))
-		Expect(queue.Get(2)).To(Equal(message1))
+		Expect(GetMessageAt(queue, 0)).To(Equal(message3))
+		Expect(GetMessageAt(queue, 1)).To(Equal(message2))
+		Expect(GetMessageAt(queue, 2)).To(Equal(message1))
 		Expect(queue.ValidateInternalState()).To(Succeed())
 	})
 
 	It("should correctly remove messages which were transmitted enough", func() {
-		gossipQueue := gossip.NewRingBufferQueue(3)
-		gossipQueue.Add(&gossip.MessageAlive{
+		queue := gossip.NewQueue(gossip.WithMaxTransmissionCount(3))
+		queue.Add(&gossip.MessageAlive{
 			Source:            TestAddress,
 			IncarnationNumber: 0,
 		})
-		gossipQueue.PrioritizeForAddress(encoding.Address{})
-		Expect(gossipQueue.Len()).To(Equal(1))
+		queue.PrioritizeForAddress(encoding.Address{})
+		Expect(queue.Len()).To(Equal(1))
 
-		gossipQueue.MarkFirstNMessagesTransmitted(1)
-		gossipQueue.PrioritizeForAddress(encoding.Address{})
-		Expect(gossipQueue.Len()).To(Equal(1))
+		queue.MarkFirstNMessagesTransmitted(1)
+		queue.PrioritizeForAddress(encoding.Address{})
+		Expect(queue.Len()).To(Equal(1))
 
-		gossipQueue.MarkFirstNMessagesTransmitted(1)
-		gossipQueue.PrioritizeForAddress(encoding.Address{})
-		Expect(gossipQueue.Len()).To(Equal(1))
+		queue.MarkFirstNMessagesTransmitted(1)
+		queue.PrioritizeForAddress(encoding.Address{})
+		Expect(queue.Len()).To(Equal(1))
 
-		gossipQueue.MarkFirstNMessagesTransmitted(1)
-		gossipQueue.PrioritizeForAddress(encoding.Address{})
-		Expect(gossipQueue.Len()).To(Equal(0))
+		queue.MarkFirstNMessagesTransmitted(1)
+		queue.PrioritizeForAddress(encoding.Address{})
+		Expect(queue.Len()).To(Equal(0))
 		Expect(queue.ValidateInternalState()).To(Succeed())
 	})
 
 	It("internal state should always be valid", func() {
 		// This test is a kind of monte carlo test. Creating random inputs and validating the internal state to be
 		// correct.
-		queue = gossip.NewRingBufferQueue(10)
+		queue = gossip.NewQueue()
 		var addresses []encoding.Address
 		for i := range 5 {
 			addresses = append(addresses, encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i))
@@ -606,9 +606,9 @@ func BenchmarkRingBufferQueue_Add(b *testing.B) {
 		// of 32 is adding some additional buffer to stay in powers of two.
 		for bucketCount := 8; bucketCount <= 32; bucketCount *= 2 {
 			// We fill a new gossip queue with gossip messages until gossip count is reached.
-			gossipQueue := gossip.NewRingBufferQueue(bucketCount)
+			queue := gossip.NewQueue(gossip.WithMaxTransmissionCount(bucketCount))
 			for i := range gossipCount {
-				gossipQueue.Add(&gossip.MessageAlive{
+				queue.Add(&gossip.MessageAlive{
 					// We differentiate every source by a different port number.
 					Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
 					IncarnationNumber: 0,
@@ -616,7 +616,7 @@ func BenchmarkRingBufferQueue_Add(b *testing.B) {
 
 				// Mark all messages as transmitted once to move all messages to the next bucket.
 				if i%gossipCount/bucketCount == 0 {
-					gossipQueue.MarkFirstNMessagesTransmitted(gossipQueue.Len())
+					queue.MarkFirstNMessagesTransmitted(queue.Len())
 				}
 			}
 			b.Run(fmt.Sprintf("%d gossip in %d buckets", gossipCount, bucketCount), func(b *testing.B) {
@@ -630,7 +630,7 @@ func BenchmarkRingBufferQueue_Add(b *testing.B) {
 				}
 				b.ResetTimer()
 				for i := range b.N {
-					gossipQueue.Add(&gossip.MessageAlive{
+					queue.Add(&gossip.MessageAlive{
 						Source:            addresses[i],
 						IncarnationNumber: 0,
 					})
@@ -642,9 +642,9 @@ func BenchmarkRingBufferQueue_Add(b *testing.B) {
 
 func BenchmarkRingBufferQueue_PrioritizeForAddress(b *testing.B) {
 	for gossipCount := 1024; gossipCount <= 16*1024; gossipCount *= 2 {
-		gossipQueue := gossip.NewRingBufferQueue(10)
+		queue := gossip.NewQueue()
 		for i := range gossipCount {
-			gossipQueue.Add(&gossip.MessageAlive{
+			queue.Add(&gossip.MessageAlive{
 				Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
 				IncarnationNumber: 0,
 			})
@@ -654,7 +654,7 @@ func BenchmarkRingBufferQueue_PrioritizeForAddress(b *testing.B) {
 			// slower path and is not exiting early.
 			address := encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+1)
 			for b.Loop() {
-				gossipQueue.PrioritizeForAddress(address)
+				queue.PrioritizeForAddress(address)
 			}
 		})
 	}
@@ -662,17 +662,23 @@ func BenchmarkRingBufferQueue_PrioritizeForAddress(b *testing.B) {
 
 func BenchmarkRingBufferQueue_Get(b *testing.B) {
 	for gossipCount := 1024; gossipCount <= 16*1024; gossipCount *= 2 {
-		gossipQueue := gossip.NewRingBufferQueue(10)
+		queue := gossip.NewQueue()
 		for i := range gossipCount {
-			gossipQueue.Add(&gossip.MessageAlive{
+			queue.Add(&gossip.MessageAlive{
 				Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
 				IncarnationNumber: 0,
 			})
 		}
-		gossipQueue.PrioritizeForAddress(encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+gossipCount/2))
+		queue.PrioritizeForAddress(encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+gossipCount/2))
 		b.Run(fmt.Sprintf("%d gossip", gossipCount), func(b *testing.B) {
-			for i := range b.N {
-				gossipQueue.Get(i % gossipCount)
+			var count int
+			for {
+				for range queue.All() {
+					count++
+					if count == b.N {
+						return
+					}
+				}
 			}
 		})
 	}
@@ -680,9 +686,9 @@ func BenchmarkRingBufferQueue_Get(b *testing.B) {
 
 func BenchmarkRingBufferQueue_MarkFirstNMessagesTransmitted(b *testing.B) {
 	for gossipCount := 1024; gossipCount <= 16*1024; gossipCount *= 2 {
-		gossipQueue := gossip.NewRingBufferQueue(10)
+		queue := gossip.NewQueue()
 		for i := range gossipCount {
-			gossipQueue.Add(&gossip.MessageAlive{
+			queue.Add(&gossip.MessageAlive{
 				Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
 				IncarnationNumber: 0,
 			})
@@ -690,7 +696,7 @@ func BenchmarkRingBufferQueue_MarkFirstNMessagesTransmitted(b *testing.B) {
 		for messagesTransmitted := 1; messagesTransmitted <= 128; messagesTransmitted *= 2 {
 			b.Run(fmt.Sprintf("%d gossip with %d transmissions", gossipCount, messagesTransmitted), func(b *testing.B) {
 				for b.Loop() {
-					gossipQueue.MarkFirstNMessagesTransmitted(messagesTransmitted)
+					queue.MarkFirstNMessagesTransmitted(messagesTransmitted)
 				}
 			})
 		}

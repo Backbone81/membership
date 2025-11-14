@@ -11,3 +11,23 @@ type Message interface {
 	GetIncarnationNumber() int
 	String() string
 }
+
+func ShouldReplaceExistingWithNew(existing Message, new Message) bool {
+	newIncarnationNumber := new.GetIncarnationNumber()
+	existingIncarnationNumber := existing.GetIncarnationNumber()
+	if newIncarnationNumber < existingIncarnationNumber {
+		// No need to overwrite when the incarnation number is lower.
+		return false
+	}
+
+	newMessageType := new.GetType()
+	existingMessageType := existing.GetType()
+	if newIncarnationNumber == existingIncarnationNumber &&
+		(newMessageType == encoding.MessageTypeAlive ||
+			newMessageType == encoding.MessageTypeSuspect && existingMessageType != encoding.MessageTypeAlive ||
+			newMessageType == encoding.MessageTypeFaulty && existingMessageType != encoding.MessageTypeAlive && existingMessageType != encoding.MessageTypeSuspect) {
+		// No need to overwrite with the same incarnation number and the wrong priorities.
+		return false
+	}
+	return true
+}

@@ -29,7 +29,7 @@ var _ = Describe("Queue", func() {
 		queue.Add(&gossipMessage)
 
 		Expect(queue.Len()).To(Equal(1))
-		Expect(GetMessageAt(queue, 0)).To(Equal(&gossipMessage))
+		Expect(queue.Get(0)).To(Equal(&gossipMessage))
 		Expect(queue.ValidateInternalState()).To(Succeed())
 	})
 
@@ -47,8 +47,8 @@ var _ = Describe("Queue", func() {
 		queue.Add(&gossipMessage2)
 
 		Expect(queue.Len()).To(Equal(2))
-		Expect(GetMessageAt(queue, 0)).To(Equal(&gossipMessage1))
-		Expect(GetMessageAt(queue, 1)).To(Equal(&gossipMessage2))
+		Expect(queue.Get(0)).To(Equal(&gossipMessage1))
+		Expect(queue.Get(1)).To(Equal(&gossipMessage2))
 		Expect(queue.ValidateInternalState()).To(Succeed())
 	})
 
@@ -66,7 +66,7 @@ var _ = Describe("Queue", func() {
 		queue.Add(&gossipMessage2)
 
 		Expect(queue.Len()).To(Equal(1))
-		Expect(GetMessageAt(queue, 0)).To(Equal(&gossipMessage1))
+		Expect(queue.Get(0)).To(Equal(&gossipMessage1))
 		Expect(queue.ValidateInternalState()).To(Succeed())
 	})
 
@@ -76,9 +76,9 @@ var _ = Describe("Queue", func() {
 			queue.Add(message1)
 			queue.Add(message2)
 			if overwrite {
-				Expect(GetMessageAt(queue, 0)).To(Equal(message2))
+				Expect(queue.Get(0)).To(Equal(message2))
 			} else {
-				Expect(GetMessageAt(queue, 0)).To(Equal(message1))
+				Expect(queue.Get(0)).To(Equal(message1))
 			}
 			Expect(queue.ValidateInternalState()).To(Succeed())
 		},
@@ -425,29 +425,29 @@ var _ = Describe("Queue", func() {
 			IncarnationNumber: 0,
 		}
 		queue.Add(message1)
-		queue.MarkFirstNMessagesTransmitted(1)
-		queue.MarkFirstNMessagesTransmitted(1)
+		queue.MarkTransmitted(1)
+		queue.MarkTransmitted(1)
 
 		message2 := &gossip.MessageAlive{
 			Source:            TestAddress2,
 			IncarnationNumber: 0,
 		}
 		queue.Add(message2)
-		queue.MarkFirstNMessagesTransmitted(2)
-		queue.MarkFirstNMessagesTransmitted(2)
-		queue.MarkFirstNMessagesTransmitted(2)
+		queue.MarkTransmitted(2)
+		queue.MarkTransmitted(2)
+		queue.MarkTransmitted(2)
 
 		message3 := &gossip.MessageAlive{
 			Source:            TestAddress3,
 			IncarnationNumber: 0,
 		}
 		queue.Add(message3)
-		queue.MarkFirstNMessagesTransmitted(3)
+		queue.MarkTransmitted(3)
 
-		queue.PrioritizeForAddress(encoding.Address{})
-		Expect(GetMessageAt(queue, 0)).To(Equal(message3))
-		Expect(GetMessageAt(queue, 1)).To(Equal(message2))
-		Expect(GetMessageAt(queue, 2)).To(Equal(message1))
+		queue.Prioritize(encoding.Address{})
+		Expect(queue.Get(0)).To(Equal(message3))
+		Expect(queue.Get(1)).To(Equal(message2))
+		Expect(queue.Get(2)).To(Equal(message1))
 		Expect(queue.ValidateInternalState()).To(Succeed())
 	})
 
@@ -458,29 +458,29 @@ var _ = Describe("Queue", func() {
 			IncarnationNumber: 0,
 		}
 		queue.Add(message1)
-		queue.MarkFirstNMessagesTransmitted(1)
-		queue.MarkFirstNMessagesTransmitted(1)
+		queue.MarkTransmitted(1)
+		queue.MarkTransmitted(1)
 
 		message2 := &gossip.MessageAlive{
 			Source:            TestAddress2,
 			IncarnationNumber: 0,
 		}
 		queue.Add(message2)
-		queue.MarkFirstNMessagesTransmitted(2)
-		queue.MarkFirstNMessagesTransmitted(2)
-		queue.MarkFirstNMessagesTransmitted(2)
+		queue.MarkTransmitted(2)
+		queue.MarkTransmitted(2)
+		queue.MarkTransmitted(2)
 
 		message3 := &gossip.MessageAlive{
 			Source:            TestAddress3,
 			IncarnationNumber: 0,
 		}
 		queue.Add(message3)
-		queue.MarkFirstNMessagesTransmitted(3)
+		queue.MarkTransmitted(3)
 
-		queue.PrioritizeForAddress(TestAddress)
-		Expect(GetMessageAt(queue, 0)).To(Equal(message1))
-		Expect(GetMessageAt(queue, 1)).To(Equal(message3))
-		Expect(GetMessageAt(queue, 2)).To(Equal(message2))
+		queue.Prioritize(TestAddress)
+		Expect(queue.Get(0)).To(Equal(message1))
+		Expect(queue.Get(1)).To(Equal(message3))
+		Expect(queue.Get(2)).To(Equal(message2))
 		Expect(queue.ValidateInternalState()).To(Succeed())
 	})
 
@@ -491,29 +491,29 @@ var _ = Describe("Queue", func() {
 			IncarnationNumber: 0,
 		}
 		queue.Add(message1)
-		queue.MarkFirstNMessagesTransmitted(1)
-		queue.MarkFirstNMessagesTransmitted(1)
+		queue.MarkTransmitted(1)
+		queue.MarkTransmitted(1)
 
 		message2 := &gossip.MessageAlive{
 			Source:            TestAddress2,
 			IncarnationNumber: 0,
 		}
 		queue.Add(message2)
-		queue.MarkFirstNMessagesTransmitted(2)
-		queue.MarkFirstNMessagesTransmitted(2)
-		queue.MarkFirstNMessagesTransmitted(2)
+		queue.MarkTransmitted(2)
+		queue.MarkTransmitted(2)
+		queue.MarkTransmitted(2)
 
 		message3 := &gossip.MessageAlive{
 			Source:            TestAddress3,
 			IncarnationNumber: 0,
 		}
 		queue.Add(message3)
-		queue.MarkFirstNMessagesTransmitted(3)
+		queue.MarkTransmitted(3)
 
-		queue.PrioritizeForAddress(TestAddress)
-		Expect(GetMessageAt(queue, 0)).To(Equal(message1))
-		Expect(GetMessageAt(queue, 1)).To(Equal(message3))
-		Expect(GetMessageAt(queue, 2)).To(Equal(message2))
+		queue.Prioritize(TestAddress)
+		Expect(queue.Get(0)).To(Equal(message1))
+		Expect(queue.Get(1)).To(Equal(message3))
+		Expect(queue.Get(2)).To(Equal(message2))
 		Expect(queue.ValidateInternalState()).To(Succeed())
 	})
 
@@ -523,29 +523,29 @@ var _ = Describe("Queue", func() {
 			IncarnationNumber: 0,
 		}
 		queue.Add(message1)
-		queue.MarkFirstNMessagesTransmitted(1)
-		queue.MarkFirstNMessagesTransmitted(1)
+		queue.MarkTransmitted(1)
+		queue.MarkTransmitted(1)
 
 		message2 := &gossip.MessageAlive{
 			Source:            TestAddress2,
 			IncarnationNumber: 0,
 		}
 		queue.Add(message2)
-		queue.MarkFirstNMessagesTransmitted(2)
-		queue.MarkFirstNMessagesTransmitted(2)
-		queue.MarkFirstNMessagesTransmitted(2)
+		queue.MarkTransmitted(2)
+		queue.MarkTransmitted(2)
+		queue.MarkTransmitted(2)
 
 		message3 := &gossip.MessageAlive{
 			Source:            TestAddress3,
 			IncarnationNumber: 0,
 		}
 		queue.Add(message3)
-		queue.MarkFirstNMessagesTransmitted(3)
+		queue.MarkTransmitted(3)
 
-		queue.PrioritizeForAddress(TestAddress)
-		Expect(GetMessageAt(queue, 0)).To(Equal(message3))
-		Expect(GetMessageAt(queue, 1)).To(Equal(message2))
-		Expect(GetMessageAt(queue, 2)).To(Equal(message1))
+		queue.Prioritize(TestAddress)
+		Expect(queue.Get(0)).To(Equal(message3))
+		Expect(queue.Get(1)).To(Equal(message2))
+		Expect(queue.Get(2)).To(Equal(message1))
 		Expect(queue.ValidateInternalState()).To(Succeed())
 	})
 
@@ -555,19 +555,19 @@ var _ = Describe("Queue", func() {
 			Source:            TestAddress,
 			IncarnationNumber: 0,
 		})
-		queue.PrioritizeForAddress(encoding.Address{})
+		queue.Prioritize(encoding.Address{})
 		Expect(queue.Len()).To(Equal(1))
 
-		queue.MarkFirstNMessagesTransmitted(1)
-		queue.PrioritizeForAddress(encoding.Address{})
+		queue.MarkTransmitted(1)
+		queue.Prioritize(encoding.Address{})
 		Expect(queue.Len()).To(Equal(1))
 
-		queue.MarkFirstNMessagesTransmitted(1)
-		queue.PrioritizeForAddress(encoding.Address{})
+		queue.MarkTransmitted(1)
+		queue.Prioritize(encoding.Address{})
 		Expect(queue.Len()).To(Equal(1))
 
-		queue.MarkFirstNMessagesTransmitted(1)
-		queue.PrioritizeForAddress(encoding.Address{})
+		queue.MarkTransmitted(1)
+		queue.Prioritize(encoding.Address{})
 		Expect(queue.Len()).To(Equal(0))
 		Expect(queue.ValidateInternalState()).To(Succeed())
 	})
@@ -588,7 +588,7 @@ var _ = Describe("Queue", func() {
 					IncarnationNumber: rand.Intn(5),
 				})
 			case selection < 100: // 75% of the time we mark 3 messages as transmitted
-				queue.MarkFirstNMessagesTransmitted(rand.Intn(3))
+				queue.MarkTransmitted(rand.Intn(3))
 			}
 			Expect(queue.ValidateInternalState()).To(Succeed())
 		}
@@ -616,7 +616,7 @@ func BenchmarkRingBufferQueue_Add(b *testing.B) {
 
 				// Mark all messages as transmitted once to move all messages to the next bucket.
 				if i%gossipCount/bucketCount == 0 {
-					queue.MarkFirstNMessagesTransmitted(queue.Len())
+					queue.MarkTransmitted(queue.Len())
 				}
 			}
 			b.Run(fmt.Sprintf("%d gossip in %d buckets", gossipCount, bucketCount), func(b *testing.B) {
@@ -654,7 +654,7 @@ func BenchmarkRingBufferQueue_PrioritizeForAddress(b *testing.B) {
 			// slower path and is not exiting early.
 			address := encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+1)
 			for b.Loop() {
-				queue.PrioritizeForAddress(address)
+				queue.Prioritize(address)
 			}
 		})
 	}
@@ -669,7 +669,7 @@ func BenchmarkRingBufferQueue_Get(b *testing.B) {
 				IncarnationNumber: 0,
 			})
 		}
-		queue.PrioritizeForAddress(encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+gossipCount/2))
+		queue.Prioritize(encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+gossipCount/2))
 		b.Run(fmt.Sprintf("%d gossip", gossipCount), func(b *testing.B) {
 			var count int
 			for {
@@ -696,7 +696,7 @@ func BenchmarkRingBufferQueue_MarkFirstNMessagesTransmitted(b *testing.B) {
 		for messagesTransmitted := 1; messagesTransmitted <= 128; messagesTransmitted *= 2 {
 			b.Run(fmt.Sprintf("%d gossip with %d transmissions", gossipCount, messagesTransmitted), func(b *testing.B) {
 				for b.Loop() {
-					queue.MarkFirstNMessagesTransmitted(messagesTransmitted)
+					queue.MarkTransmitted(messagesTransmitted)
 				}
 			})
 		}

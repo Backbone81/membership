@@ -1,6 +1,7 @@
 package gossip
 
 import (
+	"fmt"
 	"iter"
 
 	"github.com/backbone81/membership/internal/encoding"
@@ -87,6 +88,39 @@ func NewQueue(options ...Option) *Queue {
 	}
 }
 
+// Config returns the current configuration of the queue.
+func (q *Queue) Config() Config {
+	return q.config
+}
+
+// IsEmpty reports if the queue is empty.
+func (q *Queue) IsEmpty() bool {
+	// Note that this works, because Add grows the ring buffer before the ring buffer is full. Otherwise, this check
+	// could fail with a full ring buffer.
+	return q.head == q.tail
+}
+
+// Len returns the number of elements currently stored inside the queue.
+func (q *Queue) Len() int {
+	return (q.head - q.tail + len(q.ring)) % len(q.ring)
+}
+
+// Cap returns the capacity the queue can take without growing the ring buffer.
+func (q *Queue) Cap() int {
+	return len(q.ring)
+}
+
+// Clear removes all elements from the queue. It retains the memory which was already allocated to be used with upcoming
+// messages.
+func (q *Queue) Clear() {
+	clear(q.ring)
+	clear(q.bucketStarts)
+	clear(q.indexByAddress)
+	q.head = 0
+	q.tail = 0
+	q.priorityIndex = -1
+}
+
 // SetMaxTransmissionCount updates the max transmission count to the new value. Messages are held in the queue until
 // the reach that count.
 func (q *Queue) SetMaxTransmissionCount(count int) {
@@ -106,22 +140,6 @@ func (q *Queue) SetMaxTransmissionCount(count int) {
 			q.bucketStarts = append(q.bucketStarts, q.bucketStarts[len(q.bucketStarts)-1])
 		}
 	}
-}
-
-// Len returns the number of elements currently stored inside the queue.
-func (q *Queue) Len() int {
-	return (q.head - q.tail + len(q.ring)) % len(q.ring)
-}
-
-// Clear removes all elements from the queue. It retains the memory which was already allocated to be used with upcoming
-// messages.
-func (q *Queue) Clear() {
-	clear(q.ring)
-	clear(q.bucketStarts)
-	clear(q.indexByAddress)
-	q.head = 0
-	q.tail = 0
-	q.priorityIndex = -1
 }
 
 // Add puts the given message at the end of the queue into bucket 0. If the queue already contains a message about the
@@ -158,9 +176,9 @@ func (q *Queue) Add(message Message) {
 	AddMessageTotal.Inc()
 }
 
-// PrioritizeForAddress marks a message for the given address as priority. If such a message exists, it will always be
+// Prioritize marks a message for the given address as priority. If such a message exists, it will always be
 // returned first when iterating over all. Otherwise, this method has no effect.
-func (q *Queue) PrioritizeForAddress(address encoding.Address) {
+func (q *Queue) Prioritize(address encoding.Address) {
 	index, found := q.indexByAddress[address]
 	if found {
 		messageType := q.ring[index].Message.GetType()
@@ -173,6 +191,17 @@ func (q *Queue) PrioritizeForAddress(address encoding.Address) {
 		}
 	}
 	q.priorityIndex = -1
+}
+
+// Get returns the element with the given logical index. This is a quality of life function which is implemented as a
+// wrapper around All. Prefer using All for better performance when ranging over multiple elements.
+func (q *Queue) Get(logicalIndex int) Message {
+	for index, message := range q.All() {
+		if index == logicalIndex {
+			return message
+		}
+	}
+	panic("queue index out of bounds")
 }
 
 // All returns a range over function which iterates over all elements stored in the queue. The messages transmitted
@@ -211,14 +240,14 @@ func (q *Queue) all(yield func(int, Message) bool) {
 	}
 }
 
-// MarkFirstNMessagesTransmitted moves the first count messages to the next bucket. If they leave the last bucket, they
+// MarkTransmitted moves the first count messages to the next bucket. If they leave the last bucket, they
 // are deleted from the queue.
-func (q *Queue) MarkFirstNMessagesTransmitted(count int) {
-	count = min(count, q.Len())
+func (q *Queue) MarkTransmitted(count int) {
+	remaining := min(count, q.Len())
 
 	bucketEnd := q.head
 	for i := range q.bucketStarts {
-		if count == 0 {
+		if remaining == 0 {
 			// We already moved everything. We can stop here.
 			break
 		}
@@ -233,14 +262,14 @@ func (q *Queue) MarkFirstNMessagesTransmitted(count int) {
 		}
 
 		// Update the transmission count for the elements we intend to move to the next bucket.
-		moveCount := min(count, bucketSize)
+		moveCount := min(remaining, bucketSize)
 		for j := bucketStart; j < bucketStart+moveCount; j++ {
 			q.ring[j%len(q.ring)].TransmissionCount++
 		}
 
 		// Move the start of the bucket to the right. This effectively makes the moved elements part of the next bucket.
 		q.bucketStarts[i] = (bucketStart + moveCount) % len(q.ring)
-		count -= moveCount
+		remaining -= moveCount
 		bucketEnd = bucketStart
 	}
 	q.cleanupTail()
@@ -387,8 +416,38 @@ func (q *Queue) swapElements(index1 int, index2 int) {
 // ValidateInternalState reports if the internal state is valid.
 // This function is expensive and should not be called outside of tests.
 func (q *Queue) ValidateInternalState() error {
+	bucketEnd := q.head
+	for i := range q.bucketStarts {
+		bucketStart := q.bucketStarts[i]
+		bucketSize := (bucketEnd - bucketStart + len(q.ring)) % len(q.ring)
+		for j := 0; j < bucketSize; j++ {
+			index := (bucketStart + j) % len(q.ring)
 
-	// TODO: How to validate internal state?
+			// Make sure that all entries are in the correct bucket.
+			if q.ring[index].TransmissionCount != i {
+				return fmt.Errorf("invalid transmission count at index %d", index)
+			}
 
+			// Make sure that all entries are correctly stored in the index by address
+			index2, found := q.indexByAddress[q.ring[index].Message.GetAddress()]
+			if !found {
+				return fmt.Errorf("message %d could not be found in index map", index)
+			}
+			if index2 != index {
+				return fmt.Errorf("message %d has wrong index in index map", index)
+			}
+		}
+		bucketEnd = bucketStart
+	}
+
+	// Make sure that every entry in the index map can be found in the queue
+	for address, index := range q.indexByAddress {
+		if index >= len(q.ring) {
+			return fmt.Errorf("index map for address %s points out of bounds", address)
+		}
+		if !q.ring[index].Message.GetAddress().Equal(address) {
+			return fmt.Errorf("index map index mismatch for queue element %d", index)
+		}
+	}
 	return nil
 }

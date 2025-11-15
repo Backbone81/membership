@@ -53,7 +53,7 @@ type Queue struct {
 	config Config
 
 	// ring holds the storage for the ring buffer. We can assume that "len(ring) > 0" always holds.
-	ring []MessageQueueEntry
+	ring []QueueEntry
 
 	// head provides the index into the ring for the next write.
 	head int
@@ -85,7 +85,7 @@ func NewQueue(options ...Option) *Queue {
 	}
 	return &Queue{
 		config:         config,
-		ring:           make([]MessageQueueEntry, config.PreAllocationCount),
+		ring:           make([]QueueEntry, config.PreAllocationCount),
 		bucketStarts:   make([]int, config.MaxTransmissionCount),
 		indexByAddress: make(map[encoding.Address]int, config.PreAllocationCount),
 		priorityIndex:  -1,
@@ -176,7 +176,7 @@ func (q *Queue) Add(message Message) {
 	}
 
 	// Add element and update bookkeeping.
-	q.ring[q.head] = MessageQueueEntry{
+	q.ring[q.head] = QueueEntry{
 		Message:           message,
 		TransmissionCount: 0,
 	}
@@ -303,7 +303,7 @@ func (q *Queue) cleanupTail() {
 // size.
 func (q *Queue) grow() {
 	// Copy all elements into a new ring buffer. Moving everything to the start of the buffer.
-	newRing := make([]MessageQueueEntry, len(q.ring)*2)
+	newRing := make([]QueueEntry, len(q.ring)*2)
 	var n int
 	if q.tail <= q.head {
 		copy(newRing, q.ring[q.tail:q.head])

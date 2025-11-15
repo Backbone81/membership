@@ -1,7 +1,7 @@
 package gossip
 
-// MessageQueueEntry is a helper struct making up each entry in the queue.
-type MessageQueueEntry struct {
+// QueueEntry is a helper struct making up each entry in the queue.
+type QueueEntry struct {
 	// Message is the message to gossip about.
 	Message Message
 

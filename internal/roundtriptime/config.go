@@ -26,10 +26,15 @@ type Config struct {
 
 // DefaultConfig is the default configuration for Tracker which should work fine in most situations.
 var DefaultConfig = Config{
-	Count:      60,
-	Percentile: 0.95,
+	Count:      100,
+	Percentile: 0.99,
 	Alpha:      0.3,
-	Default:    100 * time.Millisecond,
-	Minimum:    5 * time.Millisecond,
-	Maximum:    300 * time.Millisecond,
+	// The minimum needs to account for scheduling inconsistencies. 5 ms is still safe without triggering missed
+	// timeouts in the scheduler.
+	Minimum: 5 * time.Millisecond,
+	Default: 100 * time.Millisecond,
+	// As the default protocol period is 1 second, the RTT needs to be below 1/3, because we need 3 round trips in
+	// a full ping, indirect ping protocol period. Therefore, the default is set to 300 ms which still provides some
+	// leeway.
+	Maximum: 300 * time.Millisecond,
 }

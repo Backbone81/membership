@@ -13,13 +13,13 @@ func WithCount(count int) Option {
 
 func WithPercentile(percentile float64) Option {
 	return func(config *Config) {
-		config.Percentile = min(1, max(0, percentile))
+		config.Percentile = max(0, min(percentile, 1))
 	}
 }
 
 func WithAlpha(alpha float64) Option {
 	return func(config *Config) {
-		config.Alpha = min(1, max(0, alpha))
+		config.Alpha = max(0, min(alpha, 1))
 	}
 }
 

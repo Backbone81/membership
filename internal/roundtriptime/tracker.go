@@ -25,6 +25,19 @@ func NewTracker(options ...Option) *Tracker {
 		option(&config)
 	}
 
+	if config.Maximum < config.Minimum {
+		// The maximum is smaller than the minimum. Adjust the minimum to match the maximum.
+		config.Minimum = config.Maximum
+	}
+	if config.Default < config.Minimum {
+		// The default is smaller than the minimum. Adjust the default to match the minimum.
+		config.Default = config.Minimum
+	}
+	if config.Maximum < config.Default {
+		// The default is bigger than the maximum. Adjust the default to match the maximum.
+		config.Default = config.Maximum
+	}
+
 	result := Tracker{
 		config:             config,
 		observedRTTs:       make([]time.Duration, config.Count),
@@ -42,6 +55,16 @@ func NewTracker(options ...Option) *Tracker {
 // Config returns the config the tracker was created with.
 func (t *Tracker) Config() Config {
 	return t.config
+}
+
+// Reset overwrites all observed RTTs with the default and also resets the calculated RTT to the default. This restores
+// the same state as if the tracker was newly created.
+func (t *Tracker) Reset() {
+	for i := range t.observedRTTs {
+		t.observedRTTs[i] = t.config.Default
+	}
+	t.calculatedRTT = t.config.Default
+	t.nextIndex = 0
 }
 
 // AddObserved will add the given RTT to the observed RTTs. It will overwrite the oldest observed RTT in the local
@@ -65,7 +88,7 @@ func (t *Tracker) UpdateCalculated() {
 
 	// The new value is mixed with the previously calculated RTT to smoothen out rapid changes.
 	smoothedRtt := time.Duration(t.config.Alpha*float64(newRtt) + (1-t.config.Alpha)*float64(t.calculatedRTT))
-	t.calculatedRTT = min(t.config.Maximum, max(t.config.Minimum, smoothedRtt))
+	t.calculatedRTT = max(t.config.Minimum, min(smoothedRtt, t.config.Maximum))
 }
 
 // GetCalculated returns the calculated RTT.

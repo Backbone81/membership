@@ -78,6 +78,7 @@ is picked and the full membership list is requested.
   dropped out of our member list. Depending on a configuration, bootstrap members could be re-added regularly again
   under the assumption that the bootstrap members are always there. If bootstrap members are ephemeral, this should be
   disabled.
+- Replace the roundtriptime.Tracker sort implementation with a quick select implementation for faster results.
 
 ### Nice to Have
 

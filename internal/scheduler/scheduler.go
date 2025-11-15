@@ -68,16 +68,19 @@ func (s *Scheduler) protocolPeriodTask() {
 	var lastExpectedRoundTripTime time.Duration
 	directPingAt := time.Now()
 	for {
-		s.measure("Direct ping completed", func() {
+		s.measure("direct_ping", func() error {
 			if err := s.target.DirectPing(); err != nil {
 				s.logger.Error(err, "Scheduled direct ping.")
+				return err
 			}
+			return nil
 		})
 
 		// Adjust the timeout for the direct ping to what we observed can be expected. We always use the current value
 		// for the timeout, but we also want to create a log entry, when the timeout changes significantly. Therefore,
 		// we only log when we move at least 10% away of the last time we logged.
 		currExpectedRoundTripTime := s.target.ExpectedRoundTripTime()
+		ExpectedRTTSeconds.Set(currExpectedRoundTripTime.Seconds())
 		logThreshold := lastExpectedRoundTripTime / 10
 		if math.Abs(float64(currExpectedRoundTripTime)-float64(lastExpectedRoundTripTime)) > float64(logThreshold) {
 			s.logger.Info(
@@ -101,20 +104,24 @@ func (s *Scheduler) protocolPeriodTask() {
 		if !s.waitUntil(indirectPingAt) {
 			return
 		}
-		s.measure("Indirect ping completed", func() {
+		s.measure("indirect_ping", func() error {
 			if err := s.target.IndirectPing(); err != nil {
 				s.logger.Error(err, "Scheduled indirect ping.")
+				return err
 			}
+			return nil
 		})
 
 		endOfProtocolPeriodAt := directPingAt.Add(s.config.ProtocolPeriod)
 		if !s.waitUntil(endOfProtocolPeriodAt) {
 			return
 		}
-		s.measure("End of protocol period completed", func() {
+		s.measure("end_of_protocol_period", func() error {
 			if err := s.target.EndOfProtocolPeriod(); err != nil {
 				s.logger.Error(err, "End of protocol period.")
+				return err
 			}
+			return nil
 		})
 
 		directPingAt = directPingAt.Add(s.config.ProtocolPeriod)
@@ -173,10 +180,12 @@ func (s *Scheduler) requestListTask() {
 	defer s.logger.Info("Member list request background task finished")
 
 	// Let's do a list request right at startup to have the full member list available as soon as possible.
-	s.measure("Request list completed", func() {
+	s.measure("request_list", func() error {
 		if err := s.target.RequestList(); err != nil {
 			s.logger.Error(err, "Startup list request.")
+			return err
 		}
+		return nil
 	})
 
 	for {
@@ -184,10 +193,12 @@ func (s *Scheduler) requestListTask() {
 		case <-s.shutdown:
 			return
 		case <-s.listRequestTicker.C:
-			s.measure("Request list completed", func() {
+			s.measure("Request list completed", func() error {
 				if err := s.target.RequestList(); err != nil {
 					s.logger.Error(err, "Scheduled list request.")
+					return err
 				}
+				return nil
 			})
 		}
 	}
@@ -195,8 +206,11 @@ func (s *Scheduler) requestListTask() {
 
 // measure executes the given function and measures the time needed. It will log the given message with the measured
 // duration.
-func (s *Scheduler) measure(message string, f func()) {
+func (s *Scheduler) measure(operation string, f func() error) {
 	start := time.Now()
-	f()
-	s.logger.V(4).Info(message, "duration", time.Since(start))
+	if err := f(); err != nil {
+		OperationErrorsTotal.WithLabelValues(operation).Inc()
+	}
+	OperationDurationSeconds.WithLabelValues(operation).Observe(time.Since(start).Seconds())
+	OperationsTotal.WithLabelValues(operation).Inc()
 }

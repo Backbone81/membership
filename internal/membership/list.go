@@ -33,7 +33,7 @@ type List struct {
 
 	randomIndexes   []int
 	nextRandomIndex int
-	gossipQueue     *gossip.MessageQueue
+	gossipQueue     *gossip.Queue
 	self            encoding.Address
 
 	datagramBuffer []byte
@@ -80,7 +80,7 @@ func NewList(options ...Option) *List {
 		config:         config,
 		logger:         config.Logger,
 		self:           config.AdvertisedAddress,
-		gossipQueue:    gossip.NewMessageQueue(10), // TODO: The max gossip count needs to be adjusted for the number of members during runtime.
+		gossipQueue:    gossip.NewQueue(), // TODO: The max gossip count needs to be adjusted for the number of members during runtime.
 		datagramBuffer: make([]byte, 0, config.MaxDatagramLengthSend),
 		rttTracker:     roundtriptime.NewTracker(),
 	}
@@ -166,7 +166,7 @@ func (l *List) AdvertiseAddress() encoding.Address {
 	return l.config.AdvertisedAddress
 }
 
-func (l *List) GetGossip() *gossip.MessageQueue {
+func (l *List) GetGossip() *gossip.Queue {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
 
@@ -1033,7 +1033,7 @@ func (l *List) sendWithGossip(address encoding.Address, message Message) error {
 		return err
 	}
 
-	l.gossipQueue.PrioritizeForAddress(address)
+	l.gossipQueue.Prioritize(address)
 	var gossipAdded int
 	for i := range l.gossipQueue.Len() {
 		var gossipN int
@@ -1050,7 +1050,7 @@ func (l *List) sendWithGossip(address encoding.Address, message Message) error {
 		datagramN += gossipN
 		gossipAdded++
 	}
-	l.gossipQueue.MarkFirstNMessagesTransmitted(gossipAdded)
+	l.gossipQueue.MarkTransmitted(gossipAdded)
 
 	if err := l.config.UDPClient.Send(address, l.datagramBuffer); err != nil {
 		return err
@@ -1193,7 +1193,7 @@ func (l *List) WriteInternalDebugState(writer io.Writer) error {
 		return err
 	}
 	// Make sure we are not prioritizing for the state dump
-	l.gossipQueue.PrioritizeForAddress(encoding.Address{})
+	l.gossipQueue.Prioritize(encoding.Address{})
 	for i := range l.gossipQueue.Len() {
 		gossipMessage := l.gossipQueue.Get(i)
 		if _, err := fmt.Fprintf(writer, "  - %s\n", gossipMessage); err != nil {

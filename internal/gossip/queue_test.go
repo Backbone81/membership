@@ -341,7 +341,7 @@ var _ = Describe("Queue", func() {
 
 			// Verify all messages accessible
 			for i := 0; i < 4; i++ {
-				Expect(queue.Get(i).GetAddress().Port()).To(Equal(uint16(1024 + 3 + i)))
+				Expect(queue.Get(i).GetAddress().Port()).To(Equal(1024 + 3 + i))
 			}
 			Expect(queue.ValidateInternalState()).To(Succeed())
 		})
@@ -971,9 +971,9 @@ var _ = Describe("Queue", func() {
 	})
 })
 
-// BenchmarkMessageQueue2_Add is measuring the time an addition of a new gossip message needs depending on the number of
+// BenchmarkQueue_Add is measuring the time an addition of a new gossip message needs depending on the number of
 // gossip already there and the number of buckets the gossip is distributed over.
-func BenchmarkRingBufferQueue_Add(b *testing.B) {
+func BenchmarkQueue_Add(b *testing.B) {
 	// We want to test for gossip up to 16k. This could in theory happen with a cluster of 16k members and there is one
 	// gossip for every member.
 	for gossipCount := 1024; gossipCount <= 16*1024; gossipCount *= 2 {
@@ -1016,7 +1016,7 @@ func BenchmarkRingBufferQueue_Add(b *testing.B) {
 	}
 }
 
-func BenchmarkRingBufferQueue_PrioritizeForAddress(b *testing.B) {
+func BenchmarkQueue_Prioritize(b *testing.B) {
 	for gossipCount := 1024; gossipCount <= 16*1024; gossipCount *= 2 {
 		queue := gossip.NewQueue()
 		for i := range gossipCount {
@@ -1036,7 +1036,7 @@ func BenchmarkRingBufferQueue_PrioritizeForAddress(b *testing.B) {
 	}
 }
 
-func BenchmarkRingBufferQueue_Get(b *testing.B) {
+func BenchmarkQueue_All(b *testing.B) {
 	for gossipCount := 1024; gossipCount <= 16*1024; gossipCount *= 2 {
 		queue := gossip.NewQueue()
 		for i := range gossipCount {
@@ -1060,16 +1060,16 @@ func BenchmarkRingBufferQueue_Get(b *testing.B) {
 	}
 }
 
-func BenchmarkRingBufferQueue_MarkFirstNMessagesTransmitted(b *testing.B) {
+func BenchmarkQueue_MarkTransmitted(b *testing.B) {
 	for gossipCount := 1024; gossipCount <= 16*1024; gossipCount *= 2 {
-		queue := gossip.NewQueue()
-		for i := range gossipCount {
-			queue.Add(&gossip.MessageAlive{
-				Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
-				IncarnationNumber: 0,
-			})
-		}
 		for messagesTransmitted := 1; messagesTransmitted <= 128; messagesTransmitted *= 2 {
+			queue := gossip.NewQueue()
+			for i := range gossipCount {
+				queue.Add(&gossip.MessageAlive{
+					Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
+					IncarnationNumber: 0,
+				})
+			}
 			b.Run(fmt.Sprintf("%d gossip with %d transmissions", gossipCount, messagesTransmitted), func(b *testing.B) {
 				for b.Loop() {
 					queue.MarkTransmitted(messagesTransmitted)

@@ -33,6 +33,11 @@ func New(target Target, options ...Option) *Scheduler {
 	}
 }
 
+// Config returns the config of the scheduler.
+func (s *Scheduler) Config() Config {
+	return s.config
+}
+
 // Startup executes the scheduler. It will trigger the membership list algorithm until Shutdown is called.
 func (s *Scheduler) Startup() error {
 	s.logger.Info("Scheduler startup")
@@ -49,8 +54,8 @@ func (s *Scheduler) Startup() error {
 // Shutdown stops the scheduler. It will block until all callbacks have completed.
 func (s *Scheduler) Shutdown() error {
 	s.logger.Info("Scheduler shutdown")
-	close(s.shutdown)
 	s.listRequestTicker.Stop()
+	close(s.shutdown)
 	s.waitGroup.Wait()
 	return nil
 }
@@ -86,9 +91,11 @@ func (s *Scheduler) protocolPeriodTask() {
 		indirectPingAt := directPingAt.Add(currExpectedRoundTripTime)
 		if time.Until(indirectPingAt) < currExpectedRoundTripTime/2 {
 			s.logger.Info(
-				"WARNING: The time between the direct ping and indirect ping is less than 50% of the expected round trip time. " +
-					"This is a strong indication that the system is overloaded. " +
+				"WARNING: The time between the direct ping and indirect ping is less than 50% of the expected round trip time. "+
+					"This is a strong indication that the system is overloaded. "+
 					"Members declared as suspect or faulty by this member are probably false positives.",
+				"want-duration", currExpectedRoundTripTime,
+				"got-duration", time.Until(indirectPingAt),
 			)
 		}
 		if !s.waitUntil(indirectPingAt) {
@@ -125,9 +132,11 @@ func (s *Scheduler) waitUntil(timestamp time.Time) bool {
 
 	if timestamp.Before(time.Now()) {
 		s.logger.Info(
-			"WARNING: The scheduled time within the protocol period has already passed. " +
-				"This is a strong indication that the system is overloaded. " +
+			"WARNING: The scheduled time within the protocol period has already passed. "+
+				"This is a strong indication that the system is overloaded. "+
 				"Members declared as suspect or faulty by this member are probably false positives.",
+			"want-time", timestamp,
+			"got-time", time.Now(),
 		)
 		return true
 	}
@@ -138,6 +147,9 @@ func (s *Scheduler) waitUntil(timestamp time.Time) bool {
 		time.Sleep(min(timeToWait, s.config.MaxSleepDuration))
 		now = time.Now()
 
+		// In case a shutdown is already triggered, we do not want to wait for the full duration of waitUntil. We
+		// therefore repeatedly check for shutdown and then continue to sleep for a bit. This allows for a fast
+		// shutdown.
 		if s.shutdownInProgress() {
 			return false
 		}

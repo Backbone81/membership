@@ -10,7 +10,13 @@ import (
 	"github.com/backbone81/membership/internal/scheduler"
 )
 
+// As Ginkgo does not yet support testing/synctest, we need to capture t during test suite initialization and make it
+// available to our Ginkgo tests. Keep an eye on https://github.com/onsi/ginkgo/issues/1601 and remove this hack
+// when Ginkgo provides support for it.
+var testingT *testing.T
+
 func TestSuite(t *testing.T) {
+	testingT = t
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Scheduler Suite")
 }

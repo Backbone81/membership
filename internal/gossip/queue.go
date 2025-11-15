@@ -36,6 +36,10 @@ import (
 // itself stays at its place. Marking the first message F as having been transmitted will move the bucket start for
 // bucket 0 from index 5 to index 6, which results in message F now being part of bucket 1.
 //
+// Messages are deduplicated based on their address. New messages with an address already present in the queue will
+// overwrite the existing messages if they have higher priority. In that case the message is moved to the first bucket
+// and changes its location. If the priority is not higher, new messages are silently dropped.
+//
 // The queue is implemented as a ring buffer to reduce the number of memory allocations and to allow elements to stay
 // at their location as long as possible. This means that we need to consider wrap-arounds at the end of the ring buffer
 // throughout our code. When the ring buffer is full, it can grow by copying the content over into a new buffer.
@@ -108,6 +112,11 @@ func (q *Queue) Len() int {
 // Cap returns the capacity the queue can take without growing the ring buffer.
 func (q *Queue) Cap() int {
 	return len(q.ring)
+}
+
+// Buckets returns the number of buckets available for elements.
+func (q *Queue) Buckets() int {
+	return len(q.bucketStarts)
 }
 
 // Clear removes all elements from the queue. It retains the memory which was already allocated to be used with upcoming

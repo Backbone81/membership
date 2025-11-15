@@ -83,6 +83,7 @@ func NewQueue(options ...Option) *Queue {
 	for _, option := range options {
 		option(&config)
 	}
+	QueueCapacityMessages.Set(float64(config.PreAllocationCount))
 	return &Queue{
 		config:         config,
 		ring:           make([]QueueEntry, config.PreAllocationCount),
@@ -167,6 +168,8 @@ func (q *Queue) Add(message Message) {
 		if entry.TransmissionCount != 0 {
 			index = q.moveToFirstBucket(index)
 		}
+		MessagesOverwrittenTotal.Inc()
+		MessagesByTypeTotal.WithLabelValues(message.GetType().String()).Inc()
 		return
 	}
 
@@ -182,7 +185,8 @@ func (q *Queue) Add(message Message) {
 	}
 	q.indexByAddress[message.GetAddress()] = q.head
 	q.head = (q.head + 1) % len(q.ring)
-	AddMessageTotal.Inc()
+	MessagesAddedTotal.Inc()
+	MessagesByTypeTotal.WithLabelValues(message.GetType().String()).Inc()
 }
 
 // Prioritize marks a message for the given address as priority. If such a message exists, it will always be
@@ -294,7 +298,7 @@ func (q *Queue) cleanupTail() {
 			q.priorityIndex = -1
 		}
 		q.tail = (q.tail + 1) % len(q.ring)
-		RemoveMessageTotal.Inc()
+		MessagesRemovedTotal.Inc()
 	}
 }
 
@@ -329,6 +333,8 @@ func (q *Queue) grow() {
 	q.head = q.Len()
 	q.tail = 0
 	q.ring = newRing
+	QueueCapacityMessages.Set(float64(len(newRing)))
+	QueueGrowthsTotal.Inc()
 }
 
 // adjustIndexAfterGrow returns the new index after the ring buffer was grown to a bigger size.

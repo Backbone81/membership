@@ -849,6 +849,143 @@ var _ = Describe("Queue", func() {
 			Expect(queue.Get(2)).To(Equal(alive3))
 			Expect(queue.ValidateInternalState()).To(Succeed())
 		})
+
+		It("should clear priority when prioritized message is removed", func() {
+			queue := gossip.NewQueue(gossip.WithMaxTransmissionCount(3))
+
+			suspect := &gossip.MessageSuspect{
+				Source:            TestAddress2,
+				Destination:       TestAddress,
+				IncarnationNumber: 0,
+			}
+			queue.Add(suspect)
+			queue.MarkTransmitted(1)
+
+			alive := &gossip.MessageAlive{
+				Source:            TestAddress2,
+				IncarnationNumber: 0,
+			}
+			queue.Add(alive)
+
+			Expect(queue.Get(0)).To(Equal(alive))
+			Expect(queue.Get(1)).To(Equal(suspect))
+
+			// Prioritize the suspect message
+			queue.Prioritize(TestAddress)
+			Expect(queue.Get(0)).To(Equal(suspect))
+			Expect(queue.Get(1)).To(Equal(alive))
+
+			queue.SetMaxTransmissionCount(1)
+
+			Expect(queue.Len()).To(Equal(1))
+			Expect(queue.Get(0)).To(Equal(alive))
+			Expect(queue.ValidateInternalState()).To(Succeed())
+		})
+
+		It("should preserve priority index when ring buffer grows", func() {
+			queue := gossip.NewQueue(gossip.WithPreAllocationCount(4))
+
+			suspect := &gossip.MessageSuspect{
+				Source:            TestAddress2,
+				Destination:       TestAddress,
+				IncarnationNumber: 0,
+			}
+			queue.Add(suspect)
+			queue.MarkTransmitted(1)
+
+			queue.Add(&gossip.MessageAlive{
+				Source:            TestAddress2,
+				IncarnationNumber: 0,
+			})
+			queue.Add(&gossip.MessageAlive{
+				Source:            TestAddress3,
+				IncarnationNumber: 0,
+			})
+
+			queue.Prioritize(TestAddress)
+			Expect(queue.Get(0)).To(Equal(suspect))
+
+			Expect(queue.Cap()).To(Equal(4))
+			Expect(queue.Len()).To(Equal(3))
+			alive := &gossip.MessageAlive{
+				Source:            encoding.NewAddress(net.IPv4(5, 6, 7, 8), 9999),
+				IncarnationNumber: 0,
+			}
+			queue.Add(alive)
+
+			Expect(queue.Cap()).To(Equal(8))
+			Expect(queue.Len()).To(Equal(4))
+
+			Expect(queue.Get(0)).To(Equal(suspect))
+			Expect(queue.ValidateInternalState()).To(Succeed())
+		})
+
+		It("should update priority index when prioritized message is swapped", func() {
+			queue := gossip.NewQueue(gossip.WithPreAllocationCount(4))
+
+			suspect := &gossip.MessageSuspect{
+				Source:            TestAddress2,
+				Destination:       TestAddress,
+				IncarnationNumber: 0,
+			}
+			queue.Add(suspect)
+			queue.MarkTransmitted(1)
+
+			alive := &gossip.MessageAlive{
+				Source:            TestAddress2,
+				IncarnationNumber: 0,
+			}
+			queue.Add(alive)
+			queue.MarkTransmitted(2)
+
+			queue.Prioritize(TestAddress)
+			Expect(queue.Get(0)).To(Equal(suspect))
+			Expect(queue.Get(1)).To(Equal(alive))
+
+			suspectUpdated := &gossip.MessageSuspect{
+				Source:            TestAddress2,
+				Destination:       TestAddress,
+				IncarnationNumber: 1, // higher incarnation number
+			}
+			queue.Add(suspectUpdated)
+
+			Expect(queue.Get(0)).To(Equal(suspectUpdated))
+			Expect(queue.Len()).To(Equal(2))
+			Expect(queue.ValidateInternalState()).To(Succeed())
+		})
+
+		It("should update priority index when message is swapped with prioritized", func() {
+			queue := gossip.NewQueue(gossip.WithPreAllocationCount(4))
+
+			alive := &gossip.MessageAlive{
+				Source:            TestAddress2,
+				IncarnationNumber: 0,
+			}
+			queue.Add(alive)
+			queue.MarkTransmitted(1)
+
+			suspect := &gossip.MessageSuspect{
+				Source:            TestAddress2,
+				Destination:       TestAddress,
+				IncarnationNumber: 0,
+			}
+			queue.Add(suspect)
+			queue.MarkTransmitted(2)
+
+			queue.Prioritize(TestAddress)
+			Expect(queue.Get(0)).To(Equal(suspect))
+			Expect(queue.Get(1)).To(Equal(alive))
+
+			aliveUpdated := &gossip.MessageAlive{
+				Source:            TestAddress2,
+				IncarnationNumber: 1, // higher incarnation number
+			}
+			queue.Add(aliveUpdated)
+
+			Expect(queue.Get(0)).To(Equal(suspect))
+			Expect(queue.Len()).To(Equal(2))
+			Expect(queue.ValidateInternalState()).To(Succeed())
+		})
 	})
 
 	Context("MarkTransmitted", func() {
@@ -945,6 +1082,15 @@ var _ = Describe("Queue", func() {
 			Expect(queue.Len()).To(Equal(0))
 			Expect(queue.IsEmpty()).To(BeTrue())
 			Expect(queue.ValidateInternalState()).To(Succeed())
+		})
+	})
+
+	Context("Get", func() {
+		It("should panic when accessed out of range", func() {
+			queue := gossip.NewQueue()
+			Expect(func() {
+				queue.Get(1024)
+			}).To(Panic())
 		})
 	})
 

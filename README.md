@@ -62,7 +62,6 @@ is picked and the full membership list is requested.
 
 ### More Advanced Topics
 
-- A ring buffer implementation for the gossip queue might perform better than the current bucket implementation.
 - Can we drop the interface for Message and collapse all message types into a single message which has all fields any
   message could have? That way we could be able to drop the interface and prevent memory allocations due to interface
   conversion.

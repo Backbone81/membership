@@ -32,3 +32,28 @@ func MessageTypeFromBuffer(buffer []byte) (MessageType, int, error) {
 	}
 	return MessageType(buffer[0]), 1, nil
 }
+
+func (t MessageType) String() string {
+	switch t {
+	case MessageTypeDirectPing:
+		return "DirectPing"
+	case MessageTypeDirectAck:
+		return "DirectAck"
+	case MessageTypeIndirectPing:
+		return "IndirectPing"
+	case MessageTypeIndirectAck:
+		return "IndirectAck"
+	case MessageTypeSuspect:
+		return "Suspect"
+	case MessageTypeAlive:
+		return "Alive"
+	case MessageTypeFaulty:
+		return "Faulty"
+	case MessageTypeListRequest:
+		return "ListRequest"
+	case MessageTypeListResponse:
+		return "ListResponse"
+	default:
+		return "<unknown>"
+	}
+}

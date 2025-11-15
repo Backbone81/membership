@@ -1,3 +1,3 @@
-// Package gossip provides functionality for handling gossip messages which are sent piggybacked on the primary
-// membership messages.
+// Package gossip provides a priority queue for managing gossip messages that are piggybacked
+// on membership protocol messages.
 package gossip

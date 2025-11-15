@@ -3,19 +3,41 @@ package gossip
 import "github.com/prometheus/client_golang/prometheus"
 
 var (
-	AddMessageTotal = prometheus.NewCounter(
+	MessagesAddedTotal = prometheus.NewCounter(
 		prometheus.CounterOpts{
-			Name: "membership_gossip_add_message_total",
-			Help: "Total number of gossip messages added. " +
-				"You can calculate the active gossip messages by subtracting membership_gossip_remove_message_total from membership_gossip_add_message_total.",
+			Name: "membership_gossip_messages_added_total",
+			Help: "Total number of gossip messages added.",
 		},
 	)
-
-	RemoveMessageTotal = prometheus.NewCounter(
+	MessagesOverwrittenTotal = prometheus.NewCounter(
 		prometheus.CounterOpts{
-			Name: "membership_gossip_remove_message_total",
-			Help: "Total number of gossip messages removed. " +
-				"You can calculate the active gossip messages by subtracting membership_gossip_remove_message_total from membership_gossip_add_message_total.",
+			Name: "membership_gossip_messages_overwritten_total",
+			Help: "Total number of gossip messages overwritten due to higher precedence.",
+		},
+	)
+	MessagesRemovedTotal = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "membership_gossip_messages_removed_total",
+			Help: "Total number of gossip messages removed after exceeding maximum transmission count.",
+		},
+	)
+	MessagesByTypeTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "membership_gossip_messages_by_type_total",
+			Help: "Total number of gossip messages added to the queue, labeled by message type.",
+		},
+		[]string{"type"},
+	)
+	QueueCapacityMessages = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "membership_gossip_queue_capacity_messages",
+			Help: "Current capacity of the gossip queue ring buffer, measured in messages.",
+		},
+	)
+	QueueGrowthsTotal = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "membership_gossip_queue_growths_total",
+			Help: "Total number of times the ring buffer grew to accommodate more messages.",
 		},
 	)
 )
@@ -23,8 +45,12 @@ var (
 // RegisterMetrics registers all metrics collectors with the given prometheus registerer.
 func RegisterMetrics(registerer prometheus.Registerer) error {
 	metrics := []prometheus.Collector{
-		AddMessageTotal,
-		RemoveMessageTotal,
+		MessagesAddedTotal,
+		MessagesOverwrittenTotal,
+		MessagesRemovedTotal,
+		MessagesByTypeTotal,
+		QueueCapacityMessages,
+		QueueGrowthsTotal,
 	}
 	for _, metric := range metrics {
 		if err := registerer.Register(metric); err != nil {

@@ -12,6 +12,8 @@ type Message interface {
 	String() string
 }
 
+// ShouldReplaceExistingWithNew reports if the new message has higher precedence as the existing message. A new message
+// with higher precedence should replace the existing one, while same or lower precedence should be dropped.
 func ShouldReplaceExistingWithNew(existing Message, new Message) bool {
 	newIncarnationNumber := new.GetIncarnationNumber()
 	existingIncarnationNumber := existing.GetIncarnationNumber()

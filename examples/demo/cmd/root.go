@@ -148,7 +148,7 @@ If left empty, the ip address of the host will be auto-detected.`,
 		&protocolPeriod,
 		"protocol-period",
 		1*time.Second,
-		`The duration of a full protocol period with direct and indirect probes.
+		`The duration of a full protocol period with direct and indirect pings.
 Any member which did not respond within that time is marked as suspect.
 This should be at least three times the usual round-trip time between members.`,
 	)
@@ -156,7 +156,7 @@ This should be at least three times the usual round-trip time between members.`,
 		&directPingTimeout,
 		"direct-ping-timeout",
 		100*time.Millisecond,
-		`The duration after which an indirect probe is initiated.
+		`The duration after which an indirect ping is initiated.
 This should be the usual round-trip time between members.`,
 	)
 

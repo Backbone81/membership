@@ -38,35 +38,35 @@ type List struct {
 
 	datagramBuffer []byte
 
-	pendingDirectProbes     []DirectProbeRecord
-	pendingDirectProbesNext []DirectProbeRecord
-	pendingIndirectProbes   []IndirectProbeRecord
+	pendingDirectPings     []DirectPingRecord
+	pendingDirectPingsNext []DirectPingRecord
+	pendingIndirectPings   []IndirectPingRecord
 
 	rttTracker *roundtriptime.Tracker
 }
 
-// DirectProbeRecord provides bookkeeping for a direct probe which is still active.
-type DirectProbeRecord struct {
-	// Timestamp is the point in time the direct probe was initiated.
+// DirectPingRecord provides bookkeeping for a direct ping which is still active.
+type DirectPingRecord struct {
+	// Timestamp is the point in time the direct ping was initiated.
 	Timestamp time.Time
 
-	// Destination is the address which the direct probe was sent to.
+	// Destination is the address which the direct ping was sent to.
 	Destination encoding.Address
 
-	// MessageDirectPing is a copy of the message which was sent for the direct probe.
+	// MessageDirectPing is a copy of the message which was sent for the direct ping.
 	MessageDirectPing MessageDirectPing
 
-	// MessageIndirectPing is a copy of a received indirect probe request. It is the zero value in case the direct
-	// probe was not initiated in response to an indirect probe request.
+	// MessageIndirectPing is a copy of a received indirect ping request. It is the zero value in case the direct
+	// ping was not initiated in response to an indirect ping request.
 	MessageIndirectPing MessageIndirectPing
 }
 
-// IndirectProbeRecord provides bookkeeping for an indirect probe which is still active.
-type IndirectProbeRecord struct {
-	// Timestamp is the point in time the indirect probe was initiated.
+// IndirectPingRecord provides bookkeeping for an indirect ping which is still active.
+type IndirectPingRecord struct {
+	// Timestamp is the point in time the indirect ping was initiated.
 	Timestamp time.Time
 
-	// MessageIndirectPing is a copy of the message which was sent for an indirect probe.
+	// MessageIndirectPing is a copy of the message which was sent for an indirect ping.
 	MessageIndirectPing MessageIndirectPing
 }
 
@@ -193,12 +193,12 @@ func (l *List) DirectPing() error {
 
 		destination := l.getNextMember().Address
 		l.logger.V(1).Info(
-			"Direct probe",
+			"Direct ping",
 			"source", l.self,
 			"destination", destination,
 			"sequence-number", directPing.SequenceNumber,
 		)
-		l.pendingDirectProbes = append(l.pendingDirectProbes, DirectProbeRecord{
+		l.pendingDirectPings = append(l.pendingDirectPings, DirectPingRecord{
 			Timestamp:         time.Now(),
 			Destination:       destination,
 			MessageDirectPing: directPing,
@@ -214,38 +214,38 @@ func (l *List) IndirectPing() error {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
 
-	// An indirect probe only makes sense whe we have at least two members.
+	// An indirect ping only makes sense whe we have at least two members.
 	if len(l.members) < 2 {
 		return nil
 	}
 
 	var joinedErr error
-	for _, directProbe := range l.pendingDirectProbes {
-		if !directProbe.MessageIndirectPing.IsZero() {
-			// We are not interested in direct probes which we do as a request for an indirect probe. We only do
-			// indirect probes for direct probes we initiated on our own.
+	for _, directPing := range l.pendingDirectPings {
+		if !directPing.MessageIndirectPing.IsZero() {
+			// We are not interested in direct pings which we do as a request for an indirect ping. We only do
+			// indirect pings for direct pings we initiated on our own.
 			continue
 		}
 
 		indirectPing := MessageIndirectPing{
 			Source:      l.self,
-			Destination: directProbe.Destination,
+			Destination: directPing.Destination,
 
-			// We use the same sequence number as we did for the corresponding direct probe. That way, logs can
-			// correlate the indirect probe with the direct probe, and we know which indirect probes to discard when
-			// the direct probe succeeds late.
-			SequenceNumber: directProbe.MessageDirectPing.SequenceNumber,
+			// We use the same sequence number as we did for the corresponding direct ping. That way, logs can
+			// correlate the indirect ping with the direct ping, and we know which indirect pings to discard when
+			// the direct ping succeeds late.
+			SequenceNumber: directPing.MessageDirectPing.SequenceNumber,
 		}
 
-		// Send the indirect probes to the indirect probe members and join up all errors which might occur.
-		members := l.pickIndirectProbes(l.config.IndirectPingMemberCount, directProbe.Destination)
-		l.pendingIndirectProbes = append(l.pendingIndirectProbes, IndirectProbeRecord{
+		// Send the indirect pings to the indirect ping members and join up all errors which might occur.
+		members := l.pickIndirectPings(l.config.IndirectPingMemberCount, directPing.Destination)
+		l.pendingIndirectPings = append(l.pendingIndirectPings, IndirectPingRecord{
 			Timestamp:           time.Now(),
 			MessageIndirectPing: indirectPing,
 		})
 		for _, member := range members {
 			l.logger.V(1).Info(
-				"Indirect probe",
+				"Indirect ping",
 				"source", l.self,
 				"destination", indirectPing.Destination,
 				"sequence-number", indirectPing.SequenceNumber,
@@ -259,11 +259,11 @@ func (l *List) IndirectPing() error {
 	return joinedErr
 }
 
-func (l *List) pickIndirectProbes(failureDetectionSubgroupSize int, directProbeAddress encoding.Address) []*encoding.Member {
+func (l *List) pickIndirectPings(failureDetectionSubgroupSize int, directPingAddress encoding.Address) []*encoding.Member {
 	candidateIndexes := make([]int, 0, len(l.members))
 	for index := range l.members {
-		if l.members[index].Address.Equal(directProbeAddress) {
-			// We do not want to include the direct probe member into our list for indirect probes.
+		if l.members[index].Address.Equal(directPingAddress) {
+			// We do not want to include the direct ping member into our list for indirect pings.
 			continue
 		}
 		candidateIndexes = append(candidateIndexes, index)
@@ -283,7 +283,7 @@ func (l *List) pickIndirectProbes(failureDetectionSubgroupSize int, directProbeA
 }
 
 func (l *List) pickListRequestMember() *encoding.Member {
-	members := l.pickIndirectProbes(1, encoding.Address{})
+	members := l.pickIndirectPings(1, encoding.Address{})
 	if len(members) < 1 {
 		return nil
 	}
@@ -296,7 +296,7 @@ func (l *List) EndOfProtocolPeriod() error {
 
 	maxTransmissionCount := l.requiredDisseminationPeriods()
 	l.gossipQueue.SetMaxTransmissionCount(maxTransmissionCount)
-	l.processFailedProbes()
+	l.processFailedPings()
 	l.markSuspectsAsFaulty()
 	l.rttTracker.UpdateCalculated()
 	return nil
@@ -344,15 +344,15 @@ func (l *List) markSuspectsAsFaulty() {
 	}
 }
 
-func (l *List) processFailedProbes() {
-	for _, pendingDirectProbe := range l.pendingDirectProbes {
+func (l *List) processFailedPings() {
+	for _, pendingDirectPings := range l.pendingDirectPings {
 		memberIndex, found := slices.BinarySearchFunc(
 			l.members,
-			encoding.Member{Address: pendingDirectProbe.Destination},
+			encoding.Member{Address: pendingDirectPings.Destination},
 			encoding.CompareMember,
 		)
 		if !found {
-			// We probably got a faulty message by some other member while we were waiting for our probe to succeed.
+			// We probably got a faulty message by some other member while we were waiting for our ping to succeed.
 			// Nothing to do here.
 			continue
 		}
@@ -379,11 +379,11 @@ func (l *List) processFailedProbes() {
 			IncarnationNumber: member.IncarnationNumber,
 		})
 	}
-	l.pendingDirectProbes, l.pendingDirectProbesNext = l.pendingDirectProbesNext, l.pendingDirectProbes[:0]
+	l.pendingDirectPings, l.pendingDirectPingsNext = l.pendingDirectPingsNext, l.pendingDirectPings[:0]
 
-	// As indirect probes always happen with a direct probe not being satisfied before, we can clear the indirect probes
-	// without any further actions, as those actions have already been taken on the pending direct probes.
-	l.pendingIndirectProbes = l.pendingIndirectProbes[:0]
+	// As indirect pings always happen with a direct ping not being satisfied before, we can clear the indirect pings
+	// without any further actions, as those actions have already been taken on the pending direct pings.
+	l.pendingIndirectPings = l.pendingIndirectPings[:0]
 }
 
 func (l *List) RequestList() error {
@@ -533,60 +533,60 @@ func (l *List) handleDirectAck(directAck MessageDirectAck) error {
 		"source", directAck.Source,
 		"sequence-number", directAck.SequenceNumber,
 	)
-	l.handleDirectAckForPendingIndirectProbes(directAck)
+	l.handleDirectAckForPendingIndirectPings(directAck)
 	var err error
-	l.pendingDirectProbes, err = l.handleDirectAckForPendingDirectProbes(l.pendingDirectProbes, directAck)
+	l.pendingDirectPings, err = l.handleDirectAckForPendingDirectPings(l.pendingDirectPings, directAck)
 	if err != nil {
 		return err
 	}
-	l.pendingDirectProbesNext, err = l.handleDirectAckForPendingDirectProbes(l.pendingDirectProbesNext, directAck)
+	l.pendingDirectPingsNext, err = l.handleDirectAckForPendingDirectPings(l.pendingDirectPingsNext, directAck)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (l *List) handleDirectAckForPendingDirectProbes(pendingDirectProbes []DirectProbeRecord, directAck MessageDirectAck) ([]DirectProbeRecord, error) {
+func (l *List) handleDirectAckForPendingDirectPings(pendingDirectPings []DirectPingRecord, directAck MessageDirectAck) ([]DirectPingRecord, error) {
 	// As we now got a direct ack, we don't have to wait for a direct ack anymore.
-	pendingDirectProbeIndex := slices.IndexFunc(pendingDirectProbes, func(record DirectProbeRecord) bool {
+	pendingDirectPingIndex := slices.IndexFunc(pendingDirectPings, func(record DirectPingRecord) bool {
 		return record.MessageDirectPing.SequenceNumber == directAck.SequenceNumber &&
 			record.Destination.Equal(directAck.Source)
 	})
-	if pendingDirectProbeIndex == -1 {
-		return pendingDirectProbes, nil
+	if pendingDirectPingIndex == -1 {
+		return pendingDirectPings, nil
 	}
 
-	pendingDirectProbe := pendingDirectProbes[pendingDirectProbeIndex]
-	pendingDirectProbes = utility.SwapDelete(pendingDirectProbes, pendingDirectProbeIndex)
+	pendingDirectPing := pendingDirectPings[pendingDirectPingIndex]
+	pendingDirectPings = utility.SwapDelete(pendingDirectPings, pendingDirectPingIndex)
 
-	// We note down the round trip time for the direct probe.
-	l.rttTracker.AddObserved(time.Since(pendingDirectProbe.Timestamp))
+	// We note down the round trip time for the direct ping.
+	l.rttTracker.AddObserved(time.Since(pendingDirectPing.Timestamp))
 
-	if pendingDirectProbe.MessageIndirectPing.IsZero() {
-		// The direct probe was NOT done in a response to a request for an indirect probe, so we are done here.
-		return pendingDirectProbes, nil
+	if pendingDirectPing.MessageIndirectPing.IsZero() {
+		// The direct ping was NOT done in a response to a request for an indirect ping, so we are done here.
+		return pendingDirectPings, nil
 	}
 
 	indirectAck := MessageIndirectAck{
 		Source:         directAck.Source,
-		SequenceNumber: pendingDirectProbe.MessageIndirectPing.SequenceNumber,
+		SequenceNumber: pendingDirectPing.MessageIndirectPing.SequenceNumber,
 	}
-	if err := l.sendWithGossip(pendingDirectProbe.MessageIndirectPing.Source, &indirectAck); err != nil {
-		return pendingDirectProbes, err
+	if err := l.sendWithGossip(pendingDirectPing.MessageIndirectPing.Source, &indirectAck); err != nil {
+		return pendingDirectPings, err
 	}
-	return pendingDirectProbes, nil
+	return pendingDirectPings, nil
 }
 
-func (l *List) handleDirectAckForPendingIndirectProbes(directAck MessageDirectAck) {
+func (l *List) handleDirectAckForPendingIndirectPings(directAck MessageDirectAck) {
 	// We don't have to wait for the indirect ack anymore.
-	pendingIndirectProbeIndex := slices.IndexFunc(l.pendingIndirectProbes, func(record IndirectProbeRecord) bool {
+	pendingIndirectPingIndex := slices.IndexFunc(l.pendingIndirectPings, func(record IndirectPingRecord) bool {
 		return record.MessageIndirectPing.SequenceNumber == directAck.SequenceNumber &&
 			record.MessageIndirectPing.Destination.Equal(directAck.Source)
 	})
-	if pendingIndirectProbeIndex == -1 {
+	if pendingIndirectPingIndex == -1 {
 		return
 	}
-	l.pendingIndirectProbes = utility.SwapDelete(l.pendingIndirectProbes, pendingIndirectProbeIndex)
+	l.pendingIndirectPings = utility.SwapDelete(l.pendingIndirectPings, pendingIndirectPingIndex)
 }
 
 func (l *List) handleIndirectPing(indirectPing MessageIndirectPing) error {
@@ -602,7 +602,7 @@ func (l *List) handleIndirectPing(indirectPing MessageIndirectPing) error {
 	}
 	l.nextSequenceNumber = (l.nextSequenceNumber + 1) % math.MaxUint16
 
-	l.pendingDirectProbesNext = append(l.pendingDirectProbesNext, DirectProbeRecord{
+	l.pendingDirectPingsNext = append(l.pendingDirectPingsNext, DirectPingRecord{
 		Timestamp:           time.Now(),
 		Destination:         indirectPing.Destination,
 		MessageDirectPing:   directPing,
@@ -621,38 +621,38 @@ func (l *List) handleIndirectAck(indirectAck MessageIndirectAck) {
 		"source", indirectAck.Source,
 		"sequence-number", indirectAck.SequenceNumber,
 	)
-	l.handleIndirectAckForPendingDirectProbes(indirectAck)
-	l.handleIndirectAckForPendingIndirectProbes(indirectAck)
+	l.handleIndirectAckForPendingDirectPings(indirectAck)
+	l.handleIndirectAckForPendingIndirectPings(indirectAck)
 }
 
-func (l *List) handleIndirectAckForPendingDirectProbes(indirectAck MessageIndirectAck) {
+func (l *List) handleIndirectAckForPendingDirectPings(indirectAck MessageIndirectAck) {
 	// As we now got an indirect ack, we don't have to wait for a direct ack anymore.
-	pendingDirectProbeIndex := slices.IndexFunc(l.pendingDirectProbes, func(record DirectProbeRecord) bool {
+	pendingDirectPingIndex := slices.IndexFunc(l.pendingDirectPings, func(record DirectPingRecord) bool {
 		return record.MessageDirectPing.SequenceNumber == indirectAck.SequenceNumber &&
 			record.Destination.Equal(indirectAck.Source)
 	})
-	if pendingDirectProbeIndex == -1 {
+	if pendingDirectPingIndex == -1 {
 		return
 	}
 
-	l.pendingDirectProbes = utility.SwapDelete(l.pendingDirectProbes, pendingDirectProbeIndex)
+	l.pendingDirectPings = utility.SwapDelete(l.pendingDirectPings, pendingDirectPingIndex)
 }
 
-func (l *List) handleIndirectAckForPendingIndirectProbes(indirectAck MessageIndirectAck) {
+func (l *List) handleIndirectAckForPendingIndirectPings(indirectAck MessageIndirectAck) {
 	// We don't have to wait for the indirect ack anymore.
-	pendingIndirectProbeIndex := slices.IndexFunc(l.pendingIndirectProbes, func(record IndirectProbeRecord) bool {
+	pendingIndirectPingIndex := slices.IndexFunc(l.pendingIndirectPings, func(record IndirectPingRecord) bool {
 		return record.MessageIndirectPing.SequenceNumber == indirectAck.SequenceNumber &&
 			record.MessageIndirectPing.Destination.Equal(indirectAck.Source)
 	})
-	if pendingIndirectProbeIndex == -1 {
+	if pendingIndirectPingIndex == -1 {
 		return
 	}
 
-	// We note down the round trip time for the indirect probe. Note that we divide by 2 because the indirect probe
+	// We note down the round trip time for the indirect ping. Note that we divide by 2 because the indirect ping
 	// consists of two round trips.
-	l.rttTracker.AddObserved(time.Since(l.pendingIndirectProbes[pendingIndirectProbeIndex].Timestamp) / 2)
+	l.rttTracker.AddObserved(time.Since(l.pendingIndirectPings[pendingIndirectPingIndex].Timestamp) / 2)
 
-	l.pendingIndirectProbes = utility.SwapDelete(l.pendingIndirectProbes, pendingIndirectProbeIndex)
+	l.pendingIndirectPings = utility.SwapDelete(l.pendingIndirectPings, pendingIndirectPingIndex)
 }
 
 func (l *List) handleSuspect(suspect gossip.MessageSuspect) {

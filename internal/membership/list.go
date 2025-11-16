@@ -279,6 +279,8 @@ func (l *List) IndirectPing() error {
 }
 
 func (l *List) pickIndirectPings(failureDetectionSubgroupSize int, directPingAddress encoding.Address) []*encoding.Member {
+	// TODO: We should do a partial Fisher-Yates shuffle (https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle).
+	// This is also what rand.Shuffle is doing for the full slice.
 	candidateIndexes := make([]int, 0, len(l.members))
 	for index := range l.members {
 		if l.members[index].Address.Equal(directPingAddress) {

@@ -14,7 +14,7 @@ type MessageDirectPing struct {
 
 	// SequenceNumber is the sequence we expect to get back in the direct ack. The sequence number should be different
 	// for every direct ping we send out.
-	SequenceNumber int
+	SequenceNumber uint16
 }
 
 // AppendToBuffer appends the message to the provided buffer encoded for network transfer.

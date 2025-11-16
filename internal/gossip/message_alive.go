@@ -14,7 +14,7 @@ type MessageAlive struct {
 	Source encoding.Address
 
 	// IncarnationNumber is the incarnation to distinguish an outdated alive message from a new one.
-	IncarnationNumber int
+	IncarnationNumber uint16
 }
 
 func (m *MessageAlive) String() string {
@@ -76,6 +76,6 @@ func (m *MessageAlive) GetType() encoding.MessageType {
 	return encoding.MessageTypeAlive
 }
 
-func (m *MessageAlive) GetIncarnationNumber() int {
+func (m *MessageAlive) GetIncarnationNumber() uint16 {
 	return m.IncarnationNumber
 }

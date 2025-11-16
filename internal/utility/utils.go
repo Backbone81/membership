@@ -1,4 +1,4 @@
-package membership
+package utility
 
 import (
 	"math"
@@ -76,10 +76,17 @@ func SuspicionTimeout(protocolPeriod time.Duration, safetyFactor float64, member
 // IncarnationLessThan reports if the left hand side incarnation number is less than the right hand side incarnation
 // number. It correctly deals with wraparound of incarnation numbers for a 16-bit unsigned integer. The implementation
 // is inspired by TCP in RFC 1323.
-func IncarnationLessThan(lhs int, rhs int) bool {
-	const maxValue = 1 << 16
+func IncarnationLessThan(lhs uint16, rhs uint16) bool {
 	const halfSpace = 1 << 15
 
-	diff := (rhs - lhs + maxValue) % maxValue
+	diff := rhs - lhs
 	return diff > 0 && diff < halfSpace
+}
+
+// IncarnationMax returns the larger incarnation number while accounting for incarnation number wraparound.
+func IncarnationMax(lhs uint16, rhs uint16) uint16 {
+	if IncarnationLessThan(lhs, rhs) {
+		return rhs
+	}
+	return lhs
 }

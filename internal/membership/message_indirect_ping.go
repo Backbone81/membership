@@ -17,7 +17,7 @@ type MessageIndirectPing struct {
 
 	// SequenceNumber is the sequence which should be unique for every direct ping. This sequence number should
 	// match the sequence number of the previous direct ping to allow correlation of direct and indirect pings.
-	SequenceNumber int
+	SequenceNumber uint16
 }
 
 // IsZero reports if this message is the zero value.

@@ -19,57 +19,91 @@ import (
 	"github.com/backbone81/membership/internal/utility"
 )
 
+// List provides the membership list as the implementation of the SWIM protocol.
+//
+// This data type should work independent of any temporal aspects to allow a clear separation between algorithm and
+// scheduler. This means that this data type should have no knowledge about protocol period durations or timeouts. The
+// algorithm is driven by calling DirectPing, IndirectPing and EndOfProtocolPeriod.
+//
+// List is safe for concurrent use by multiple goroutines. Access through exported methods is internally synchronized.
 type List struct {
+	// mutex is responsible for serializing concurrent access to members of this struct.
 	mutex sync.Mutex
 
+	// config holds the configuration of the membership list.
 	config Config
+
+	// logger provides the logger which the membership list uses to output status information.
 	logger logr.Logger
 
-	nextSequenceNumber int
-	incarnationNumber  int
+	// self is the address for the current list instance. This is important because the own address might be hidden
+	// behind a NAT router.
+	self encoding.Address
 
-	members       []encoding.Member
+	// nextSequenceNumber provides the sequence number to use for the next ping. Be aware that sequence number must only
+	// ever be checked for equality and inequality. That way we do not have to deal with wrap-around events.
+	nextSequenceNumber uint16
+
+	// incarnationNumber is the incarnation number of this membership list instance. It is incremented each time this
+	// list needs to refute a suspect or faulty message. Be aware that you need to use utility.IncarnationLessThan and
+	// utility.IncarnationMax when dealing with incarnation numbers to correctly deal with wrap-around events.
+	incarnationNumber uint16
+
+	// members holds the list of members which are known to be alive or suspect. This list always needs to be sorted
+	// by address to allow for binary searches in this list. It can contain thousands of elements in big clusters.
+	members []encoding.Member
+
+	// faultyMembers holds the list of members which were declared faulty. This is important for a full memberlist
+	// sync to allow information about faulty members to be transported. This list always needs to be sorted by address
+	// to allow for binary searches in this list. It can contain thousands of elements in big clusters.
 	faultyMembers []encoding.Member
 
-	randomIndexes   []int
-	nextRandomIndex int
-	gossipQueue     *gossip.Queue
-	self            encoding.Address
+	// randomIndexes holds alist of random indexes into members. randomIndexes always has the same length as members and
+	// every index only occurs once. This helps in having an upper bound on picking random members for direct pings.
+	// If direct pings were truly random, there would be a slight chance that some member would never be picked as a
+	// direct ping target by any other member. By shuffling all available members and working through that list before
+	// shuffling again, we have a guarantee that in the works case after two sweeps through the member list each member
+	// was picked at least once.
+	randomIndexes []int
 
+	// nextRandomIndex is the index into randomIndexes which describes the next random member to pick for direct pings.
+	// This index is always increasing and wraps around at the end of randomIndexes - triggering a re-shuffle.
+	nextRandomIndex int
+
+	// gossipQueue provides the priority queue for gossip messages to piggyback on pings and acks.
+	gossipQueue *gossip.Queue
+
+	// datagramBuffer is the buffer to write network messages into. We re-use the same buffer for every network message
+	// to reduce the amount of memory allocations happening. As access to this buffer is serialized on the top level,
+	// we do not need more than one buffer as we cannot have more than one network message at the same time.
 	datagramBuffer []byte
 
-	pendingDirectPings     []DirectPingRecord
-	pendingDirectPingsNext []DirectPingRecord
-	pendingIndirectPings   []IndirectPingRecord
+	// pendingDirectPings provides information about direct pings which were started in the current protocol period
+	// and will end at the end of the current protocol period. These are direct pings which were triggered by the
+	// scheduler as part of our own protocol cycle. This list will usually only contain a handful of elements and does
+	// not require special ordering.
+	pendingDirectPings []PendingDirectPing
 
+	// pendingDirectPingsNext provides information about direct pings which were started in the current protocol period
+	// and will end at the end of the NEXT protocol period. These are direct pings which were triggered in a response
+	// to execute an indirect ping. As such requests can happen at any time, we need to keep them around until the end
+	// of the next protocol period before we abandon them. This list will usually only contain a handful of elements and
+	// does not require special ordering.
+	pendingDirectPingsNext []PendingDirectPing
+
+	// pendingIndirectPings provides information about indirect pings which were started in the current protocol period
+	// and will end at the end of the current protocol period. These are indirect pings which were triggered by the
+	// scheduler as part of our own protocol cycle. This list will usually only contain a handful of elements and does
+	// not require special ordering.
+	pendingIndirectPings []PendingIndirectPing
+
+	// rttTracker is used to store the measured round trip time of direct pings and indirect pings and calculates the
+	// expected round trip time as a percentile of what was observed until then. This information is provided to the
+	// scheduler to allow dynamic adjustments of direct ping timeouts according to the observed round trip times.
 	rttTracker *roundtriptime.Tracker
 }
 
-// DirectPingRecord provides bookkeeping for a direct ping which is still active.
-type DirectPingRecord struct {
-	// Timestamp is the point in time the direct ping was initiated.
-	Timestamp time.Time
-
-	// Destination is the address which the direct ping was sent to.
-	Destination encoding.Address
-
-	// MessageDirectPing is a copy of the message which was sent for the direct ping.
-	MessageDirectPing MessageDirectPing
-
-	// MessageIndirectPing is a copy of a received indirect ping request. It is the zero value in case the direct
-	// ping was not initiated in response to an indirect ping request.
-	MessageIndirectPing MessageIndirectPing
-}
-
-// IndirectPingRecord provides bookkeeping for an indirect ping which is still active.
-type IndirectPingRecord struct {
-	// Timestamp is the point in time the indirect ping was initiated.
-	Timestamp time.Time
-
-	// MessageIndirectPing is a copy of the message which was sent for an indirect ping.
-	MessageIndirectPing MessageIndirectPing
-}
-
+// NewList creates a new membership list.
 func NewList(options ...Option) *List {
 	config := DefaultConfig
 	for _, option := range options {
@@ -80,7 +114,7 @@ func NewList(options ...Option) *List {
 		config:         config,
 		logger:         config.Logger,
 		self:           config.AdvertisedAddress,
-		gossipQueue:    gossip.NewQueue(), // TODO: The max gossip count needs to be adjusted for the number of members during runtime.
+		gossipQueue:    gossip.NewQueue(),
 		datagramBuffer: make([]byte, 0, config.MaxDatagramLengthSend),
 		rttTracker:     roundtriptime.NewTracker(),
 	}
@@ -100,6 +134,7 @@ func NewList(options ...Option) *List {
 	return &newList
 }
 
+// Len returns the number of members which are currently alive or suspect.
 func (l *List) Len() int {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
@@ -189,7 +224,7 @@ func (l *List) DirectPing() error {
 			Source:         l.self,
 			SequenceNumber: l.nextSequenceNumber,
 		}
-		l.nextSequenceNumber = (l.nextSequenceNumber + 1) % math.MaxUint16
+		l.nextSequenceNumber++
 
 		destination := l.getNextMember().Address
 		l.logger.V(1).Info(
@@ -198,7 +233,7 @@ func (l *List) DirectPing() error {
 			"destination", destination,
 			"sequence-number", directPing.SequenceNumber,
 		)
-		l.pendingDirectPings = append(l.pendingDirectPings, DirectPingRecord{
+		l.pendingDirectPings = append(l.pendingDirectPings, PendingDirectPing{
 			Timestamp:         time.Now(),
 			Destination:       destination,
 			MessageDirectPing: directPing,
@@ -239,7 +274,7 @@ func (l *List) IndirectPing() error {
 
 		// Send the indirect pings to the indirect ping members and join up all errors which might occur.
 		members := l.pickIndirectPings(l.config.IndirectPingMemberCount, directPing.Destination)
-		l.pendingIndirectPings = append(l.pendingIndirectPings, IndirectPingRecord{
+		l.pendingIndirectPings = append(l.pendingIndirectPings, PendingIndirectPing{
 			Timestamp:           time.Now(),
 			MessageIndirectPing: indirectPing,
 		})
@@ -546,9 +581,9 @@ func (l *List) handleDirectAck(directAck MessageDirectAck) error {
 	return nil
 }
 
-func (l *List) handleDirectAckForPendingDirectPings(pendingDirectPings []DirectPingRecord, directAck MessageDirectAck) ([]DirectPingRecord, error) {
+func (l *List) handleDirectAckForPendingDirectPings(pendingDirectPings []PendingDirectPing, directAck MessageDirectAck) ([]PendingDirectPing, error) {
 	// As we now got a direct ack, we don't have to wait for a direct ack anymore.
-	pendingDirectPingIndex := slices.IndexFunc(pendingDirectPings, func(record DirectPingRecord) bool {
+	pendingDirectPingIndex := slices.IndexFunc(pendingDirectPings, func(record PendingDirectPing) bool {
 		return record.MessageDirectPing.SequenceNumber == directAck.SequenceNumber &&
 			record.Destination.Equal(directAck.Source)
 	})
@@ -579,7 +614,7 @@ func (l *List) handleDirectAckForPendingDirectPings(pendingDirectPings []DirectP
 
 func (l *List) handleDirectAckForPendingIndirectPings(directAck MessageDirectAck) {
 	// We don't have to wait for the indirect ack anymore.
-	pendingIndirectPingIndex := slices.IndexFunc(l.pendingIndirectPings, func(record IndirectPingRecord) bool {
+	pendingIndirectPingIndex := slices.IndexFunc(l.pendingIndirectPings, func(record PendingIndirectPing) bool {
 		return record.MessageIndirectPing.SequenceNumber == directAck.SequenceNumber &&
 			record.MessageIndirectPing.Destination.Equal(directAck.Source)
 	})
@@ -600,9 +635,9 @@ func (l *List) handleIndirectPing(indirectPing MessageIndirectPing) error {
 		Source:         l.self,
 		SequenceNumber: l.nextSequenceNumber,
 	}
-	l.nextSequenceNumber = (l.nextSequenceNumber + 1) % math.MaxUint16
+	l.nextSequenceNumber++
 
-	l.pendingDirectPingsNext = append(l.pendingDirectPingsNext, DirectPingRecord{
+	l.pendingDirectPingsNext = append(l.pendingDirectPingsNext, PendingDirectPing{
 		Timestamp:           time.Now(),
 		Destination:         indirectPing.Destination,
 		MessageDirectPing:   directPing,
@@ -627,7 +662,7 @@ func (l *List) handleIndirectAck(indirectAck MessageIndirectAck) {
 
 func (l *List) handleIndirectAckForPendingDirectPings(indirectAck MessageIndirectAck) {
 	// As we now got an indirect ack, we don't have to wait for a direct ack anymore.
-	pendingDirectPingIndex := slices.IndexFunc(l.pendingDirectPings, func(record DirectPingRecord) bool {
+	pendingDirectPingIndex := slices.IndexFunc(l.pendingDirectPings, func(record PendingDirectPing) bool {
 		return record.MessageDirectPing.SequenceNumber == indirectAck.SequenceNumber &&
 			record.Destination.Equal(indirectAck.Source)
 	})
@@ -640,7 +675,7 @@ func (l *List) handleIndirectAckForPendingDirectPings(indirectAck MessageIndirec
 
 func (l *List) handleIndirectAckForPendingIndirectPings(indirectAck MessageIndirectAck) {
 	// We don't have to wait for the indirect ack anymore.
-	pendingIndirectPingIndex := slices.IndexFunc(l.pendingIndirectPings, func(record IndirectPingRecord) bool {
+	pendingIndirectPingIndex := slices.IndexFunc(l.pendingIndirectPings, func(record PendingIndirectPing) bool {
 		return record.MessageIndirectPing.SequenceNumber == indirectAck.SequenceNumber &&
 			record.MessageIndirectPing.Destination.Equal(indirectAck.Source)
 	})
@@ -679,14 +714,14 @@ func (l *List) handleSuspectForSelf(suspect gossip.MessageSuspect) bool {
 		return false
 	}
 
-	if IncarnationLessThan(suspect.IncarnationNumber, l.incarnationNumber) {
+	if utility.IncarnationLessThan(suspect.IncarnationNumber, l.incarnationNumber) {
 		// We have a more up-to-date state than the gossip. Nothing to do.
 		return true
 	}
 
 	// We need to refute the suspect about ourselves. Add a new alive message to gossip.
 	// Also make sure that our incarnation number is bigger than before.
-	l.incarnationNumber = max(l.incarnationNumber+1, suspect.IncarnationNumber+1) % math.MaxUint16
+	l.incarnationNumber = utility.IncarnationMax(l.incarnationNumber+1, suspect.IncarnationNumber+1)
 	l.gossipQueue.Add(&gossip.MessageAlive{
 		Source:            l.self,
 		IncarnationNumber: l.incarnationNumber,
@@ -706,7 +741,7 @@ func (l *List) handleSuspectForFaultyMembers(suspect gossip.MessageSuspect) bool
 	}
 	faultyMember := &l.faultyMembers[faultyMemberIndex]
 
-	if suspect.IncarnationNumber <= faultyMember.IncarnationNumber {
+	if !utility.IncarnationLessThan(faultyMember.IncarnationNumber, suspect.IncarnationNumber) {
 		// We have more up-to-date information about this member.
 		return true
 	}
@@ -735,7 +770,7 @@ func (l *List) handleSuspectForMembers(suspect gossip.MessageSuspect) bool {
 	}
 	member := &l.members[memberIndex]
 
-	if suspect.IncarnationNumber < member.IncarnationNumber {
+	if utility.IncarnationLessThan(suspect.IncarnationNumber, member.IncarnationNumber) {
 		// We have more up-to-date information about this member.
 		return true
 	}
@@ -798,7 +833,7 @@ func (l *List) handleAliveForFaultyMembers(alive gossip.MessageAlive) bool {
 	}
 	faultyMember := &l.faultyMembers[faultyMemberIndex]
 
-	if alive.IncarnationNumber <= faultyMember.IncarnationNumber {
+	if !utility.IncarnationLessThan(faultyMember.IncarnationNumber, alive.IncarnationNumber) {
 		// We have more up-to-date information about this member.
 		return true
 	}
@@ -826,7 +861,7 @@ func (l *List) handleAliveForMembers(alive gossip.MessageAlive) bool {
 	}
 	member := &l.members[memberIndex]
 
-	if alive.IncarnationNumber <= member.IncarnationNumber {
+	if !utility.IncarnationLessThan(member.IncarnationNumber, alive.IncarnationNumber) {
 		// We have more up-to-date information about this member.
 		return true
 	}
@@ -877,14 +912,14 @@ func (l *List) handleFaultyForSelf(faulty gossip.MessageFaulty) bool {
 		return false
 	}
 
-	if IncarnationLessThan(faulty.IncarnationNumber, l.incarnationNumber) {
+	if utility.IncarnationLessThan(faulty.IncarnationNumber, l.incarnationNumber) {
 		// We have a more up-to-date state than the gossip. Nothing to do.
 		return true
 	}
 
 	// We need to re-join. Add a new alive message to gossip.
 	// Also make sure that our incarnation number is bigger than before.
-	l.incarnationNumber = max(l.incarnationNumber+1, faulty.IncarnationNumber+1) % math.MaxUint16
+	l.incarnationNumber = utility.IncarnationMax(l.incarnationNumber+1, faulty.IncarnationNumber+1)
 	l.gossipQueue.Add(&gossip.MessageAlive{
 		Source:            l.self,
 		IncarnationNumber: l.incarnationNumber,
@@ -904,7 +939,7 @@ func (l *List) handleFaultyForFaultyMembers(faulty gossip.MessageFaulty) bool {
 	}
 	faultyMember := &l.faultyMembers[faultyMemberIndex]
 
-	if faulty.IncarnationNumber < faultyMember.IncarnationNumber {
+	if utility.IncarnationLessThan(faulty.IncarnationNumber, faultyMember.IncarnationNumber) {
 		// We have more up-to-date information about this member.
 		return true
 	}
@@ -926,7 +961,7 @@ func (l *List) handleFaultyForMembers(faulty gossip.MessageFaulty) bool {
 	}
 	member := &l.members[memberIndex]
 
-	if faulty.IncarnationNumber < member.IncarnationNumber {
+	if utility.IncarnationLessThan(faulty.IncarnationNumber, member.IncarnationNumber) {
 		// We have more up-to-date information about this member.
 		return true
 	}
@@ -1120,7 +1155,7 @@ func (l *List) addMember(member encoding.Member) {
 	if l.config.MemberAddedCallback != nil {
 		l.config.MemberAddedCallback(member.Address)
 	}
-	AddMemberTotal.Inc()
+	MembersAddedTotal.Inc()
 }
 
 func (l *List) removeMemberByAddress(address encoding.Address) {
@@ -1160,7 +1195,7 @@ func (l *List) removeMemberByIndex(index int) {
 
 	l.members = slices.Delete(l.members, index, index+1)
 	l.randomIndexes = slices.Delete(l.randomIndexes, randomIndex, randomIndex+1)
-	RemoveMemberTotal.Inc()
+	MembersRemovedTotal.Inc()
 }
 
 func (l *List) WriteInternalDebugState(writer io.Writer) error {
@@ -1204,7 +1239,7 @@ func (l *List) WriteInternalDebugState(writer io.Writer) error {
 }
 
 func (l *List) requiredDisseminationPeriods() int {
-	return int(math.Ceil(DisseminationPeriods(l.config.SafetyFactor, len(l.members))))
+	return int(math.Ceil(utility.DisseminationPeriods(l.config.SafetyFactor, len(l.members))))
 }
 
 func (l *List) BroadcastShutdown() error {

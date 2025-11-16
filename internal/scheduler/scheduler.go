@@ -10,6 +10,9 @@ import (
 
 // Scheduler is driving the timed actions of the membership list. This allows us to separate the algorithm from temporal
 // constraints and enables tests of the main algorithm to run without delays.
+//
+// Scheduler is safe for concurrent use by multiple goroutines. But you need to make sure that Shutdown is only called
+// after Startup and you should call Startup and Shutdown only once. Create a new Scheduler if you need to restart.
 type Scheduler struct {
 	logger            logr.Logger
 	config            Config

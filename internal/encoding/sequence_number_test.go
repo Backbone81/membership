@@ -1,7 +1,6 @@
 package encoding_test
 
 import (
-	"math"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -26,21 +25,13 @@ var _ = Describe("SequenceNumber", func() {
 
 	DescribeTable("should append to buffer with valid sequence numbers",
 		func(sequenceNumber int) {
-			buffer, _, err := encoding.AppendSequenceNumberToBuffer(nil, sequenceNumber)
+			buffer, _, err := encoding.AppendSequenceNumberToBuffer(nil, uint16(sequenceNumber))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(buffer).ToNot(BeNil())
 		},
 		Entry("zero", 0),
 		Entry("small positive", 80),
 		Entry("big positive", 3000),
-	)
-
-	DescribeTable("should fail to append to buffer with invalid sequence numbers",
-		func(sequenceNumber int) {
-			Expect(encoding.AppendSequenceNumberToBuffer(nil, sequenceNumber)).Error().To(HaveOccurred())
-		},
-		Entry("negative", -10),
-		Entry("too big of a sequence number", math.MaxUint16+1),
 	)
 
 	It("should read from buffer", func() {
@@ -52,7 +43,7 @@ var _ = Describe("SequenceNumber", func() {
 		Expect(err).ToNot(HaveOccurred())
 
 		Expect(appendN).To(Equal(readN))
-		Expect(1024).To(Equal(readSequenceNumber))
+		Expect(uint16(1024)).To(Equal(readSequenceNumber))
 	})
 
 	It("should fail to read from nil buffer", func() {

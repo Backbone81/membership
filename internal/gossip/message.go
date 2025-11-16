@@ -1,6 +1,9 @@
 package gossip
 
-import "github.com/backbone81/membership/internal/encoding"
+import (
+	"github.com/backbone81/membership/internal/encoding"
+	"github.com/backbone81/membership/internal/utility"
+)
 
 // Message is the interface all gossip network messages need to implement.
 type Message interface {
@@ -8,7 +11,7 @@ type Message interface {
 	FromBuffer(buffer []byte) (int, error)
 	GetAddress() encoding.Address
 	GetType() encoding.MessageType
-	GetIncarnationNumber() int
+	GetIncarnationNumber() uint16
 	String() string
 }
 
@@ -17,7 +20,7 @@ type Message interface {
 func ShouldReplaceExistingWithNew(existing Message, new Message) bool {
 	newIncarnationNumber := new.GetIncarnationNumber()
 	existingIncarnationNumber := existing.GetIncarnationNumber()
-	if newIncarnationNumber < existingIncarnationNumber {
+	if utility.IncarnationLessThan(newIncarnationNumber, existingIncarnationNumber) {
 		// No need to overwrite when the incarnation number is lower.
 		return false
 	}

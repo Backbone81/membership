@@ -18,7 +18,7 @@ type MessageFaulty struct {
 
 	// IncarnationNumber is the incarnation which source saw and based its decision on. This helps in identifying
 	// outdated messages.
-	IncarnationNumber int
+	IncarnationNumber uint16
 }
 
 func (m *MessageFaulty) String() string {
@@ -90,6 +90,6 @@ func (m *MessageFaulty) GetType() encoding.MessageType {
 	return encoding.MessageTypeFaulty
 }
 
-func (m *MessageFaulty) GetIncarnationNumber() int {
+func (m *MessageFaulty) GetIncarnationNumber() uint16 {
 	return m.IncarnationNumber
 }

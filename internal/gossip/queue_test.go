@@ -1107,7 +1107,7 @@ var _ = Describe("Queue", func() {
 			case selection < 25: // 25% of the time we add a message
 				queue.Add(&gossip.MessageAlive{
 					Source:            addresses[rand.Intn(len(addresses))],
-					IncarnationNumber: rand.Intn(5),
+					IncarnationNumber: uint16(rand.Intn(5)),
 				})
 			case selection < 100: // 75% of the time we mark 3 messages as transmitted
 				queue.MarkTransmitted(rand.Intn(3))

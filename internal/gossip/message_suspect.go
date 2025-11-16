@@ -18,7 +18,7 @@ type MessageSuspect struct {
 
 	// IncarnationNumber is the incarnation which source saw and based its decision on. This helps in identifying
 	// outdated messages.
-	IncarnationNumber int
+	IncarnationNumber uint16
 }
 
 func (m *MessageSuspect) String() string {
@@ -90,6 +90,6 @@ func (m *MessageSuspect) GetType() encoding.MessageType {
 	return encoding.MessageTypeSuspect
 }
 
-func (m *MessageSuspect) GetIncarnationNumber() int {
+func (m *MessageSuspect) GetIncarnationNumber() uint16 {
 	return m.IncarnationNumber
 }

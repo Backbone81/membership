@@ -14,7 +14,7 @@ type MessageDirectAck struct {
 
 	// SequenceNumber is the same sequence which the member received with the direct ping. This makes sure that direct
 	// acks which arrive too late are ignored.
-	SequenceNumber int
+	SequenceNumber uint16
 }
 
 // AppendToBuffer appends the message to the provided buffer encoded for network transfer.

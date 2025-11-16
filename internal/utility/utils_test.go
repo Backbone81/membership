@@ -1,16 +1,15 @@
-package membership_test
+package utility_test
 
 import (
+	"github.com/backbone81/membership/internal/utility"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-
-	"github.com/backbone81/membership/internal/membership"
 )
 
 var _ = Describe("Utils", func() {
 	DescribeTable("IncarnationLessThan should provide correct results",
 		func(lhs int, rhs int, want bool) {
-			Expect(membership.IncarnationLessThan(lhs, rhs)).To(Equal(want))
+			Expect(utility.IncarnationLessThan(uint16(lhs), uint16(rhs))).To(Equal(want))
 		},
 		Entry("lhs after rhs", 1, 0, false),
 		Entry("lhs before rhs", 0, 1, true),

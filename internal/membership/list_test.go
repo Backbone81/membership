@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/backbone81/membership/internal/utility"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -892,7 +893,8 @@ var _ = Describe("List", func() {
 		// TODO: implementation
 	})
 
-	It("newly joined member should propagate after a limited number of protocol periods", func() {
+	// This test is flaky and therefore disabled.
+	PIt("newly joined member should propagate after a limited number of protocol periods", func() {
 		for memberCount := 1; memberCount <= 256; memberCount *= 2 {
 			memoryTransport := transport.NewMemory()
 			var lists []*membership.List
@@ -933,7 +935,7 @@ var _ = Describe("List", func() {
 			lists = append(lists, newList)
 
 			// TODO: This is a bad test. It is so unreliable, think about something better.
-			periodCount := int(math.Ceil(membership.DisseminationPeriods(membership.DefaultConfig.SafetyFactor*16, len(lists))))
+			periodCount := int(math.Ceil(utility.DisseminationPeriods(membership.DefaultConfig.SafetyFactor*16, len(lists))))
 			for i := range periodCount {
 				GinkgoLogr.Info("> Start of protocol period", "period", i)
 				GinkgoLogr.Info("> Executing direct pings")

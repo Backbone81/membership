@@ -1,7 +1,6 @@
 package encoding_test
 
 import (
-	"math"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -26,7 +25,7 @@ var _ = Describe("IncarnationNumber", func() {
 
 	DescribeTable("should append to buffer with valid incarnation numbers",
 		func(incarnationNumber int) {
-			buffer, _, err := encoding.AppendIncarnationNumberToBuffer(nil, incarnationNumber)
+			buffer, _, err := encoding.AppendIncarnationNumberToBuffer(nil, uint16(incarnationNumber))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(buffer).ToNot(BeNil())
 		},
@@ -35,16 +34,8 @@ var _ = Describe("IncarnationNumber", func() {
 		Entry("big positive", 3000),
 	)
 
-	DescribeTable("should fail to append to buffer with invalid incarnation numbers",
-		func(incarnationNumber int) {
-			Expect(encoding.AppendIncarnationNumberToBuffer(nil, incarnationNumber)).Error().To(HaveOccurred())
-		},
-		Entry("negative", -10),
-		Entry("too big of an incarnation number", math.MaxUint16+1),
-	)
-
 	It("should read from buffer", func() {
-		appendIncarnationNumber := 1024
+		appendIncarnationNumber := uint16(1024)
 		buffer, appendN, err := encoding.AppendIncarnationNumberToBuffer(nil, appendIncarnationNumber)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(buffer).ToNot(BeNil())

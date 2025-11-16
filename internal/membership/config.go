@@ -7,6 +7,7 @@ import (
 	"github.com/backbone81/membership/internal/transport"
 )
 
+// Config provides the configuration for the membership list.
 type Config struct {
 	// Logger is the Logger to use for outputting status information.
 	Logger logr.Logger
@@ -63,6 +64,7 @@ type Config struct {
 	IndirectPingMemberCount int
 }
 
+// DefaultConfig provides a default configuration which should work for most use-cases.
 var DefaultConfig = Config{
 	MaxDatagramLengthSend:   512,
 	SafetyFactor:            3,

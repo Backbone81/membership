@@ -1,6 +1,7 @@
 package membership
 
 import (
+	"github.com/backbone81/membership/internal/roundtriptime"
 	"github.com/go-logr/logr"
 
 	"github.com/backbone81/membership/internal/encoding"
@@ -86,5 +87,11 @@ func WithDirectPingMemberCount(memberCount int) Option {
 func WithIndirectPingMemberCount(memberCount int) Option {
 	return func(config *Config) {
 		config.IndirectPingMemberCount = max(1, min(memberCount, 64))
+	}
+}
+
+func WithRoundTripTimeTracker(rttTracker *roundtriptime.Tracker) Option {
+	return func(config *Config) {
+		config.RoundTripTimeTracker = rttTracker
 	}
 }

@@ -1,7 +1,5 @@
 package scheduler
 
-import "time"
-
 // Target is the interface which the implementation of the membership algorithm must implement to be driven
 // by the scheduler.
 type Target interface {
@@ -16,7 +14,4 @@ type Target interface {
 
 	// RequestList fetches the full member list from a randomly chosen member.
 	RequestList() error
-
-	// ExpectedRoundTripTime returns the round trip time the target is expecting.
-	ExpectedRoundTripTime() time.Duration
 }

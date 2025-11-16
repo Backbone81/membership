@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/backbone81/membership/internal/roundtriptime"
 	"github.com/backbone81/membership/internal/utility"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -27,6 +28,7 @@ var _ = Describe("List", func() {
 			membership.WithUDPClient(&transport.Discard{}),
 			membership.WithTCPClient(&transport.Discard{}),
 			membership.WithAdvertisedAddress(TestAddress),
+			membership.WithRoundTripTimeTracker(roundtriptime.NewTracker()),
 		)
 		list.GetGossip().Clear()
 	})
@@ -53,6 +55,7 @@ var _ = Describe("List", func() {
 				membersRemoved.Add(1)
 				callbacks.Done()
 			}),
+			membership.WithRoundTripTimeTracker(roundtriptime.NewTracker()),
 		)
 		list.GetGossip().Clear()
 
@@ -93,6 +96,7 @@ var _ = Describe("List", func() {
 			membership.WithUDPClient(&storeClient),
 			membership.WithTCPClient(&transport.Discard{}),
 			membership.WithAdvertisedAddress(TestAddress),
+			membership.WithRoundTripTimeTracker(roundtriptime.NewTracker()),
 		)
 		list.GetGossip().Clear()
 
@@ -107,6 +111,7 @@ var _ = Describe("List", func() {
 			membership.WithUDPClient(&storeClient),
 			membership.WithTCPClient(&transport.Discard{}),
 			membership.WithAdvertisedAddress(TestAddress),
+			membership.WithRoundTripTimeTracker(roundtriptime.NewTracker()),
 		)
 		list.GetGossip().Clear()
 
@@ -203,6 +208,7 @@ var _ = Describe("List", func() {
 			list := membership.NewList(
 				membership.WithUDPClient(&transport.Discard{}),
 				membership.WithTCPClient(&transport.Discard{}),
+				membership.WithRoundTripTimeTracker(roundtriptime.NewTracker()),
 			)
 			list.GetGossip().Clear()
 			list.SetMembers(beforeMembers)
@@ -905,6 +911,7 @@ var _ = Describe("List", func() {
 					membership.WithAdvertisedAddress(address),
 					membership.WithUDPClient(memoryTransport.Client()),
 					membership.WithTCPClient(memoryTransport.Client()),
+					membership.WithRoundTripTimeTracker(roundtriptime.NewTracker()),
 				}
 				for j := range memberCount {
 					options = append(options,
@@ -926,6 +933,7 @@ var _ = Describe("List", func() {
 				membership.WithAdvertisedAddress(address),
 				membership.WithUDPClient(memoryTransport.Client()),
 				membership.WithTCPClient(memoryTransport.Client()),
+				membership.WithRoundTripTimeTracker(roundtriptime.NewTracker()),
 			}
 			options = append(options,
 				membership.WithBootstrapMember(encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1)),
@@ -1101,6 +1109,7 @@ func createListWithMembers(memberCount int) *membership.List {
 	list := membership.NewList(
 		membership.WithUDPClient(&transport.Discard{}),
 		membership.WithTCPClient(&transport.Discard{}),
+		membership.WithRoundTripTimeTracker(roundtriptime.NewTracker()),
 	)
 
 	for i := range memberCount {

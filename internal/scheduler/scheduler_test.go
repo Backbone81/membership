@@ -5,6 +5,7 @@ import (
 	"testing/synctest"
 	"time"
 
+	"github.com/backbone81/membership/internal/roundtriptime"
 	"github.com/backbone81/membership/internal/scheduler"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -21,6 +22,7 @@ var _ = Describe("Scheduler", func() {
 			myScheduler := scheduler.New(
 				&target,
 				scheduler.WithLogger(GinkgoLogr),
+				scheduler.WithRoundTripTimeTracker(roundtriptime.NewTracker()),
 			)
 			Expect(myScheduler.Startup()).To(Succeed())
 
@@ -54,6 +56,7 @@ var _ = Describe("Scheduler", func() {
 			myScheduler := scheduler.New(
 				&target,
 				scheduler.WithLogger(GinkgoLogr),
+				scheduler.WithRoundTripTimeTracker(roundtriptime.NewTracker()),
 			)
 			Expect(myScheduler.Startup()).To(Succeed())
 
@@ -77,6 +80,7 @@ var _ = Describe("Scheduler", func() {
 			myScheduler := scheduler.New(
 				&target,
 				scheduler.WithLogger(GinkgoLogr),
+				scheduler.WithRoundTripTimeTracker(roundtriptime.NewTracker()),
 			)
 			Expect(myScheduler.Startup()).To(Succeed())
 

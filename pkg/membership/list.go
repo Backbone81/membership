@@ -3,6 +3,7 @@ package membership
 import (
 	"github.com/backbone81/membership/internal/encoding"
 	intmembership "github.com/backbone81/membership/internal/membership"
+	"github.com/backbone81/membership/internal/roundtriptime"
 	intscheduler "github.com/backbone81/membership/internal/scheduler"
 	inttransport "github.com/backbone81/membership/internal/transport"
 )
@@ -20,6 +21,7 @@ func NewList(options ...Option) *List {
 		option(&config)
 	}
 
+	rttTracker := roundtriptime.NewTracker()
 	list := intmembership.NewList(
 		intmembership.WithLogger(config.Logger),
 		intmembership.WithBootstrapMembers(config.BootstrapMembers),
@@ -33,6 +35,7 @@ func NewList(options ...Option) *List {
 		intmembership.WithShutdownMemberCount(config.ShutdownMemberCount),
 		intmembership.WithDirectPingMemberCount(config.DirectPingMemberCount),
 		intmembership.WithIndirectPingMemberCount(config.IndirectPingMemberCount),
+		intmembership.WithRoundTripTimeTracker(rttTracker),
 	)
 	udpServerTransport := inttransport.NewUDPServer(config.Logger, list, config.BindAddress, config.MaxDatagramLengthReceive)
 	tcpServerTransport := inttransport.NewTCPServer(config.Logger, list, config.BindAddress)
@@ -42,6 +45,7 @@ func NewList(options ...Option) *List {
 		intscheduler.WithProtocolPeriod(config.ProtocolPeriod),
 		intscheduler.WithMaxSleepDuration(config.MaxSleepDuration),
 		intscheduler.WithListRequestInterval(config.ListRequestInterval),
+		intscheduler.WithRoundTripTimeTracker(rttTracker),
 	)
 
 	newList := List{

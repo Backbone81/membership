@@ -4,6 +4,7 @@ import (
 	"math"
 	"net"
 
+	"github.com/backbone81/membership/internal/roundtriptime"
 	"github.com/go-logr/logr"
 
 	"github.com/backbone81/membership/internal/encoding"
@@ -43,10 +44,11 @@ func runProtocol(logger logr.Logger, memoryTransport *transport.Memory, memberCo
 					Transport:   memoryTransport.Client(),
 					Reliability: 0.9,
 				}),
+				membership.WithRoundTripTimeTracker(roundtriptime.NewTracker()),
 			}
 			for _, list := range lists {
 				options = append(options,
-					membership.WithBootstrapMember(list.AdvertiseAddress()),
+					membership.WithBootstrapMember(list.Config().AdvertisedAddress),
 				)
 			}
 			newList := membership.NewList(options...)

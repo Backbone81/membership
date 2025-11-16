@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 
+	"github.com/backbone81/membership/internal/roundtriptime"
 	"github.com/spf13/cobra"
 
 	"github.com/backbone81/membership/internal/encoding"
@@ -45,6 +46,7 @@ var rootCmd = &cobra.Command{
 				membership.WithAdvertisedAddress(address),
 				membership.WithUDPClient(memoryTransport.Client()),
 				membership.WithTCPClient(memoryTransport.Client()),
+				membership.WithRoundTripTimeTracker(roundtriptime.NewTracker()),
 			}
 			for j := range memberCount {
 				options = append(options,
@@ -64,6 +66,7 @@ var rootCmd = &cobra.Command{
 			membership.WithAdvertisedAddress(address),
 			membership.WithUDPClient(memoryTransport.Client()),
 			membership.WithTCPClient(memoryTransport.Client()),
+			membership.WithRoundTripTimeTracker(roundtriptime.NewTracker()),
 		}
 		options = append(options,
 			membership.WithBootstrapMember(encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1)),

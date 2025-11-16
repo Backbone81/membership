@@ -1,6 +1,7 @@
 package membership
 
 import (
+	"github.com/backbone81/membership/internal/roundtriptime"
 	"github.com/go-logr/logr"
 
 	"github.com/backbone81/membership/internal/encoding"
@@ -62,6 +63,9 @@ type Config struct {
 	// IndirectPingMemberCount is the number of members to request a ping of some other member which did not respond
 	// in time.
 	IndirectPingMemberCount int
+
+	// RoundTripTimeTracker is the roundtrip time tracker which the membership list records the measured network round trips to.
+	RoundTripTimeTracker *roundtriptime.Tracker
 }
 
 // DefaultConfig provides a default configuration which should work for most use-cases.

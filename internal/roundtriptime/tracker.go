@@ -3,14 +3,16 @@ package roundtriptime
 import (
 	"math"
 	"slices"
+	"sync"
 	"time"
 )
 
 // Tracker provides a mechanic to track network round trip times and calculate a calculatedRTT on a specific percentile of
 // observed observedRTTs. This can be used to dynamically adjust timeouts to a reasonable value.
 //
-// Tracker is not safe for concurrent use by multiple goroutines. Callers must serialize access to all methods.
+// Tracker is safe for concurrent use by multiple goroutines. Access is synchronized internally.
 type Tracker struct {
+	mutex              sync.Mutex
 	config             Config
 	nextIndex          int
 	observedRTTs       []time.Duration
@@ -54,12 +56,18 @@ func NewTracker(options ...Option) *Tracker {
 
 // Config returns the config the tracker was created with.
 func (t *Tracker) Config() Config {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+
 	return t.config
 }
 
 // Reset overwrites all observed RTTs with the default and also resets the calculated RTT to the default. This restores
 // the same state as if the tracker was newly created.
 func (t *Tracker) Reset() {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+
 	for i := range t.observedRTTs {
 		t.observedRTTs[i] = t.config.Default
 	}
@@ -70,12 +78,18 @@ func (t *Tracker) Reset() {
 // AddObserved will add the given RTT to the observed RTTs. It will overwrite the oldest observed RTT in the local
 // buffer.
 func (t *Tracker) AddObserved(roundTripTime time.Duration) {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+
 	t.observedRTTs[t.nextIndex] = roundTripTime
 	t.nextIndex = (t.nextIndex + 1) % len(t.observedRTTs)
 }
 
 // UpdateCalculated updates the calculated RTT according to the given percentile and the smoothing factor.
 func (t *Tracker) UpdateCalculated() {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+
 	// We need to copy everything over into a temporary slice and sort it increasingly. Note that we might look into
 	// using quickselect to avoid sorting the full slice - but it might not have any measurable impact as we are dealing
 	// with slices of 60 to 120 entries in normal situations.
@@ -93,5 +107,8 @@ func (t *Tracker) UpdateCalculated() {
 
 // GetCalculated returns the calculated RTT.
 func (t *Tracker) GetCalculated() time.Duration {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+
 	return t.calculatedRTT
 }

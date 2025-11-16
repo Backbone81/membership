@@ -15,7 +15,6 @@ import (
 
 	"github.com/backbone81/membership/internal/encoding"
 	"github.com/backbone81/membership/internal/gossip"
-	"github.com/backbone81/membership/internal/roundtriptime"
 	"github.com/backbone81/membership/internal/utility"
 )
 
@@ -96,11 +95,6 @@ type List struct {
 	// scheduler as part of our own protocol cycle. This list will usually only contain a handful of elements and does
 	// not require special ordering.
 	pendingIndirectPings []PendingIndirectPing
-
-	// rttTracker is used to store the measured round trip time of direct pings and indirect pings and calculates the
-	// expected round trip time as a percentile of what was observed until then. This information is provided to the
-	// scheduler to allow dynamic adjustments of direct ping timeouts according to the observed round trip times.
-	rttTracker *roundtriptime.Tracker
 }
 
 // NewList creates a new membership list.
@@ -110,13 +104,19 @@ func NewList(options ...Option) *List {
 		option(&config)
 	}
 
+	if config.RoundTripTimeTracker == nil {
+		panic("you must provide a round trip time tracker")
+	}
+
 	newList := List{
-		config:         config,
-		logger:         config.Logger,
-		self:           config.AdvertisedAddress,
-		gossipQueue:    gossip.NewQueue(),
-		datagramBuffer: make([]byte, 0, config.MaxDatagramLengthSend),
-		rttTracker:     roundtriptime.NewTracker(),
+		config:                 config,
+		logger:                 config.Logger,
+		self:                   config.AdvertisedAddress,
+		gossipQueue:            gossip.NewQueue(),
+		datagramBuffer:         make([]byte, 0, config.MaxDatagramLengthSend),
+		pendingDirectPings:     make([]PendingDirectPing, 0, 16),
+		pendingDirectPingsNext: make([]PendingDirectPing, 0, 16),
+		pendingIndirectPings:   make([]PendingIndirectPing, 0, 16),
 	}
 
 	// We need to gossip our own alive. Otherwise, nobody will pick us up into their own member list.
@@ -134,6 +134,14 @@ func NewList(options ...Option) *List {
 	return &newList
 }
 
+// Config returns the configuration the membership list was created with.
+func (l *List) Config() Config {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	return l.config
+}
+
 // Len returns the number of members which are currently alive or suspect.
 func (l *List) Len() int {
 	l.mutex.Lock()
@@ -142,83 +150,38 @@ func (l *List) Len() int {
 	return len(l.members)
 }
 
+// Get returns the addresses of all members. The addresses are guaranteed to be sorted ascending. This call will always
+// allocate a new slice holding the member addresses. Use GetInto if you want to avoid memory allocations.
 func (l *List) Get() []encoding.Address {
+	return l.GetInto(nil)
+}
+
+// GetInto returns the addresses of all members. The addresses are guaranteed to be sorted ascending. Providing a slice
+// as parameter will use that slice to fill member addresses in. This allows the caller to prevent memory allocations.
+// If the parameter is nil, a new slice will be allocated with capacity to hold the full member list.
+func (l *List) GetInto(addresses []encoding.Address) []encoding.Address {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
 
-	result := make([]encoding.Address, 0, len(l.members))
+	if addresses == nil {
+		addresses = make([]encoding.Address, 0, len(l.members))
+	} else {
+		addresses = addresses[:0]
+	}
+
 	for _, member := range l.members {
-		result = append(result, member.Address)
+		addresses = append(addresses, member.Address)
 	}
-	return result
+	return addresses
 }
 
-func (l *List) ExpectedRoundTripTime() time.Duration {
-	l.mutex.Lock()
-	defer l.mutex.Unlock()
-
-	return l.rttTracker.GetCalculated()
-}
-
-func (l *List) GetMembers() []encoding.Member {
-	l.mutex.Lock()
-	defer l.mutex.Unlock()
-
-	return l.members
-}
-
-func (l *List) GetFaultyMembers() []encoding.Member {
-	l.mutex.Lock()
-	defer l.mutex.Unlock()
-
-	return l.faultyMembers
-}
-
-func (l *List) SetMembers(members []encoding.Member) {
-	l.mutex.Lock()
-	defer l.mutex.Unlock()
-
-	l.members = l.members[:0]
-	l.randomIndexes = l.randomIndexes[:0]
-	l.nextRandomIndex = 0
-
-	for _, member := range members {
-		l.addMember(member)
-	}
-}
-
-func (l *List) SetFaultyMembers(members []encoding.Member) {
-	l.mutex.Lock()
-	defer l.mutex.Unlock()
-
-	l.faultyMembers = append(l.faultyMembers[:0], members...)
-}
-
-func (l *List) AdvertiseAddress() encoding.Address {
-	l.mutex.Lock()
-	defer l.mutex.Unlock()
-
-	return l.config.AdvertisedAddress
-}
-
-func (l *List) GetGossip() *gossip.Queue {
-	l.mutex.Lock()
-	defer l.mutex.Unlock()
-
-	return l.gossipQueue
-}
-
-func (l *List) ClearGossip() {
-	l.mutex.Lock()
-	defer l.mutex.Unlock()
-
-	l.gossipQueue.Clear()
-}
-
+// DirectPing executes the first step in the SWIM protocol by directly pinging other members.
 func (l *List) DirectPing() error {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
 
+	// As we are supporting to directly ping multiple members, we need to make sure that we are not exceeding the
+	// current member count. Otherwise, we would ping the same member multiple times in the same protocol period.
 	for range min(len(l.members), l.config.DirectPingMemberCount) {
 		directPing := MessageDirectPing{
 			Source:         l.self,
@@ -245,6 +208,27 @@ func (l *List) DirectPing() error {
 	return nil
 }
 
+// getNextMember returns the next member to pick for a direct ping. This method ensures that the next member is selected
+// randomly but with an upper bound to prevent some members never being picket for a direct ping. This is done by having
+// a list of all indexes into the member list and shuffling that index list. Then we can move through that list one by
+// one and re-shuffle once we reach the end of the list. This ensures that in the worst case a member is picked after
+// two iterations of the member list.
+func (l *List) getNextMember() *encoding.Member {
+	if l.nextRandomIndex >= len(l.randomIndexes) {
+		// When we moved beyond the end of the list, re-shuffle the indices and reset back to the start of the list.
+		rand.Shuffle(len(l.randomIndexes), func(i, j int) {
+			l.randomIndexes[i], l.randomIndexes[j] = l.randomIndexes[j], l.randomIndexes[i]
+		})
+		l.nextRandomIndex = 0
+	}
+
+	randomIndex := l.nextRandomIndex
+	l.nextRandomIndex++
+	return &l.members[l.randomIndexes[randomIndex]]
+}
+
+// IndirectPing executes the second step in the SWIM protocol by requesting indirect pings for direct pings which timed
+// out.
 func (l *List) IndirectPing() error {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
@@ -333,7 +317,6 @@ func (l *List) EndOfProtocolPeriod() error {
 	l.gossipQueue.SetMaxTransmissionCount(maxTransmissionCount)
 	l.processFailedPings()
 	l.markSuspectsAsFaulty()
-	l.rttTracker.UpdateCalculated()
 	return nil
 }
 
@@ -595,7 +578,7 @@ func (l *List) handleDirectAckForPendingDirectPings(pendingDirectPings []Pending
 	pendingDirectPings = utility.SwapDelete(pendingDirectPings, pendingDirectPingIndex)
 
 	// We note down the round trip time for the direct ping.
-	l.rttTracker.AddObserved(time.Since(pendingDirectPing.Timestamp))
+	l.config.RoundTripTimeTracker.AddObserved(time.Since(pendingDirectPing.Timestamp))
 
 	if pendingDirectPing.MessageIndirectPing.IsZero() {
 		// The direct ping was NOT done in a response to a request for an indirect ping, so we are done here.
@@ -684,8 +667,10 @@ func (l *List) handleIndirectAckForPendingIndirectPings(indirectAck MessageIndir
 	}
 
 	// We note down the round trip time for the indirect ping. Note that we divide by 2 because the indirect ping
-	// consists of two round trips.
-	l.rttTracker.AddObserved(time.Since(l.pendingIndirectPings[pendingIndirectPingIndex].Timestamp) / 2)
+	// consists of two round trips. We also add to observations, as we basically observed two round trips.
+	observedRoundTrip := time.Since(l.pendingIndirectPings[pendingIndirectPingIndex].Timestamp) / 2
+	l.config.RoundTripTimeTracker.AddObserved(observedRoundTrip)
+	l.config.RoundTripTimeTracker.AddObserved(observedRoundTrip)
 
 	l.pendingIndirectPings = utility.SwapDelete(l.pendingIndirectPings, pendingIndirectPingIndex)
 }
@@ -1093,20 +1078,6 @@ func (l *List) sendWithGossip(address encoding.Address, message Message) error {
 	return nil
 }
 
-func (l *List) getNextMember() *encoding.Member {
-	if l.nextRandomIndex >= len(l.randomIndexes) {
-		// When we moved beyond the end of the list, re-shuffle the indices and reset back to the start of the list.
-		rand.Shuffle(len(l.randomIndexes), func(i, j int) {
-			l.randomIndexes[i], l.randomIndexes[j] = l.randomIndexes[j], l.randomIndexes[i]
-		})
-		l.nextRandomIndex = 0
-	}
-
-	randomIndex := l.nextRandomIndex
-	l.nextRandomIndex++
-	return &l.members[l.randomIndexes[randomIndex]]
-}
-
 func (l *List) addMember(member encoding.Member) {
 	if member.Address.Equal(l.self) {
 		// We do not add ourselves to the member list
@@ -1283,4 +1254,52 @@ func (l *List) pickShutdownMembers(memberCount int) []*encoding.Member {
 		result[i] = &l.members[candidateIndexes[i]]
 	}
 	return result
+}
+
+func (l *List) GetMembers() []encoding.Member {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	return l.members
+}
+
+func (l *List) GetFaultyMembers() []encoding.Member {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	return l.faultyMembers
+}
+
+func (l *List) SetMembers(members []encoding.Member) {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	l.members = l.members[:0]
+	l.randomIndexes = l.randomIndexes[:0]
+	l.nextRandomIndex = 0
+
+	for _, member := range members {
+		l.addMember(member)
+	}
+}
+
+func (l *List) SetFaultyMembers(members []encoding.Member) {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	l.faultyMembers = append(l.faultyMembers[:0], members...)
+}
+
+func (l *List) GetGossip() *gossip.Queue {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	return l.gossipQueue
+}
+
+func (l *List) ClearGossip() {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	l.gossipQueue.Clear()
 }

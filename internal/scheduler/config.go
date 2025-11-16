@@ -3,6 +3,7 @@ package scheduler
 import (
 	"time"
 
+	"github.com/backbone81/membership/internal/roundtriptime"
 	"github.com/go-logr/logr"
 )
 
@@ -23,6 +24,10 @@ type Config struct {
 
 	// ListRequestInterval is the time interval in which a full member list is requested from a randomly selected member.
 	ListRequestInterval time.Duration
+
+	// RoundTripTimeTracker is the roundtrip time tracker which the membership list records the measured network round
+	// trips to.
+	RoundTripTimeTracker *roundtriptime.Tracker
 }
 
 // DefaultConfig provides a scheduler configuration with sane defaults for most situations.

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/backbone81/membership/internal/roundtriptime"
 	"github.com/go-logr/logr"
 
 	"github.com/backbone81/membership/internal/encoding"
@@ -42,6 +43,7 @@ func buildCluster(memberCount int, memoryTransport *transport.Memory) ([]*member
 			membership.WithAdvertisedAddress(address),
 			membership.WithUDPClient(memoryTransport.Client()),
 			membership.WithTCPClient(memoryTransport.Client()),
+			membership.WithRoundTripTimeTracker(roundtriptime.NewTracker()),
 		}
 		for j := range memberCount {
 			options = append(options,

@@ -3,6 +3,7 @@ package scheduler
 import (
 	"time"
 
+	"github.com/backbone81/membership/internal/roundtriptime"
 	"github.com/go-logr/logr"
 )
 
@@ -34,5 +35,11 @@ func WithMaxSleepDuration(maxSleepDuration time.Duration) Option {
 func WithListRequestInterval(listRequestInterval time.Duration) Option {
 	return func(config *Config) {
 		config.ListRequestInterval = listRequestInterval
+	}
+}
+
+func WithRoundTripTimeTracker(rttTracker *roundtriptime.Tracker) Option {
+	return func(config *Config) {
+		config.RoundTripTimeTracker = rttTracker
 	}
 }

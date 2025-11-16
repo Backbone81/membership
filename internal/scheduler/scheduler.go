@@ -28,6 +28,11 @@ func New(target Target, options ...Option) *Scheduler {
 	for _, option := range options {
 		option(&config)
 	}
+
+	if config.RoundTripTimeTracker == nil {
+		panic("you must provide a round trip time tracker")
+	}
+
 	return &Scheduler{
 		logger:   config.Logger,
 		config:   config,
@@ -82,7 +87,7 @@ func (s *Scheduler) protocolPeriodTask() {
 		// Adjust the timeout for the direct ping to what we observed can be expected. We always use the current value
 		// for the timeout, but we also want to create a log entry, when the timeout changes significantly. Therefore,
 		// we only log when we move at least 10% away of the last time we logged.
-		currExpectedRoundTripTime := s.target.ExpectedRoundTripTime()
+		currExpectedRoundTripTime := s.config.RoundTripTimeTracker.GetCalculated()
 		ExpectedRTTSeconds.Set(currExpectedRoundTripTime.Seconds())
 		logThreshold := lastExpectedRoundTripTime / 10
 		if math.Abs(float64(currExpectedRoundTripTime)-float64(lastExpectedRoundTripTime)) > float64(logThreshold) {
@@ -120,6 +125,7 @@ func (s *Scheduler) protocolPeriodTask() {
 			return
 		}
 		s.measure("end_of_protocol_period", func() error {
+			s.config.RoundTripTimeTracker.UpdateCalculated()
 			if err := s.target.EndOfProtocolPeriod(); err != nil {
 				s.logger.Error(err, "End of protocol period.")
 				return err

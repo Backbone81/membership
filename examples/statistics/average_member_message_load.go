@@ -6,6 +6,7 @@ import (
 	"os"
 	"text/tabwriter"
 
+	"github.com/backbone81/membership/internal/roundtriptime"
 	"github.com/go-logr/logr"
 
 	"github.com/backbone81/membership/internal/encoding"
@@ -39,6 +40,7 @@ func AverageMemberMessageLoad(logger logr.Logger, maxMemberCount int) error {
 				membership.WithTCPClient(memoryTransport.Client()),
 				membership.WithIndirectPingMemberCount(1),
 				membership.WithSafetyFactor(3),
+				membership.WithRoundTripTimeTracker(roundtriptime.NewTracker()),
 			}
 			for j := range memberCount {
 				options = append(options,

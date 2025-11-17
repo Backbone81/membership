@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"math"
 	"math/rand"
 	"slices"
@@ -95,6 +94,9 @@ type List struct {
 	// scheduler as part of our own protocol cycle. This list will usually only contain a handful of elements and does
 	// not require special ordering.
 	pendingIndirectPings []PendingIndirectPing
+
+	pickRandomMembersResult []*encoding.Member
+	pickRandomMembersSwap   map[int]int
 }
 
 // NewList creates a new membership list.
@@ -109,14 +111,16 @@ func NewList(options ...Option) *List {
 	}
 
 	newList := List{
-		config:                 config,
-		logger:                 config.Logger,
-		self:                   config.AdvertisedAddress,
-		gossipQueue:            gossip.NewQueue(),
-		datagramBuffer:         make([]byte, 0, config.MaxDatagramLengthSend),
-		pendingDirectPings:     make([]PendingDirectPing, 0, 16),
-		pendingDirectPingsNext: make([]PendingDirectPing, 0, 16),
-		pendingIndirectPings:   make([]PendingIndirectPing, 0, 16),
+		config:                  config,
+		logger:                  config.Logger,
+		self:                    config.AdvertisedAddress,
+		gossipQueue:             gossip.NewQueue(),
+		datagramBuffer:          make([]byte, 0, config.MaxDatagramLengthSend),
+		pendingDirectPings:      make([]PendingDirectPing, 0, 16),
+		pendingDirectPingsNext:  make([]PendingDirectPing, 0, 16),
+		pendingIndirectPings:    make([]PendingIndirectPing, 0, 16),
+		pickRandomMembersResult: make([]*encoding.Member, 0, 16),
+		pickRandomMembersSwap:   make(map[int]int, 16),
 	}
 
 	// We need to gossip our own alive. Otherwise, nobody will pick us up into their own member list.
@@ -257,7 +261,7 @@ func (l *List) IndirectPing() error {
 		}
 
 		// Send the indirect pings to the indirect ping members and join up all errors which might occur.
-		members := l.pickIndirectPings(l.config.IndirectPingMemberCount, directPing.Destination)
+		members := l.pickRandomMembersWithout(l.config.IndirectPingMemberCount, directPing.Destination)
 		l.pendingIndirectPings = append(l.pendingIndirectPings, PendingIndirectPing{
 			Timestamp:           time.Now(),
 			MessageIndirectPing: indirectPing,
@@ -278,92 +282,100 @@ func (l *List) IndirectPing() error {
 	return joinedErr
 }
 
-func (l *List) pickIndirectPings(failureDetectionSubgroupSize int, directPingAddress encoding.Address) []*encoding.Member {
-	// TODO: We should do a partial Fisher-Yates shuffle (https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle).
-	// This is also what rand.Shuffle is doing for the full slice.
-	candidateIndexes := make([]int, 0, len(l.members))
-	for index := range l.members {
-		if l.members[index].Address.Equal(directPingAddress) {
-			// We do not want to include the direct ping member into our list for indirect pings.
-			continue
-		}
-		candidateIndexes = append(candidateIndexes, index)
+// pickRandomMembers returns count random members using a partial Fisher-Yates shuffle
+// (https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle). This avoids copying and shuffling the entire members
+// slice and is basically the same what rand.Shuffle is using for shuffling full slices.
+// As we try to avoid copying the full slice, we use a map to remember those swaps we already did. This allows us to
+// have minimal memory consumption even for large member lists.
+// WARNING: The member slice returned by this method is only valid until the next call to pickRandomMembers or
+// pickRandomMembersWithout. Create a copy if you need to retain the result longer.
+func (l *List) pickRandomMembers(count int) []*encoding.Member {
+	count = min(count, len(l.members))
+	if count == 0 {
+		return nil
 	}
 
-	rand.Shuffle(len(candidateIndexes), func(i, j int) {
-		candidateIndexes[i], candidateIndexes[j] = candidateIndexes[j], candidateIndexes[i]
-	})
+	// Reset the result slice and reset the map.
+	l.pickRandomMembersResult = l.pickRandomMembersResult[:0]
+	clear(l.pickRandomMembersSwap)
 
-	// Pick the first few candidates.
-	candidateIndexes = candidateIndexes[:min(failureDetectionSubgroupSize, len(candidateIndexes))]
-	result := make([]*encoding.Member, len(candidateIndexes))
-	for i := range candidateIndexes {
-		result[i] = &l.members[candidateIndexes[i]]
+	// We iterate over the number of elements we want to retrieve.
+	for i := 0; i < count; i++ {
+		// For every element, we pick a random other element which is identical to the current element or bigger.
+		j := i + rand.Intn(len(l.members)-i)
+
+		// We look up the real indexes according to what swaps we already did in the past.
+		iReal := l.pickRandomMemberIndex(i)
+		jReal := l.pickRandomMemberIndex(j)
+
+		// Let's remember that the j element is now replaced by the real i element. Note that we do not remember the
+		// i element, because we will never look at it again, we are only swapping with elements to the right of i, not
+		// left of i.
+		l.pickRandomMembersSwap[j] = iReal
+
+		// Append the swapped member to the result.
+		l.pickRandomMembersResult = append(l.pickRandomMembersResult, &l.members[jReal])
+	}
+	return l.pickRandomMembersResult
+}
+
+// pickRandomMemberIndex is a helper method which resolves a given index through the swap map to get the real index.
+func (l *List) pickRandomMemberIndex(index int) int {
+	if value, found := l.pickRandomMembersSwap[index]; found {
+		return value
+	}
+	return index
+}
+
+// pickRandomMembersWithout returns count random members, excluding the member with the given address.
+// If the excluded address is selected, it's replaced with an additional random member.
+// WARNING: The member slice returned by this method is only valid until the next call to pickRandomMembers or
+// pickRandomMembersWithout. Create a copy if you need to retain the result longer.
+func (l *List) pickRandomMembersWithout(count int, exclude encoding.Address) []*encoding.Member {
+	// We retrieve one member more that requested to allow for an additional member if we find the excluded address.
+	result := l.pickRandomMembers(count + 1)
+
+	// Find and remove the excluded address if present
+	for i, member := range result {
+		if member.Address.Equal(exclude) {
+			return utility.SwapDelete(result, i)
+		}
+	}
+
+	// Ensure we don't return more than requested.
+	if len(result) > count {
+		result = result[:count]
 	}
 	return result
 }
 
-func (l *List) pickListRequestMember() *encoding.Member {
-	members := l.pickIndirectPings(1, encoding.Address{})
-	if len(members) < 1 {
-		return nil
-	}
-	return members[0]
-}
-
+// EndOfProtocolPeriod is the last step in the SWIM protocol where we check which pings went unanswered, and we declare
+// as suspect or faulty which needs declaring.
 func (l *List) EndOfProtocolPeriod() error {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
 
-	maxTransmissionCount := l.requiredDisseminationPeriods()
-	l.gossipQueue.SetMaxTransmissionCount(maxTransmissionCount)
+	// Adjust the gossip queue to the potentially changed cluster size. Either keep gossip longer because of bigger
+	// cluster or keep gossip shorter, because of smaller cluster.
+	l.gossipQueue.SetMaxTransmissionCount(l.requiredDisseminationPeriods())
+
+	// We first process failed pings which lead to suspect declarations, and then mark suspects as faulty. This allows
+	// us to declare suspect and faulty within the same protocol period, if needed. This is helpful for tests and
+	// benchmarks where we can only observe the list state through the public interface.
 	l.processFailedPings()
 	l.markSuspectsAsFaulty()
 	return nil
 }
 
-func (l *List) markSuspectsAsFaulty() {
-	suspicionPeriodThreshold := l.requiredDisseminationPeriods()
-
-	// As we are potentially removing elements from the member list, we need to iterate from the back to the front in
-	// order to not skip a member when the content changes.
-	for i := len(l.members) - 1; i >= 0; i-- {
-		member := &l.members[i]
-		if member.State != encoding.MemberStateSuspect {
-			continue
-		}
-		member.SuspicionPeriodCounter++
-		if member.SuspicionPeriodCounter < suspicionPeriodThreshold {
-			continue
-		}
-
-		l.logger.Info(
-			"Member declared as faulty",
-			"source", l.self,
-			"destination", member.Address,
-			"incarnation-number", member.IncarnationNumber,
-		)
-		member.State = encoding.MemberStateFaulty
-		faultyMemberIndex, found := slices.BinarySearchFunc(
-			l.faultyMembers,
-			*member,
-			encoding.CompareMember,
-		)
-		if found {
-			// Overwrite existing faulty member
-			l.faultyMembers[faultyMemberIndex] = *member
-		} else {
-			l.faultyMembers = slices.Insert(l.faultyMembers, faultyMemberIndex, *member)
-		}
-		l.gossipQueue.Add(&gossip.MessageFaulty{
-			Source:            l.self,
-			Destination:       member.Address,
-			IncarnationNumber: member.IncarnationNumber,
-		})
-		l.removeMemberByIndex(i) // must always happen last to keep the member alive during this method
-	}
+// requiredDisseminationPeriods returns the number of protocol periods which are deemed safe for disseminating gossip
+// messages and for declaring as suspect as faulty. Note that a safety factor of 0 will always lead to 0 periods
+// causing instant suspect and faulty declarations.
+func (l *List) requiredDisseminationPeriods() int {
+	return int(math.Ceil(utility.DisseminationPeriods(l.config.SafetyFactor, len(l.members))))
 }
 
+// processFailedPings loops through all pending direct pings, marks members as suspect which did not answer to pings and
+// adds a gossip message about that suspect message.
 func (l *List) processFailedPings() {
 	for _, pendingDirectPings := range l.pendingDirectPings {
 		memberIndex, found := slices.BinarySearchFunc(
@@ -399,6 +411,10 @@ func (l *List) processFailedPings() {
 			IncarnationNumber: member.IncarnationNumber,
 		})
 	}
+
+	// We swap the pending direct pings of the current protocol period with the pending direct pings of the next
+	// protocol period - resetting the pings for the next period to nothing. This allows us to re-use the same slices
+	// over and over without new allocations.
 	l.pendingDirectPings, l.pendingDirectPingsNext = l.pendingDirectPingsNext, l.pendingDirectPings[:0]
 
 	// As indirect pings always happen with a direct ping not being satisfied before, we can clear the indirect pings
@@ -406,12 +422,67 @@ func (l *List) processFailedPings() {
 	l.pendingIndirectPings = l.pendingIndirectPings[:0]
 }
 
+// markSuspectsAsFaulty loops through all members and increases the suspect counter on each suspect. It declares members
+// as faulty if they exceeded the suspicion threshold.
+func (l *List) markSuspectsAsFaulty() {
+	suspicionPeriodThreshold := l.requiredDisseminationPeriods()
+
+	// As we are potentially removing elements from the member list, we need to iterate from the back to the front in
+	// order to not skip a member when the content changes.
+	// TODO: Iterating over all members to search for suspects is wasteful. Introduce a suspectCounters map and remove
+	// the field SuspicionPeriodCounter from the member struct. You need to update the indexes in this map when members
+	// are added or removed, and when members are declared suspect or alive.
+	for i := len(l.members) - 1; i >= 0; i-- {
+		member := &l.members[i]
+		if member.State != encoding.MemberStateSuspect {
+			// We are only interested in looking at suspect members.
+			continue
+		}
+		member.SuspicionPeriodCounter++
+		if member.SuspicionPeriodCounter < suspicionPeriodThreshold {
+			// We are only interested in members exceeding the suspicion threshold.
+			continue
+		}
+
+		l.logger.Info(
+			"Member declared as faulty",
+			"source", l.self,
+			"destination", member.Address,
+			"incarnation-number", member.IncarnationNumber,
+		)
+		member.State = encoding.MemberStateFaulty
+		faultyMemberIndex, found := slices.BinarySearchFunc(
+			l.faultyMembers,
+			*member,
+			encoding.CompareMember,
+		)
+		if found {
+			// Overwrite existing faulty member
+			l.faultyMembers[faultyMemberIndex] = *member
+		} else {
+			l.faultyMembers = slices.Insert(l.faultyMembers, faultyMemberIndex, *member)
+		}
+		l.gossipQueue.Add(&gossip.MessageFaulty{
+			Source:            l.self,
+			Destination:       member.Address,
+			IncarnationNumber: member.IncarnationNumber,
+		})
+		l.removeMemberByIndex(i) // must always happen last to keep the member alive during this method
+	}
+}
+
+// RequestList is a protocol step which is not part of the core SWIM protocol, but it is required for letting new
+// members know the full member list quickly, and it is helpful in addressing some randomness issues which might lead
+// to some member not getting the gossip about a specific change. RequestList picks one random member and requests
+// a full list of all alive, suspect and faulty members. The request is sent as a standard datagram with gossip, while
+// the response is returned as TCP message. This operation can be expensive in time and space and should be executed
+// at a much lower frequency compared to the standard SWIM actions.
 func (l *List) RequestList() error {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
 
-	member := l.pickListRequestMember()
-	if member == nil {
+	members := l.pickRandomMembers(1)
+	if len(members) < 1 {
 		// We could not pick a member to request the member list from. There probably is no other member at all.
 		return nil
 	}
@@ -422,14 +493,17 @@ func (l *List) RequestList() error {
 
 	l.logger.V(1).Info(
 		"Requesting member list",
-		"destination", member.Address,
+		"destination", members[0].Address,
 	)
-	if err := l.sendWithGossip(member.Address, &listRequest); err != nil {
+	if err := l.sendWithGossip(members[0].Address, &listRequest); err != nil {
 		return err
 	}
 	return nil
 }
 
+// DispatchDatagram is the entrypoint which processes messages received by other members. The buffer provided as
+// parameter might contain any number of messages. This method will unmarshal messages and pass them on for processing
+// until the buffer is exhausted.
 func (l *List) DispatchDatagram(buffer []byte) error {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
@@ -525,7 +599,10 @@ func (l *List) DispatchDatagram(buffer []byte) error {
 				joinedErr = errors.Join(joinedErr, err)
 			}
 		default:
-			log.Printf("ERROR: Unknown message type %d.", messageType)
+			l.logger.Error(
+				fmt.Errorf("unknown message type %d", messageType),
+				"The network message has an unknown message type.",
+			)
 		}
 	}
 	return joinedErr
@@ -1209,10 +1286,6 @@ func (l *List) WriteInternalDebugState(writer io.Writer) error {
 		}
 	}
 	return nil
-}
-
-func (l *List) requiredDisseminationPeriods() int {
-	return int(math.Ceil(utility.DisseminationPeriods(l.config.SafetyFactor, len(l.members))))
 }
 
 func (l *List) BroadcastShutdown() error {

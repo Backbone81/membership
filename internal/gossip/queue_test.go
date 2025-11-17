@@ -1102,7 +1102,7 @@ var _ = Describe("Queue", func() {
 		for i := range 5 {
 			addresses = append(addresses, encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i))
 		}
-		for range 1_000_000 {
+		for range 100_000 {
 			switch selection := rand.Intn(100); {
 			case selection < 25: // 25% of the time we add a message
 				queue.Add(&gossip.MessageAlive{

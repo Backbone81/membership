@@ -231,6 +231,47 @@ func (l *List) getNextMember() *encoding.Member {
 	return &l.members[l.randomIndexes[randomIndex]]
 }
 
+// sendWithGossip sends the given network message to the given address, It fills up the remaining space in the datagram
+// with gossip from the gossip queue.
+func (l *List) sendWithGossip(address encoding.Address, message Message) error {
+	l.datagramBuffer = l.datagramBuffer[:0]
+
+	var err error
+	var datagramN int
+	l.datagramBuffer, datagramN, err = message.AppendToBuffer(l.datagramBuffer)
+	if err != nil {
+		return err
+	}
+
+	// Make sure that we send gossip about our destination first, to allow quicker refutation of suspects.
+	l.gossipQueue.Prioritize(address)
+
+	var gossipAdded int
+	for _, msg := range l.gossipQueue.All() {
+		var gossipN int
+		l.datagramBuffer, gossipN, err = msg.AppendToBuffer(l.datagramBuffer)
+		if err != nil {
+			return err
+		}
+
+		if len(l.datagramBuffer) > l.config.MaxDatagramLengthSend {
+			// Appending the last gossip exceeded the maximum size we want to have for our network message. Reset the
+			// buffer back to its size before we added the last gossip.
+			l.datagramBuffer = l.datagramBuffer[:datagramN]
+			break
+		}
+
+		datagramN += gossipN
+		gossipAdded++
+	}
+	l.gossipQueue.MarkTransmitted(gossipAdded)
+
+	if err := l.config.UDPClient.Send(address, l.datagramBuffer); err != nil {
+		return err
+	}
+	return nil
+}
+
 // IndirectPing executes the second step in the SWIM protocol by requesting indirect pings for direct pings which timed
 // out.
 func (l *List) IndirectPing() error {
@@ -499,6 +540,129 @@ func (l *List) RequestList() error {
 		return err
 	}
 	return nil
+}
+
+// BroadcastShutdown is picking some members at random and sends those a faulty message about itself. This helps in
+// disseminating graceful shutdowns a lot quicker than waiting for a ping to fail and then to wait through a suspect
+// timeout.
+func (l *List) BroadcastShutdown() error {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	faultyMessage := gossip.MessageFaulty{
+		Source:            l.self,
+		Destination:       l.self,
+		IncarnationNumber: l.incarnationNumber,
+	}
+
+	members := l.pickRandomMembers(l.config.ShutdownMemberCount)
+	for _, member := range members {
+		l.logger.Info(
+			"Broadcasting shutdown",
+			"address", member.Address,
+		)
+		// We send our broadcast with the gossip we have, to help disseminate that information before we are gone.
+		if err := l.sendWithGossip(member.Address, &faultyMessage); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// addMember adds the given member as a new member. It updates all bookkeeping which might be affected by this change.
+func (l *List) addMember(member encoding.Member) {
+	if member.Address.Equal(l.self) {
+		// We do not add ourselves to the member list
+		return
+	}
+
+	l.logger.Info(
+		"Member added",
+		"address", member.Address,
+		"incarnation-number", member.IncarnationNumber,
+	)
+
+	// Insert the new member at the correct ordered location. Remember the index for later.
+	memberIndex, found := slices.BinarySearchFunc(
+		l.members,
+		member,
+		encoding.CompareMember,
+	)
+	if found {
+		// Update the existing member. Note that we do not count this towards the add member metric. Otherwise, the
+		// number of members could not be calculated by subtracting remove member metric from add member metric.
+		l.members[memberIndex] = member
+		return
+	}
+	l.members = slices.Insert(l.members, memberIndex, member)
+
+	// Fix the current indices to account for the inserted member.
+	for i := range l.randomIndexes {
+		if l.randomIndexes[i] < memberIndex {
+			continue
+		}
+		l.randomIndexes[i]++
+	}
+
+	// We pick a random location to insert the new member into the random indexes slice. We need to add +1 to the length
+	// of that slice to allow for appending at the end.
+	insertIndex := rand.Intn(len(l.randomIndexes) + 1)
+	l.randomIndexes = slices.Insert(l.randomIndexes, insertIndex, memberIndex)
+	if insertIndex <= l.nextRandomIndex {
+		// The new member index was inserted before or at the next random index. We therefore move the next random index
+		// forward by one to not have the same member be picked twice in a row.
+		l.nextRandomIndex++
+	}
+
+	// Trigger the callback if set.
+	if l.config.MemberAddedCallback != nil {
+		l.config.MemberAddedCallback(member.Address)
+	}
+	MembersAddedTotal.Inc()
+}
+
+// removeMemberByAddress removes the member with the given address from the list of members. Updating the relevant
+// bookkeeping at the same time.
+func (l *List) removeMemberByAddress(address encoding.Address) {
+	index, found := slices.BinarySearchFunc(
+		l.members,
+		encoding.Member{Address: address},
+		encoding.CompareMember,
+	)
+	if !found {
+		return
+	}
+	l.removeMemberByIndex(index)
+}
+
+// removeMemberByIndex removes the member with the given index from the list of members. Updating the relevant
+// bookkeeping at the same time.
+func (l *List) removeMemberByIndex(index int) {
+	l.logger.Info(
+		"Member removed",
+		"address", l.members[index].Address,
+		"incarnation-number", l.members[index].IncarnationNumber,
+	)
+
+	// Trigger the callback if set.
+	if l.config.MemberRemovedCallback != nil {
+		l.config.MemberRemovedCallback(l.members[index].Address)
+	}
+
+	// If we remove the element from the slice, all indexes after that element need to be decremented by one.
+	var randomIndex int
+	for i := range l.randomIndexes {
+		if index < l.randomIndexes[i] {
+			l.randomIndexes[i]--
+		}
+		if index == l.randomIndexes[i] {
+			randomIndex = i
+		}
+	}
+
+	l.members = slices.Delete(l.members, index, index+1)
+	l.randomIndexes = slices.Delete(l.randomIndexes, randomIndex, randomIndex+1)
+	MembersRemovedTotal.Inc()
 }
 
 // DispatchDatagram is the entrypoint which processes messages received by other members. The buffer provided as
@@ -1122,132 +1286,6 @@ func (l *List) handleListResponse(listResponse MessageListResponse) error {
 	return nil
 }
 
-func (l *List) sendWithGossip(address encoding.Address, message Message) error {
-	l.datagramBuffer = l.datagramBuffer[:0]
-
-	var err error
-	var datagramN int
-	l.datagramBuffer, datagramN, err = message.AppendToBuffer(l.datagramBuffer)
-	if err != nil {
-		return err
-	}
-
-	l.gossipQueue.Prioritize(address)
-	var gossipAdded int
-	for i := range l.gossipQueue.Len() {
-		var gossipN int
-		l.datagramBuffer, gossipN, err = l.gossipQueue.Get(i).AppendToBuffer(l.datagramBuffer)
-		if err != nil {
-			return err
-		}
-
-		if len(l.datagramBuffer) > l.config.MaxDatagramLengthSend {
-			l.datagramBuffer = l.datagramBuffer[:len(l.datagramBuffer)-gossipN]
-			break
-		}
-
-		datagramN += gossipN
-		gossipAdded++
-	}
-	l.gossipQueue.MarkTransmitted(gossipAdded)
-
-	if err := l.config.UDPClient.Send(address, l.datagramBuffer); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (l *List) addMember(member encoding.Member) {
-	if member.Address.Equal(l.self) {
-		// We do not add ourselves to the member list
-		return
-	}
-
-	l.logger.Info(
-		"Member added",
-		"address", member.Address,
-		"incarnation-number", member.IncarnationNumber,
-	)
-
-	// Insert the new member at the correct ordered location. Remember the index for later.
-	memberIndex, found := slices.BinarySearchFunc(
-		l.members,
-		member,
-		encoding.CompareMember,
-	)
-	if found {
-		// Update the existing member. Note that we do not count this towards the add member metric. Otherwise, the
-		// number of members could not be calculated by subtracting remove member metric from add member metric.
-		l.members[memberIndex] = member
-		return
-	}
-	l.members = slices.Insert(l.members, memberIndex, member)
-
-	// Fix the current indices to account for the inserted member.
-	for i := range l.randomIndexes {
-		if l.randomIndexes[i] < memberIndex {
-			continue
-		}
-		l.randomIndexes[i]++
-	}
-
-	// We pick a random location to insert the new member into the random indexes slice. We need to add +1 to the length
-	// of that slice to allow for appending at the end.
-	insertIndex := rand.Intn(len(l.randomIndexes) + 1)
-	l.randomIndexes = slices.Insert(l.randomIndexes, insertIndex, memberIndex)
-	if insertIndex <= l.nextRandomIndex {
-		// The new member index was inserted before or at the next random index. We therefore move the next random index
-		// forward by one to not have the same member be picked twice in a row.
-		l.nextRandomIndex++
-	}
-
-	// Trigger the callback if set.
-	if l.config.MemberAddedCallback != nil {
-		l.config.MemberAddedCallback(member.Address)
-	}
-	MembersAddedTotal.Inc()
-}
-
-func (l *List) removeMemberByAddress(address encoding.Address) {
-	index, found := slices.BinarySearchFunc(
-		l.members,
-		encoding.Member{Address: address},
-		encoding.CompareMember,
-	)
-	if !found {
-		return
-	}
-	l.removeMemberByIndex(index) // must always happen last to keep the member alive during this method
-}
-
-func (l *List) removeMemberByIndex(index int) {
-	l.logger.Info(
-		"Member removed",
-		"address", l.members[index].Address,
-		"incarnation-number", l.members[index].IncarnationNumber,
-	)
-
-	// Trigger the callback if set.
-	if l.config.MemberRemovedCallback != nil {
-		l.config.MemberRemovedCallback(l.members[index].Address)
-	}
-
-	// If we remove the element from the slice, all indexes after that element need to be decremented by one.
-	var randomIndex int
-	for i := range l.randomIndexes {
-		if index < l.randomIndexes[i] {
-			l.randomIndexes[i]--
-		}
-		if index == l.randomIndexes[i] {
-			randomIndex = i
-		}
-	}
-
-	l.members = slices.Delete(l.members, index, index+1)
-	l.randomIndexes = slices.Delete(l.randomIndexes, randomIndex, randomIndex+1)
-	MembersRemovedTotal.Inc()
-}
-
 func (l *List) WriteInternalDebugState(writer io.Writer) error {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
@@ -1279,56 +1317,12 @@ func (l *List) WriteInternalDebugState(writer io.Writer) error {
 	}
 	// Make sure we are not prioritizing for the state dump
 	l.gossipQueue.Prioritize(encoding.Address{})
-	for i := range l.gossipQueue.Len() {
-		gossipMessage := l.gossipQueue.Get(i)
-		if _, err := fmt.Fprintf(writer, "  - %s\n", gossipMessage); err != nil {
+	for _, msg := range l.gossipQueue.All() {
+		if _, err := fmt.Fprintf(writer, "  - %s\n", msg); err != nil {
 			return err
 		}
 	}
 	return nil
-}
-
-func (l *List) BroadcastShutdown() error {
-	l.mutex.Lock()
-	defer l.mutex.Unlock()
-
-	faultyMessage := gossip.MessageFaulty{
-		Source:            l.self,
-		Destination:       l.self,
-		IncarnationNumber: l.incarnationNumber,
-	}
-
-	members := l.pickShutdownMembers(l.config.ShutdownMemberCount)
-	for _, member := range members {
-		l.logger.Info(
-			"Broadcasting shutdown",
-			"address", member.Address,
-		)
-		// We send our broadcast with the gossip we have, to help disseminate that information before we are gone.
-		if err := l.sendWithGossip(member.Address, &faultyMessage); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (l *List) pickShutdownMembers(memberCount int) []*encoding.Member {
-	candidateIndexes := make([]int, 0, len(l.members))
-	for index := range l.members {
-		candidateIndexes = append(candidateIndexes, index)
-	}
-
-	rand.Shuffle(len(candidateIndexes), func(i, j int) {
-		candidateIndexes[i], candidateIndexes[j] = candidateIndexes[j], candidateIndexes[i]
-	})
-
-	// Pick the first few candidates.
-	candidateIndexes = candidateIndexes[:min(memberCount, len(candidateIndexes))]
-	result := make([]*encoding.Member, len(candidateIndexes))
-	for i := range candidateIndexes {
-		result[i] = &l.members[candidateIndexes[i]]
-	}
-	return result
 }
 
 func (l *List) GetMembers() []encoding.Member {

@@ -20,6 +20,253 @@ import (
 )
 
 var _ = Describe("List", func() {
+	Context("NewList", func() {
+		It("should create a list with default configuration", func() {
+			list := newTestList()
+
+			Expect(list).NotTo(BeNil())
+			Expect(list.Len()).To(Equal(0))
+			Expect(list.Get()).To(BeEmpty())
+			Expect(membership.DebugList(list).GetMembers()).To(BeEmpty())
+			Expect(membership.DebugList(list).GetFaultyMembers()).To(BeEmpty())
+		})
+
+		It("should apply WithAdvertisedAddress option", func() {
+			address := encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1)
+			list := newTestList(
+				membership.WithAdvertisedAddress(address),
+			)
+
+			config := list.Config()
+			Expect(config.AdvertisedAddress).To(Equal(address))
+		})
+
+		It("should apply WithSafetyFactor option", func() {
+			list := newTestList(
+				membership.WithSafetyFactor(5.0),
+			)
+
+			config := list.Config()
+			Expect(config.SafetyFactor).To(Equal(5.0))
+		})
+
+		It("should set negative safety factor to 0", func() {
+			list := newTestList(
+				membership.WithSafetyFactor(-5.0),
+			)
+
+			config := list.Config()
+			Expect(config.SafetyFactor).To(Equal(0.0))
+		})
+
+		It("should apply WithDirectPingMemberCount option", func() {
+			list := newTestList(
+				membership.WithDirectPingMemberCount(2),
+			)
+
+			config := list.Config()
+			Expect(config.DirectPingMemberCount).To(Equal(2))
+		})
+
+		It("should set negative direct ping member count to 1", func() {
+			list := newTestList(
+				membership.WithDirectPingMemberCount(-5),
+			)
+
+			config := list.Config()
+			Expect(config.DirectPingMemberCount).To(Equal(1))
+		})
+
+		It("should apply WithIndirectPingMemberCount option", func() {
+			list := newTestList(
+				membership.WithIndirectPingMemberCount(5),
+			)
+
+			config := list.Config()
+			Expect(config.IndirectPingMemberCount).To(Equal(5))
+		})
+
+		It("should set negative indirect ping member count to 1", func() {
+			list := newTestList(
+				membership.WithIndirectPingMemberCount(-5),
+			)
+
+			config := list.Config()
+			Expect(config.IndirectPingMemberCount).To(Equal(1))
+		})
+
+		It("should apply WithShutdownMemberCount option", func() {
+			list := newTestList(
+				membership.WithShutdownMemberCount(10),
+			)
+
+			config := list.Config()
+			Expect(config.ShutdownMemberCount).To(Equal(10))
+		})
+
+		It("should set negative shutdown member count to 1", func() {
+			list := newTestList(
+				membership.WithShutdownMemberCount(-10),
+			)
+
+			config := list.Config()
+			Expect(config.ShutdownMemberCount).To(Equal(1))
+		})
+
+		It("should apply WithMaxDatagramLengthSend option", func() {
+			list := newTestList(
+				membership.WithMaxDatagramLengthSend(2000),
+			)
+
+			config := list.Config()
+			Expect(config.MaxDatagramLengthSend).To(Equal(2000))
+		})
+
+		It("should set negative max datagram length send to 1", func() {
+			list := newTestList(
+				membership.WithMaxDatagramLengthSend(-2000),
+			)
+
+			config := list.Config()
+			Expect(config.MaxDatagramLengthSend).To(Equal(1))
+		})
+
+		It("should process bootstrap members as alive", func() {
+			bootstrap := []encoding.Address{
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 2),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 3),
+			}
+
+			list := newTestList(
+				membership.WithBootstrapMembers(bootstrap),
+			)
+
+			Expect(list.Len()).To(Equal(3))
+			members := membership.DebugList(list).GetMembers()
+			Expect(members).To(HaveLen(3))
+
+			for i, member := range members {
+				Expect(member.Address).To(Equal(bootstrap[i]))
+				Expect(member.State).To(Equal(encoding.MemberStateAlive))
+				Expect(member.IncarnationNumber).To(Equal(uint16(0)))
+			}
+		})
+
+		It("should exclude self from bootstrap members", func() {
+			self := encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1)
+			bootstrap := []encoding.Address{
+				self, // Should be excluded
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 2),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 3),
+			}
+
+			list := newTestList(
+				membership.WithAdvertisedAddress(self),
+				membership.WithBootstrapMembers(bootstrap),
+			)
+
+			Expect(list.Len()).To(Equal(2), "Self should be excluded from member list")
+			members := membership.DebugList(list).GetMembers()
+
+			for _, member := range members {
+				Expect(member.Address).NotTo(Equal(self))
+			}
+		})
+
+		It("should deduplicate bootstrap members", func() {
+			duplicate := encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1)
+			bootstrap := []encoding.Address{
+				duplicate,
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 2),
+				duplicate,
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 3),
+			}
+
+			list := newTestList(
+				membership.WithBootstrapMembers(bootstrap),
+			)
+
+			Expect(list.Len()).To(Equal(3), "Duplicates should be removed")
+		})
+
+		It("should register member added callback", func() {
+			var addedCount int
+			var addedMutex sync.Mutex
+			var addedAddresses []encoding.Address
+
+			_ = newTestList(
+				membership.WithMemberAddedCallback(func(address encoding.Address) {
+					addedMutex.Lock()
+					defer addedMutex.Unlock()
+					addedCount++
+					addedAddresses = append(addedAddresses, address)
+				}),
+				membership.WithBootstrapMembers([]encoding.Address{
+					encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
+					encoding.NewAddress(net.IPv4(255, 255, 255, 255), 2),
+				}),
+			)
+
+			// Callbacks should have been invoked for bootstrap members
+			Eventually(func() int {
+				addedMutex.Lock()
+				defer addedMutex.Unlock()
+				return addedCount
+			}).Should(Equal(2))
+
+			addedMutex.Lock()
+			defer addedMutex.Unlock()
+			Expect(addedAddresses).To(HaveLen(2))
+		})
+
+		It("should allow options to override each other", func() {
+			list := newTestList(
+				membership.WithSafetyFactor(3.0),
+				membership.WithSafetyFactor(5.0), // Should override previous
+			)
+
+			config := list.Config()
+			Expect(config.SafetyFactor).To(Equal(5.0), "Later option should override")
+		})
+
+		It("should maintain sorted member list from bootstrap", func() {
+			bootstrap := []encoding.Address{
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 3),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 2),
+			}
+
+			list := newTestList(
+				membership.WithBootstrapMembers(bootstrap),
+			)
+
+			addresses := list.Get()
+			Expect(addresses).To(HaveLen(3))
+
+			// Verify sorted ascending
+			for i := 0; i < len(addresses)-1; i++ {
+				Expect(encoding.CompareAddress(addresses[i], addresses[i+1])).To(Equal(-1),
+					"Addresses should be sorted ascending")
+			}
+		})
+
+		It("should initialize with gossip about self", func() {
+			list := newTestList()
+
+			gossipQueue := membership.DebugList(list).GetGossip()
+			Expect(gossipQueue.Len()).To(Equal(1))
+
+			msg := membership.DebugList(list).GetGossip().Get(0)
+			aliveMsg, ok := msg.(*gossip.MessageAlive)
+			Expect(ok).To(BeTrue())
+			Expect(aliveMsg.Destination).To(Equal(TestAddress))
+			Expect(aliveMsg.IncarnationNumber).To(Equal(uint16(0)))
+		})
+	})
+
+	// ========== OLD TESTS ==========
+
 	var list *membership.List
 
 	BeforeEach(func() {
@@ -1130,4 +1377,16 @@ func createListWithMembers(memberCount int) *membership.List {
 	}
 	membership.DebugList(list).GetGossip().Clear()
 	return list
+}
+
+func newTestList(options ...membership.Option) *membership.List {
+	defaultOptions := []membership.Option{
+		membership.WithLogger(GinkgoLogr),
+		membership.WithAdvertisedAddress(TestAddress),
+		membership.WithUDPClient(&transport.Discard{}),
+		membership.WithTCPClient(&transport.Discard{}),
+		membership.WithRoundTripTimeTracker(roundtriptime.NewTracker()),
+	}
+	allOptions := append(defaultOptions, options...)
+	return membership.NewList(allOptions...)
 }

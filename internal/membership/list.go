@@ -105,6 +105,12 @@ func NewList(options ...Option) *List {
 		option(&config)
 	}
 
+	if config.UDPClient == nil {
+		panic("you must provide a UDP client")
+	}
+	if config.TCPClient == nil {
+		panic("you must provide a TCP client")
+	}
 	if config.RoundTripTimeTracker == nil {
 		panic("you must provide a round trip time tracker")
 	}

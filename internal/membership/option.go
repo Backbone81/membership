@@ -50,7 +50,7 @@ func WithTCPClient(transport transport.Transport) Option {
 
 func WithMaxDatagramLengthSend(maxDatagramLength int) Option {
 	return func(config *Config) {
-		config.MaxDatagramLengthSend = maxDatagramLength
+		config.MaxDatagramLengthSend = max(1, maxDatagramLength)
 	}
 }
 
@@ -68,25 +68,25 @@ func WithMemberRemovedCallback(memberRemovedCallback func(address encoding.Addre
 
 func WithSafetyFactor(safetyFactor float64) Option {
 	return func(config *Config) {
-		config.SafetyFactor = safetyFactor
+		config.SafetyFactor = max(0, safetyFactor)
 	}
 }
 
 func WithShutdownMemberCount(memberCount int) Option {
 	return func(config *Config) {
-		config.ShutdownMemberCount = max(1, min(memberCount, 64))
+		config.ShutdownMemberCount = max(1, memberCount)
 	}
 }
 
 func WithDirectPingMemberCount(memberCount int) Option {
 	return func(config *Config) {
-		config.DirectPingMemberCount = max(1, min(memberCount, 64))
+		config.DirectPingMemberCount = max(1, memberCount)
 	}
 }
 
 func WithIndirectPingMemberCount(memberCount int) Option {
 	return func(config *Config) {
-		config.IndirectPingMemberCount = max(1, min(memberCount, 64))
+		config.IndirectPingMemberCount = max(1, memberCount)
 	}
 }
 

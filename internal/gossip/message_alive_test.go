@@ -12,7 +12,7 @@ import (
 )
 
 var testMessageAlive = gossip.MessageAlive{
-	Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
+	Destination:       encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 	IncarnationNumber: 7,
 }
 

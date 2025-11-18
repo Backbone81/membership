@@ -48,7 +48,7 @@ func AverageMemberMessageLoad(logger logr.Logger, maxMemberCount int) error {
 				)
 			}
 			newList := membership.NewList(options...)
-			newList.ClearGossip()
+			membership.DebugList(newList).ClearGossip()
 			memoryTransport.AddTarget(address, newList)
 			lists = append(lists, newList)
 		}

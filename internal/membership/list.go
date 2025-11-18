@@ -3,7 +3,6 @@ package membership
 import (
 	"errors"
 	"fmt"
-	"io"
 	"math"
 	"math/rand"
 	"slices"
@@ -125,7 +124,7 @@ func NewList(options ...Option) *List {
 
 	// We need to gossip our own alive. Otherwise, nobody will pick us up into their own member list.
 	newList.gossipQueue.Add(&gossip.MessageAlive{
-		Source:            config.AdvertisedAddress,
+		Destination:       config.AdvertisedAddress,
 		IncarnationNumber: 0,
 	})
 	for _, initialMember := range config.BootstrapMembers {
@@ -283,6 +282,8 @@ func (l *List) IndirectPing() error {
 		return nil
 	}
 
+	// As we want to do the indirect pings for all pending direct pings, we collect all errors and return them as
+	// a joined error at the end. Otherwise, the first error would stop the iteration and break the expected behavior.
 	var joinedErr error
 	for _, directPing := range l.pendingDirectPings {
 		if !directPing.MessageIndirectPing.IsZero() {
@@ -951,7 +952,7 @@ func (l *List) handleSuspectForSelf(suspect gossip.MessageSuspect) bool {
 	// Also make sure that our incarnation number is bigger than before.
 	l.incarnationNumber = utility.IncarnationMax(l.incarnationNumber+1, suspect.IncarnationNumber+1)
 	l.gossipQueue.Add(&gossip.MessageAlive{
-		Source:            l.self,
+		Destination:       l.self,
 		IncarnationNumber: l.incarnationNumber,
 	})
 	return true
@@ -1030,7 +1031,7 @@ func (l *List) handleSuspectForUnknown(suspect gossip.MessageSuspect) {
 func (l *List) handleAlive(alive gossip.MessageAlive) {
 	l.logger.V(3).Info(
 		"Received gossip about alive",
-		"source", alive.Source,
+		"source", alive.Destination,
 		"incarnation-number", alive.IncarnationNumber,
 	)
 	if l.handleAliveForSelf(alive) {
@@ -1046,13 +1047,13 @@ func (l *List) handleAlive(alive gossip.MessageAlive) {
 }
 
 func (l *List) handleAliveForSelf(alive gossip.MessageAlive) bool {
-	return alive.Source.Equal(l.self)
+	return alive.Destination.Equal(l.self)
 }
 
 func (l *List) handleAliveForFaultyMembers(alive gossip.MessageAlive) bool {
 	faultyMemberIndex, found := slices.BinarySearchFunc(
 		l.faultyMembers,
-		encoding.Member{Address: alive.Source},
+		encoding.Member{Address: alive.Destination},
 		encoding.CompareMember,
 	)
 	if !found {
@@ -1069,7 +1070,7 @@ func (l *List) handleAliveForFaultyMembers(alive gossip.MessageAlive) bool {
 	// Move the faulty member over to the member list
 	l.faultyMembers = slices.Delete(l.faultyMembers, faultyMemberIndex, faultyMemberIndex+1)
 	l.addMember(encoding.Member{
-		Address:           alive.Source,
+		Address:           alive.Destination,
 		State:             encoding.MemberStateAlive,
 		IncarnationNumber: alive.IncarnationNumber,
 	})
@@ -1080,7 +1081,7 @@ func (l *List) handleAliveForFaultyMembers(alive gossip.MessageAlive) bool {
 func (l *List) handleAliveForMembers(alive gossip.MessageAlive) bool {
 	memberIndex, found := slices.BinarySearchFunc(
 		l.members,
-		encoding.Member{Address: alive.Source},
+		encoding.Member{Address: alive.Destination},
 		encoding.CompareMember,
 	)
 	if !found {
@@ -1109,7 +1110,7 @@ func (l *List) handleAliveForMembers(alive gossip.MessageAlive) bool {
 func (l *List) handleAliveForUnknown(alive gossip.MessageAlive) {
 	// We don't know about this member yet. Add it to our member list and gossip about it.
 	l.addMember(encoding.Member{
-		Address:           alive.Source,
+		Address:           alive.Destination,
 		State:             encoding.MemberStateAlive,
 		IncarnationNumber: alive.IncarnationNumber,
 	})
@@ -1149,7 +1150,7 @@ func (l *List) handleFaultyForSelf(faulty gossip.MessageFaulty) bool {
 	// Also make sure that our incarnation number is bigger than before.
 	l.incarnationNumber = utility.IncarnationMax(l.incarnationNumber+1, faulty.IncarnationNumber+1)
 	l.gossipQueue.Add(&gossip.MessageAlive{
-		Source:            l.self,
+		Destination:       l.self,
 		IncarnationNumber: l.incarnationNumber,
 	})
 	return true
@@ -1264,7 +1265,7 @@ func (l *List) handleListResponse(listResponse MessageListResponse) error {
 		switch member.State {
 		case encoding.MemberStateAlive:
 			l.handleAlive(gossip.MessageAlive{
-				Source:            listResponse.Source,
+				Destination:       member.Address,
 				IncarnationNumber: member.IncarnationNumber,
 			})
 		case encoding.MemberStateSuspect:
@@ -1284,91 +1285,4 @@ func (l *List) handleListResponse(listResponse MessageListResponse) error {
 		}
 	}
 	return nil
-}
-
-func (l *List) WriteInternalDebugState(writer io.Writer) error {
-	l.mutex.Lock()
-	defer l.mutex.Unlock()
-
-	if _, err := fmt.Fprintf(writer, "Membership List %s\n", l.self); err != nil {
-		return err
-	}
-
-	if _, err := fmt.Fprintf(writer, "Members (%d)\n", len(l.members)); err != nil {
-		return err
-	}
-	for _, member := range l.members {
-		if _, err := fmt.Fprintf(writer, "  - %s\n", member.Address); err != nil {
-			return err
-		}
-	}
-
-	if _, err := fmt.Fprintf(writer, "Next Direct Pings\n"); err != nil {
-		return err
-	}
-	for i := l.nextRandomIndex; i < len(l.randomIndexes); i++ {
-		if _, err := fmt.Fprintf(writer, "  - %s\n", l.members[l.randomIndexes[i]].Address); err != nil {
-			return err
-		}
-	}
-
-	if _, err := fmt.Fprintf(writer, "Gossip (%d)\n", l.gossipQueue.Len()); err != nil {
-		return err
-	}
-	// Make sure we are not prioritizing for the state dump
-	l.gossipQueue.Prioritize(encoding.Address{})
-	for _, msg := range l.gossipQueue.All() {
-		if _, err := fmt.Fprintf(writer, "  - %s\n", msg); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (l *List) GetMembers() []encoding.Member {
-	l.mutex.Lock()
-	defer l.mutex.Unlock()
-
-	return l.members
-}
-
-func (l *List) GetFaultyMembers() []encoding.Member {
-	l.mutex.Lock()
-	defer l.mutex.Unlock()
-
-	return l.faultyMembers
-}
-
-func (l *List) SetMembers(members []encoding.Member) {
-	l.mutex.Lock()
-	defer l.mutex.Unlock()
-
-	l.members = l.members[:0]
-	l.randomIndexes = l.randomIndexes[:0]
-	l.nextRandomIndex = 0
-
-	for _, member := range members {
-		l.addMember(member)
-	}
-}
-
-func (l *List) SetFaultyMembers(members []encoding.Member) {
-	l.mutex.Lock()
-	defer l.mutex.Unlock()
-
-	l.faultyMembers = append(l.faultyMembers[:0], members...)
-}
-
-func (l *List) GetGossip() *gossip.Queue {
-	l.mutex.Lock()
-	defer l.mutex.Unlock()
-
-	return l.gossipQueue
-}
-
-func (l *List) ClearGossip() {
-	l.mutex.Lock()
-	defer l.mutex.Unlock()
-
-	l.gossipQueue.Clear()
 }

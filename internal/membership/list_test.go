@@ -30,7 +30,7 @@ var _ = Describe("List", func() {
 			membership.WithAdvertisedAddress(TestAddress),
 			membership.WithRoundTripTimeTracker(roundtriptime.NewTracker()),
 		)
-		list.GetGossip().Clear()
+		membership.DebugList(list).GetGossip().Clear()
 	})
 
 	It("should return the member list", func() {
@@ -57,11 +57,11 @@ var _ = Describe("List", func() {
 			}),
 			membership.WithRoundTripTimeTracker(roundtriptime.NewTracker()),
 		)
-		list.GetGossip().Clear()
+		membership.DebugList(list).GetGossip().Clear()
 
 		for i := range 10 {
 			messageAlive := gossip.MessageAlive{
-				Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
+				Destination:       encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
 				IncarnationNumber: 0,
 			}
 			buffer, _, err := messageAlive.AppendToBuffer(nil)
@@ -98,7 +98,7 @@ var _ = Describe("List", func() {
 			membership.WithAdvertisedAddress(TestAddress),
 			membership.WithRoundTripTimeTracker(roundtriptime.NewTracker()),
 		)
-		list.GetGossip().Clear()
+		membership.DebugList(list).GetGossip().Clear()
 
 		Expect(list.DirectPing()).To(Succeed())
 		Expect(storeClient.Addresses).To(BeEmpty())
@@ -113,12 +113,12 @@ var _ = Describe("List", func() {
 			membership.WithAdvertisedAddress(TestAddress),
 			membership.WithRoundTripTimeTracker(roundtriptime.NewTracker()),
 		)
-		list.GetGossip().Clear()
+		membership.DebugList(list).GetGossip().Clear()
 
 		// Add a few members
 		for i := range 10 {
 			message := gossip.MessageAlive{
-				Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+1+i),
+				Destination:       encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+1+i),
 				IncarnationNumber: 0,
 			}
 			buffer, _, err := message.AppendToBuffer(nil)
@@ -149,22 +149,22 @@ var _ = Describe("List", func() {
 	})
 
 	It("should ignore alive about self", func() {
-		Expect(list.GetGossip().Len()).To(Equal(0))
+		Expect(membership.DebugList(list).GetGossip().Len()).To(Equal(0))
 		message := gossip.MessageAlive{
-			Source:            TestAddress,
+			Destination:       TestAddress,
 			IncarnationNumber: 0,
 		}
 		buffer, _, err := message.AppendToBuffer(nil)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(list.DispatchDatagram(buffer)).To(Succeed())
 
-		Expect(list.GetMembers()).To(BeEmpty())
-		Expect(list.GetFaultyMembers()).To(BeEmpty())
-		Expect(list.GetGossip().Len()).To(Equal(0))
+		Expect(membership.DebugList(list).GetMembers()).To(BeEmpty())
+		Expect(membership.DebugList(list).GetFaultyMembers()).To(BeEmpty())
+		Expect(membership.DebugList(list).GetGossip().Len()).To(Equal(0))
 	})
 
 	It("should refute suspect about self", func() {
-		Expect(list.GetGossip().Len()).To(Equal(0))
+		Expect(membership.DebugList(list).GetGossip().Len()).To(Equal(0))
 		message := gossip.MessageSuspect{
 			Source:            TestAddress2,
 			Destination:       TestAddress,
@@ -174,17 +174,17 @@ var _ = Describe("List", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(list.DispatchDatagram(buffer)).To(Succeed())
 
-		Expect(list.GetMembers()).To(BeEmpty())
-		Expect(list.GetFaultyMembers()).To(BeEmpty())
-		Expect(list.GetGossip().Len()).To(Equal(1))
-		Expect(list.GetGossip().Get(0)).To(Equal(&gossip.MessageAlive{
-			Source:            TestAddress,
+		Expect(membership.DebugList(list).GetMembers()).To(BeEmpty())
+		Expect(membership.DebugList(list).GetFaultyMembers()).To(BeEmpty())
+		Expect(membership.DebugList(list).GetGossip().Len()).To(Equal(1))
+		Expect(membership.DebugList(list).GetGossip().Get(0)).To(Equal(&gossip.MessageAlive{
+			Destination:       TestAddress,
 			IncarnationNumber: 1,
 		}))
 	})
 
 	It("should refute faulty about self", func() {
-		Expect(list.GetGossip().Len()).To(Equal(0))
+		Expect(membership.DebugList(list).GetGossip().Len()).To(Equal(0))
 		message := gossip.MessageFaulty{
 			Source:            TestAddress2,
 			Destination:       TestAddress,
@@ -194,11 +194,11 @@ var _ = Describe("List", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(list.DispatchDatagram(buffer)).To(Succeed())
 
-		Expect(list.GetMembers()).To(BeEmpty())
-		Expect(list.GetFaultyMembers()).To(BeEmpty())
-		Expect(list.GetGossip().Len()).To(Equal(1))
-		Expect(list.GetGossip().Get(0)).To(Equal(&gossip.MessageAlive{
-			Source:            TestAddress,
+		Expect(membership.DebugList(list).GetMembers()).To(BeEmpty())
+		Expect(membership.DebugList(list).GetFaultyMembers()).To(BeEmpty())
+		Expect(membership.DebugList(list).GetGossip().Len()).To(Equal(1))
+		Expect(membership.DebugList(list).GetGossip().Get(0)).To(Equal(&gossip.MessageAlive{
+			Destination:       TestAddress,
 			IncarnationNumber: 1,
 		}))
 	})
@@ -210,30 +210,30 @@ var _ = Describe("List", func() {
 				membership.WithTCPClient(&transport.Discard{}),
 				membership.WithRoundTripTimeTracker(roundtriptime.NewTracker()),
 			)
-			list.GetGossip().Clear()
-			list.SetMembers(beforeMembers)
-			list.SetFaultyMembers(beforeFaultyMembers)
+			membership.DebugList(list).GetGossip().Clear()
+			membership.DebugList(list).SetMembers(beforeMembers)
+			membership.DebugList(list).SetFaultyMembers(beforeFaultyMembers)
 
 			buffer, _, err := message.AppendToBuffer(nil)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(list.DispatchDatagram(buffer)).To(Succeed())
 
 			if afterMembers == nil {
-				Expect(list.GetMembers()).To(BeEmpty())
+				Expect(membership.DebugList(list).GetMembers()).To(BeEmpty())
 			} else {
-				Expect(list.GetMembers()).To(Equal(afterMembers))
+				Expect(membership.DebugList(list).GetMembers()).To(Equal(afterMembers))
 			}
 			if afterFaultyMembers == nil {
-				Expect(list.GetFaultyMembers()).To(BeEmpty())
+				Expect(membership.DebugList(list).GetFaultyMembers()).To(BeEmpty())
 			} else {
-				Expect(list.GetFaultyMembers()).To(Equal(afterFaultyMembers))
+				Expect(membership.DebugList(list).GetFaultyMembers()).To(Equal(afterFaultyMembers))
 			}
 		},
 		Entry("Alive should add a member",
 			nil,
 			nil,
 			&gossip.MessageAlive{
-				Source:            TestAddress,
+				Destination:       TestAddress,
 				IncarnationNumber: 2,
 			},
 			[]encoding.Member{
@@ -255,7 +255,7 @@ var _ = Describe("List", func() {
 			},
 			nil,
 			&gossip.MessageAlive{
-				Source:            TestAddress,
+				Destination:       TestAddress,
 				IncarnationNumber: 1,
 			},
 			[]encoding.Member{
@@ -277,7 +277,7 @@ var _ = Describe("List", func() {
 			},
 			nil,
 			&gossip.MessageAlive{
-				Source:            TestAddress,
+				Destination:       TestAddress,
 				IncarnationNumber: 2,
 			},
 			[]encoding.Member{
@@ -299,7 +299,7 @@ var _ = Describe("List", func() {
 			},
 			nil,
 			&gossip.MessageAlive{
-				Source:            TestAddress,
+				Destination:       TestAddress,
 				IncarnationNumber: 3,
 			},
 			[]encoding.Member{
@@ -494,7 +494,7 @@ var _ = Describe("List", func() {
 			},
 			nil,
 			&gossip.MessageAlive{
-				Source:            TestAddress,
+				Destination:       TestAddress,
 				IncarnationNumber: 1,
 			},
 			[]encoding.Member{
@@ -516,7 +516,7 @@ var _ = Describe("List", func() {
 			},
 			nil,
 			&gossip.MessageAlive{
-				Source:            TestAddress,
+				Destination:       TestAddress,
 				IncarnationNumber: 2,
 			},
 			[]encoding.Member{
@@ -538,7 +538,7 @@ var _ = Describe("List", func() {
 			},
 			nil,
 			&gossip.MessageAlive{
-				Source:            TestAddress,
+				Destination:       TestAddress,
 				IncarnationNumber: 3,
 			},
 			[]encoding.Member{
@@ -699,7 +699,7 @@ var _ = Describe("List", func() {
 				},
 			},
 			&gossip.MessageAlive{
-				Source:            TestAddress,
+				Destination:       TestAddress,
 				IncarnationNumber: 1,
 			},
 			nil,
@@ -721,7 +721,7 @@ var _ = Describe("List", func() {
 				},
 			},
 			&gossip.MessageAlive{
-				Source:            TestAddress,
+				Destination:       TestAddress,
 				IncarnationNumber: 2,
 			},
 			nil,
@@ -743,7 +743,7 @@ var _ = Describe("List", func() {
 				},
 			},
 			&gossip.MessageAlive{
-				Source:            TestAddress,
+				Destination:       TestAddress,
 				IncarnationNumber: 3,
 			},
 			[]encoding.Member{
@@ -919,7 +919,7 @@ var _ = Describe("List", func() {
 					)
 				}
 				newList := membership.NewList(options...)
-				newList.ClearGossip()
+				membership.DebugList(newList).ClearGossip()
 				memoryTransport.AddTarget(address, newList)
 				lists = append(lists, newList)
 			}
@@ -1053,7 +1053,7 @@ func BenchmarkList_handleSuspect(b *testing.B) {
 
 func BenchmarkList_handleAlive(b *testing.B) {
 	message := gossip.MessageAlive{
-		Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+32000),
+		Destination:       encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+32000),
 		IncarnationNumber: 0,
 	}
 	dispatchDatagramWithMembers(b, &message)
@@ -1114,7 +1114,7 @@ func createListWithMembers(memberCount int) *membership.List {
 
 	for i := range memberCount {
 		messageAlive := gossip.MessageAlive{
-			Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
+			Destination:       encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
 			IncarnationNumber: 0,
 		}
 		buffer, _, err := messageAlive.AppendToBuffer(nil)
@@ -1128,6 +1128,6 @@ func createListWithMembers(memberCount int) *membership.List {
 	if list.Len() != memberCount {
 		panic("member count does not match expected value")
 	}
-	list.GetGossip().Clear()
+	membership.DebugList(list).GetGossip().Clear()
 	return list
 }

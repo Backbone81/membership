@@ -92,7 +92,7 @@ var _ = Describe("Queue", func() {
 		It("should clear queue with single message", func() {
 			queue := gossip.NewQueue()
 			queue.Add(&gossip.MessageAlive{
-				Source:            TestAddress,
+				Destination:       TestAddress,
 				IncarnationNumber: 0,
 			})
 
@@ -115,7 +115,7 @@ var _ = Describe("Queue", func() {
 
 			for i := 0; i < 10; i++ {
 				queue.Add(&gossip.MessageAlive{
-					Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
+					Destination:       encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
 					IncarnationNumber: 0,
 				})
 			}
@@ -139,7 +139,7 @@ var _ = Describe("Queue", func() {
 
 			for i := 0; i < 10; i++ {
 				queue.Add(&gossip.MessageAlive{
-					Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
+					Destination:       encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
 					IncarnationNumber: 0,
 				})
 			}
@@ -195,7 +195,7 @@ var _ = Describe("Queue", func() {
 
 			for i := 0; i < 10; i++ {
 				queue.Add(&gossip.MessageAlive{
-					Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
+					Destination:       encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
 					IncarnationNumber: 0,
 				})
 			}
@@ -236,7 +236,7 @@ var _ = Describe("Queue", func() {
 		It("should add message to empty queue", func() {
 			queue := gossip.NewQueue()
 			message := &gossip.MessageAlive{
-				Source:            TestAddress,
+				Destination:       TestAddress,
 				IncarnationNumber: 0,
 			}
 			queue.Add(message)
@@ -250,11 +250,11 @@ var _ = Describe("Queue", func() {
 		It("should add multiple messages with different addresses", func() {
 			queue := gossip.NewQueue()
 			message1 := &gossip.MessageAlive{
-				Source:            TestAddress,
+				Destination:       TestAddress,
 				IncarnationNumber: 0,
 			}
 			message2 := &gossip.MessageAlive{
-				Source:            TestAddress2,
+				Destination:       TestAddress2,
 				IncarnationNumber: 0,
 			}
 			queue.Add(message1)
@@ -270,11 +270,11 @@ var _ = Describe("Queue", func() {
 		It("should not add duplicate message for same address", func() {
 			queue := gossip.NewQueue()
 			message1 := &gossip.MessageAlive{
-				Source:            TestAddress,
+				Destination:       TestAddress,
 				IncarnationNumber: 0,
 			}
 			message2 := &gossip.MessageAlive{
-				Source:            TestAddress,
+				Destination:       TestAddress,
 				IncarnationNumber: 0,
 			}
 			queue.Add(message1)
@@ -290,7 +290,7 @@ var _ = Describe("Queue", func() {
 			queue := gossip.NewQueue(gossip.WithPreAllocationCount(4))
 			for i := 0; i < 3; i++ {
 				queue.Add(&gossip.MessageAlive{
-					Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
+					Destination:       encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
 					IncarnationNumber: 0,
 				})
 			}
@@ -298,7 +298,7 @@ var _ = Describe("Queue", func() {
 			Expect(queue.Len()).To(Equal(3))
 
 			queue.Add(&gossip.MessageAlive{
-				Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+3),
+				Destination:       encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+3),
 				IncarnationNumber: 0,
 			})
 			Expect(queue.Cap()).To(Equal(8))
@@ -318,7 +318,7 @@ var _ = Describe("Queue", func() {
 
 			for i := 0; i < 3; i++ {
 				queue.Add(&gossip.MessageAlive{
-					Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
+					Destination:       encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
 					IncarnationNumber: 0,
 				})
 			}
@@ -331,7 +331,7 @@ var _ = Describe("Queue", func() {
 			// Now add messages that will cause wraparound + growth
 			for i := 3; i < 7; i++ {
 				queue.Add(&gossip.MessageAlive{
-					Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
+					Destination:       encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
 					IncarnationNumber: 0,
 				})
 			}
@@ -349,7 +349,7 @@ var _ = Describe("Queue", func() {
 		It("should move overwritten message back to bucket 0", func() {
 			queue := gossip.NewQueue()
 			message1 := &gossip.MessageAlive{
-				Source:            TestAddress,
+				Destination:       TestAddress,
 				IncarnationNumber: 1,
 			}
 			queue.Add(message1)
@@ -357,7 +357,7 @@ var _ = Describe("Queue", func() {
 			queue.MarkTransmitted(1)
 
 			message2 := &gossip.MessageAlive{
-				Source:            TestAddress2,
+				Destination:       TestAddress2,
 				IncarnationNumber: 0,
 			}
 			queue.Add(message2)
@@ -367,7 +367,7 @@ var _ = Describe("Queue", func() {
 			Expect(queue.Get(1)).To(Equal(message1))
 
 			message1Updated := &gossip.MessageAlive{
-				Source:            TestAddress,
+				Destination:       TestAddress,
 				IncarnationNumber: 2,
 			}
 			queue.Add(message1Updated)
@@ -392,40 +392,40 @@ var _ = Describe("Queue", func() {
 			},
 			Entry("Alive with lower incarnation number should NOT overwrite alive",
 				&gossip.MessageAlive{
-					Source:            TestAddress,
+					Destination:       TestAddress,
 					IncarnationNumber: 2,
 				},
 				&gossip.MessageAlive{
-					Source:            TestAddress,
+					Destination:       TestAddress,
 					IncarnationNumber: 1,
 				},
 				false,
 			),
 			Entry("Alive with same incarnation number should NOT overwrite alive",
 				&gossip.MessageAlive{
-					Source:            TestAddress,
+					Destination:       TestAddress,
 					IncarnationNumber: 2,
 				},
 				&gossip.MessageAlive{
-					Source:            TestAddress,
+					Destination:       TestAddress,
 					IncarnationNumber: 2,
 				},
 				false,
 			),
 			Entry("Alive with bigger incarnation number should overwrite alive",
 				&gossip.MessageAlive{
-					Source:            TestAddress,
+					Destination:       TestAddress,
 					IncarnationNumber: 2,
 				},
 				&gossip.MessageAlive{
-					Source:            TestAddress,
+					Destination:       TestAddress,
 					IncarnationNumber: 3,
 				},
 				true,
 			),
 			Entry("Suspect with lower incarnation number should NOT overwrite alive",
 				&gossip.MessageAlive{
-					Source:            TestAddress,
+					Destination:       TestAddress,
 					IncarnationNumber: 2,
 				},
 				&gossip.MessageSuspect{
@@ -437,7 +437,7 @@ var _ = Describe("Queue", func() {
 			),
 			Entry("Suspect with same incarnation number should overwrite alive",
 				&gossip.MessageAlive{
-					Source:            TestAddress,
+					Destination:       TestAddress,
 					IncarnationNumber: 2,
 				},
 				&gossip.MessageSuspect{
@@ -449,7 +449,7 @@ var _ = Describe("Queue", func() {
 			),
 			Entry("Suspect with bigger incarnation number should overwrite alive",
 				&gossip.MessageAlive{
-					Source:            TestAddress,
+					Destination:       TestAddress,
 					IncarnationNumber: 2,
 				},
 				&gossip.MessageSuspect{
@@ -461,7 +461,7 @@ var _ = Describe("Queue", func() {
 			),
 			Entry("Faulty with lower incarnation number should NOT overwrite alive",
 				&gossip.MessageAlive{
-					Source:            TestAddress,
+					Destination:       TestAddress,
 					IncarnationNumber: 2,
 				},
 				&gossip.MessageFaulty{
@@ -473,7 +473,7 @@ var _ = Describe("Queue", func() {
 			),
 			Entry("Faulty with same incarnation number should overwrite alive",
 				&gossip.MessageAlive{
-					Source:            TestAddress,
+					Destination:       TestAddress,
 					IncarnationNumber: 2,
 				},
 				&gossip.MessageFaulty{
@@ -485,7 +485,7 @@ var _ = Describe("Queue", func() {
 			),
 			Entry("Faulty with bigger incarnation number should overwrite alive",
 				&gossip.MessageAlive{
-					Source:            TestAddress,
+					Destination:       TestAddress,
 					IncarnationNumber: 2,
 				},
 				&gossip.MessageFaulty{
@@ -503,7 +503,7 @@ var _ = Describe("Queue", func() {
 					IncarnationNumber: 2,
 				},
 				&gossip.MessageAlive{
-					Source:            TestAddress,
+					Destination:       TestAddress,
 					IncarnationNumber: 1,
 				},
 				false,
@@ -515,7 +515,7 @@ var _ = Describe("Queue", func() {
 					IncarnationNumber: 2,
 				},
 				&gossip.MessageAlive{
-					Source:            TestAddress,
+					Destination:       TestAddress,
 					IncarnationNumber: 2,
 				},
 				false,
@@ -527,7 +527,7 @@ var _ = Describe("Queue", func() {
 					IncarnationNumber: 2,
 				},
 				&gossip.MessageAlive{
-					Source:            TestAddress,
+					Destination:       TestAddress,
 					IncarnationNumber: 3,
 				},
 				true,
@@ -618,7 +618,7 @@ var _ = Describe("Queue", func() {
 					IncarnationNumber: 2,
 				},
 				&gossip.MessageAlive{
-					Source:            TestAddress,
+					Destination:       TestAddress,
 					IncarnationNumber: 1,
 				},
 				false,
@@ -630,7 +630,7 @@ var _ = Describe("Queue", func() {
 					IncarnationNumber: 2,
 				},
 				&gossip.MessageAlive{
-					Source:            TestAddress,
+					Destination:       TestAddress,
 					IncarnationNumber: 2,
 				},
 				false,
@@ -642,7 +642,7 @@ var _ = Describe("Queue", func() {
 					IncarnationNumber: 2,
 				},
 				&gossip.MessageAlive{
-					Source:            TestAddress,
+					Destination:       TestAddress,
 					IncarnationNumber: 3,
 				},
 				true,
@@ -732,11 +732,11 @@ var _ = Describe("Queue", func() {
 		It("should not prioritize when address does not exist", func() {
 			queue := gossip.NewQueue()
 			message1 := &gossip.MessageAlive{
-				Source:            TestAddress,
+				Destination:       TestAddress,
 				IncarnationNumber: 0,
 			}
 			message2 := &gossip.MessageAlive{
-				Source:            TestAddress2,
+				Destination:       TestAddress2,
 				IncarnationNumber: 0,
 			}
 			queue.Add(message1)
@@ -753,7 +753,7 @@ var _ = Describe("Queue", func() {
 			queue := gossip.NewQueue()
 
 			alive1 := &gossip.MessageAlive{
-				Source:            TestAddress2,
+				Destination:       TestAddress2,
 				IncarnationNumber: 0,
 			}
 			queue.Add(alive1)
@@ -766,7 +766,7 @@ var _ = Describe("Queue", func() {
 			queue.Add(suspect)
 
 			alive2 := &gossip.MessageAlive{
-				Source:            TestAddress3,
+				Destination:       TestAddress3,
 				IncarnationNumber: 0,
 			}
 			queue.Add(alive2)
@@ -787,7 +787,7 @@ var _ = Describe("Queue", func() {
 			queue := gossip.NewQueue()
 
 			alive1 := &gossip.MessageAlive{
-				Source:            TestAddress2,
+				Destination:       TestAddress2,
 				IncarnationNumber: 0,
 			}
 			queue.Add(alive1)
@@ -800,7 +800,7 @@ var _ = Describe("Queue", func() {
 			queue.Add(faulty)
 
 			alive2 := &gossip.MessageAlive{
-				Source:            TestAddress3,
+				Destination:       TestAddress3,
 				IncarnationNumber: 0,
 			}
 			queue.Add(alive2)
@@ -821,19 +821,19 @@ var _ = Describe("Queue", func() {
 			queue := gossip.NewQueue()
 
 			alive1 := &gossip.MessageAlive{
-				Source:            TestAddress2,
+				Destination:       TestAddress2,
 				IncarnationNumber: 0,
 			}
 			queue.Add(alive1)
 
 			alive2 := &gossip.MessageAlive{
-				Source:            TestAddress,
+				Destination:       TestAddress,
 				IncarnationNumber: 0,
 			}
 			queue.Add(alive2)
 
 			alive3 := &gossip.MessageAlive{
-				Source:            TestAddress3,
+				Destination:       TestAddress3,
 				IncarnationNumber: 0,
 			}
 			queue.Add(alive3)
@@ -862,7 +862,7 @@ var _ = Describe("Queue", func() {
 			queue.MarkTransmitted(1)
 
 			alive := &gossip.MessageAlive{
-				Source:            TestAddress2,
+				Destination:       TestAddress2,
 				IncarnationNumber: 0,
 			}
 			queue.Add(alive)
@@ -894,11 +894,11 @@ var _ = Describe("Queue", func() {
 			queue.MarkTransmitted(1)
 
 			queue.Add(&gossip.MessageAlive{
-				Source:            TestAddress2,
+				Destination:       TestAddress2,
 				IncarnationNumber: 0,
 			})
 			queue.Add(&gossip.MessageAlive{
-				Source:            TestAddress3,
+				Destination:       TestAddress3,
 				IncarnationNumber: 0,
 			})
 
@@ -908,7 +908,7 @@ var _ = Describe("Queue", func() {
 			Expect(queue.Cap()).To(Equal(4))
 			Expect(queue.Len()).To(Equal(3))
 			alive := &gossip.MessageAlive{
-				Source:            encoding.NewAddress(net.IPv4(5, 6, 7, 8), 9999),
+				Destination:       encoding.NewAddress(net.IPv4(5, 6, 7, 8), 9999),
 				IncarnationNumber: 0,
 			}
 			queue.Add(alive)
@@ -932,7 +932,7 @@ var _ = Describe("Queue", func() {
 			queue.MarkTransmitted(1)
 
 			alive := &gossip.MessageAlive{
-				Source:            TestAddress2,
+				Destination:       TestAddress2,
 				IncarnationNumber: 0,
 			}
 			queue.Add(alive)
@@ -958,7 +958,7 @@ var _ = Describe("Queue", func() {
 			queue := gossip.NewQueue(gossip.WithPreAllocationCount(4))
 
 			alive := &gossip.MessageAlive{
-				Source:            TestAddress2,
+				Destination:       TestAddress2,
 				IncarnationNumber: 0,
 			}
 			queue.Add(alive)
@@ -977,7 +977,7 @@ var _ = Describe("Queue", func() {
 			Expect(queue.Get(1)).To(Equal(alive))
 
 			aliveUpdated := &gossip.MessageAlive{
-				Source:            TestAddress2,
+				Destination:       TestAddress2,
 				IncarnationNumber: 1, // higher incarnation number
 			}
 			queue.Add(aliveUpdated)
@@ -992,15 +992,15 @@ var _ = Describe("Queue", func() {
 		It("should move requested number of messages", func() {
 			queue := gossip.NewQueue()
 			message1 := &gossip.MessageAlive{
-				Source:            TestAddress,
+				Destination:       TestAddress,
 				IncarnationNumber: 0,
 			}
 			message2 := &gossip.MessageAlive{
-				Source:            TestAddress2,
+				Destination:       TestAddress2,
 				IncarnationNumber: 0,
 			}
 			message3 := &gossip.MessageAlive{
-				Source:            TestAddress3,
+				Destination:       TestAddress3,
 				IncarnationNumber: 0,
 			}
 			queue.Add(message1)
@@ -1025,7 +1025,7 @@ var _ = Describe("Queue", func() {
 			queue := gossip.NewQueue(gossip.WithMaxTransmissionCount(3))
 
 			message := &gossip.MessageAlive{
-				Source:            TestAddress,
+				Destination:       TestAddress,
 				IncarnationNumber: 0,
 			}
 			queue.Add(message)
@@ -1046,7 +1046,7 @@ var _ = Describe("Queue", func() {
 		It("should handle marking more messages than exist", func() {
 			queue := gossip.NewQueue()
 			message := &gossip.MessageAlive{
-				Source:            TestAddress,
+				Destination:       TestAddress,
 				IncarnationNumber: 0,
 			}
 			queue.Add(message)
@@ -1061,7 +1061,7 @@ var _ = Describe("Queue", func() {
 		It("should handle marking zero messages", func() {
 			queue := gossip.NewQueue()
 			message := &gossip.MessageAlive{
-				Source:            TestAddress,
+				Destination:       TestAddress,
 				IncarnationNumber: 0,
 			}
 			queue.Add(message)
@@ -1106,7 +1106,7 @@ var _ = Describe("Queue", func() {
 			switch selection := rand.Intn(100); {
 			case selection < 25: // 25% of the time we add a message
 				queue.Add(&gossip.MessageAlive{
-					Source:            addresses[rand.Intn(len(addresses))],
+					Destination:       addresses[rand.Intn(len(addresses))],
 					IncarnationNumber: uint16(rand.Intn(5)),
 				})
 			case selection < 100: // 75% of the time we mark 3 messages as transmitted
@@ -1132,7 +1132,7 @@ func BenchmarkQueue_Add(b *testing.B) {
 			for i := range gossipCount {
 				queue.Add(&gossip.MessageAlive{
 					// We differentiate every source by a different port number.
-					Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
+					Destination:       encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
 					IncarnationNumber: 0,
 				})
 
@@ -1153,7 +1153,7 @@ func BenchmarkQueue_Add(b *testing.B) {
 				b.ResetTimer()
 				for i := range b.N {
 					queue.Add(&gossip.MessageAlive{
-						Source:            addresses[i],
+						Destination:       addresses[i],
 						IncarnationNumber: 0,
 					})
 				}
@@ -1167,7 +1167,7 @@ func BenchmarkQueue_Prioritize(b *testing.B) {
 		queue := gossip.NewQueue()
 		for i := range gossipCount {
 			queue.Add(&gossip.MessageAlive{
-				Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
+				Destination:       encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
 				IncarnationNumber: 0,
 			})
 		}
@@ -1187,7 +1187,7 @@ func BenchmarkQueue_All(b *testing.B) {
 		queue := gossip.NewQueue()
 		for i := range gossipCount {
 			queue.Add(&gossip.MessageAlive{
-				Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
+				Destination:       encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
 				IncarnationNumber: 0,
 			})
 		}
@@ -1212,7 +1212,7 @@ func BenchmarkQueue_MarkTransmitted(b *testing.B) {
 			queue := gossip.NewQueue()
 			for i := range gossipCount {
 				queue.Add(&gossip.MessageAlive{
-					Source:            encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
+					Destination:       encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
 					IncarnationNumber: 0,
 				})
 			}

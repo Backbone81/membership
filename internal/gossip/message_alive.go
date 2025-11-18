@@ -10,15 +10,15 @@ import (
 // MessageAlive declares the destination as being alive by the source.
 // This is the `Alive` message of SWIM chapter 4.2. Suspicion Mechanism: Reducing the Frequency of False Positives.
 type MessageAlive struct {
-	// Source is the member declaring itself as alive.
-	Source encoding.Address
+	// Destination is the member declaring itself as alive.
+	Destination encoding.Address
 
 	// IncarnationNumber is the incarnation to distinguish an outdated alive message from a new one.
 	IncarnationNumber uint16
 }
 
 func (m *MessageAlive) String() string {
-	return fmt.Sprintf("Alive %s (incarnation %d)", m.Source, m.IncarnationNumber)
+	return fmt.Sprintf("Alive %s (incarnation %d)", m.Destination, m.IncarnationNumber)
 }
 
 // AppendToBuffer appends the message to the provided buffer encoded for network transfer.
@@ -29,7 +29,7 @@ func (m *MessageAlive) AppendToBuffer(buffer []byte) ([]byte, int, error) {
 		return buffer, 0, err
 	}
 
-	sourceBuffer, sourceN, err := encoding.AppendAddressToBuffer(messageTypeBuffer, m.Source)
+	sourceBuffer, sourceN, err := encoding.AppendAddressToBuffer(messageTypeBuffer, m.Destination)
 	if err != nil {
 		return buffer, 0, err
 	}
@@ -54,7 +54,7 @@ func (m *MessageAlive) FromBuffer(buffer []byte) (int, error) {
 	}
 
 	var sourceN, incarnationNumberN int
-	m.Source, sourceN, err = encoding.AddressFromBuffer(buffer[messageTypeN:])
+	m.Destination, sourceN, err = encoding.AddressFromBuffer(buffer[messageTypeN:])
 	if err != nil {
 		return 0, err
 	}
@@ -69,7 +69,7 @@ func (m *MessageAlive) FromBuffer(buffer []byte) (int, error) {
 
 // GetAddress returns the address which is relevant for this message. Needed for the gossip queue to check for equality.
 func (m *MessageAlive) GetAddress() encoding.Address {
-	return m.Source
+	return m.Destination
 }
 
 func (m *MessageAlive) GetType() encoding.MessageType {

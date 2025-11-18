@@ -21,7 +21,11 @@ func NewList(options ...Option) *List {
 		option(&config)
 	}
 
-	rttTracker := roundtriptime.NewTracker()
+	rttTracker := roundtriptime.NewTracker(
+		// The maximum round trip time is derived from 90% of the protocol period to allow for some leeway, then divided
+		// by three, because a ping and indirect ping require three round trips in total to complete.
+		roundtriptime.WithMaximum(config.ProtocolPeriod * 90 / 100 / 3),
+	)
 	list := intmembership.NewList(
 		intmembership.WithLogger(config.Logger),
 		intmembership.WithBootstrapMembers(config.BootstrapMembers),

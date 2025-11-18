@@ -54,7 +54,7 @@ func buildCluster(memberCount int, memoryTransport *transport.Memory) ([]*member
 			)
 		}
 		newList := membership.NewList(options...)
-		newList.ClearGossip()
+		membership.DebugList(newList).ClearGossip()
 		memoryTransport.AddTarget(address, newList)
 		lists = append(lists, newList)
 	}

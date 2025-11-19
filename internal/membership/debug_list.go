@@ -107,3 +107,26 @@ func (l *DebugListWrapper) ClearGossip() {
 
 	l.gossipQueue.Clear()
 }
+
+// GetPendingDirectPings returns the current pending direct pings for testing.
+func (d *DebugListWrapper) GetPendingDirectPings() []PendingDirectPing {
+	d.mutex.Lock()
+	defer d.mutex.Unlock()
+
+	return d.pendingDirectPings
+}
+
+// GetPendingIndirectPings returns the current pending indirect pings for testing.
+func (d *DebugListWrapper) GetPendingIndirectPings() []PendingIndirectPing {
+	d.mutex.Lock()
+	defer d.mutex.Unlock()
+
+	return d.pendingIndirectPings
+}
+
+func (d *DebugListWrapper) SetConfig(config Config) {
+	d.mutex.Lock()
+	defer d.mutex.Unlock()
+
+	d.config = config
+}

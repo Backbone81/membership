@@ -3,6 +3,7 @@ package membership
 import (
 	"errors"
 	"fmt"
+	"iter"
 	"math"
 	"math/rand"
 	"slices"
@@ -159,29 +160,28 @@ func (l *List) Len() int {
 	return len(l.members)
 }
 
-// Get returns the addresses of all members. The addresses are guaranteed to be sorted ascending. This call will always
-// allocate a new slice holding the member addresses. Use GetInto if you want to avoid memory allocations.
-func (l *List) Get() []encoding.Address {
-	return l.GetInto(nil)
+// All returns a range over function which iterates over the addresses of all members stored in the list. The members
+// are sorted by address ascending.
+// While iterating over all members, the internal mutex is locked. Do not execute lengthy operations while iterating
+// over all members, as that will block processing of network messages. In addition, do not call any other method
+// of List during iteration, as that will cause a deadlock. Create your own copy of the member list with
+// slices.Collect(List.All()) and work on that list if you need to execute long-running operations or need to call
+// methods on List.
+func (l *List) All() iter.Seq[encoding.Address] {
+	return l.all
 }
 
-// GetInto returns the addresses of all members. The addresses are guaranteed to be sorted ascending. Providing a slice
-// as parameter will use that slice to fill member addresses in. This allows the caller to prevent memory allocations.
-// If the parameter is nil, a new slice will be allocated with capacity to hold the full member list.
-func (l *List) GetInto(addresses []encoding.Address) []encoding.Address {
+// all is a helper function which is the range over function returned by All. This avoids a memory allocation
+// which an anonymous function with a closure would cause.
+func (l *List) all(yield func(encoding.Address) bool) {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
 
-	if addresses == nil {
-		addresses = make([]encoding.Address, 0, len(l.members))
-	} else {
-		addresses = addresses[:0]
-	}
-
 	for _, member := range l.members {
-		addresses = append(addresses, member.Address)
+		if !yield(member.Address) {
+			return
+		}
 	}
-	return addresses
 }
 
 // DirectPing executes the first step in the SWIM protocol by directly pinging other members.

@@ -111,8 +111,8 @@ var rootCmd = &cobra.Command{
 		}
 
 		for i, list := range lists[:len(lists)-1] {
-			if len(list.Get()) != memberCount {
-				return fmt.Errorf("expected list %d to have %d members but got %d", i+1, memberCount, len(list.Get()))
+			if list.Len() != memberCount {
+				return fmt.Errorf("expected list %d to have %d members but got %d", i+1, memberCount, list.Len())
 			}
 		}
 		return nil

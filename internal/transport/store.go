@@ -17,3 +17,8 @@ func (s *Store) Send(address encoding.Address, buffer []byte) error {
 	s.Buffers = append(s.Buffers, buffer)
 	return nil
 }
+
+func (s *Store) Clear() {
+	s.Addresses = s.Addresses[:0]
+	s.Buffers = s.Buffers[:0]
+}

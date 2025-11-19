@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -26,7 +27,7 @@ var _ = Describe("List", func() {
 
 			Expect(list).NotTo(BeNil())
 			Expect(list.Len()).To(Equal(0))
-			Expect(list.Get()).To(BeEmpty())
+			Expect(slices.Collect(list.All())).To(BeEmpty())
 			Expect(membership.DebugList(list).GetMembers()).To(BeEmpty())
 			Expect(membership.DebugList(list).GetFaultyMembers()).To(BeEmpty())
 		})
@@ -241,7 +242,7 @@ var _ = Describe("List", func() {
 				membership.WithBootstrapMembers(bootstrap),
 			)
 
-			addresses := list.Get()
+			addresses := slices.Collect(list.All())
 			Expect(addresses).To(HaveLen(3))
 
 			// Verify sorted ascending
@@ -265,6 +266,593 @@ var _ = Describe("List", func() {
 		})
 	})
 
+	Context("All", func() {
+		It("should return empty iterator for empty list", func() {
+			list := newTestList()
+
+			var count int
+			for range list.All() {
+				count++
+			}
+
+			Expect(count).To(Equal(0))
+		})
+
+		It("should iterate over multiple members", func() {
+			bootstrap := []encoding.Address{
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 2),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 3),
+			}
+			list := newTestList(
+				membership.WithBootstrapMembers(bootstrap),
+			)
+
+			var addresses []encoding.Address
+			for addr := range list.All() {
+				addresses = append(addresses, addr)
+			}
+
+			Expect(addresses).To(HaveLen(3))
+			Expect(addresses).To(ConsistOf(bootstrap))
+		})
+
+		It("should yield members in sorted ascending order", func() {
+			bootstrap := []encoding.Address{
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 3),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 2),
+			}
+			list := newTestList(
+				membership.WithBootstrapMembers(bootstrap),
+			)
+
+			var addresses []encoding.Address
+			for addr := range list.All() {
+				addresses = append(addresses, addr)
+			}
+
+			for i := 0; i < len(addresses)-1; i++ {
+				Expect(encoding.CompareAddress(addresses[i], addresses[i+1])).To(Equal(-1),
+					"Address at index %d (%v) should be less than address at index %d (%v)",
+					i, addresses[i], i+1, addresses[i+1])
+			}
+		})
+
+		It("should support early exit from iteration", func() {
+			bootstrap := []encoding.Address{
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 2),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 3),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 4),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 5),
+			}
+			list := newTestList(
+				membership.WithBootstrapMembers(bootstrap),
+			)
+
+			var count int
+			target := encoding.NewAddress(net.IPv4(255, 255, 255, 255), 3)
+			var found encoding.Address
+
+			for addr := range list.All() {
+				count++
+				if addr == target {
+					found = addr
+					break
+				}
+			}
+
+			Expect(found).To(Equal(target))
+			Expect(count).To(Equal(3))
+		})
+
+		It("should not include faulty members", func() {
+			aliveAddr := encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1)
+			faultyAddr := encoding.NewAddress(net.IPv4(255, 255, 255, 255), 2)
+
+			list := newTestList(
+				membership.WithBootstrapMembers([]encoding.Address{aliveAddr, faultyAddr}),
+			)
+			Expect(list.Len()).To(Equal(2))
+
+			// Mark as faulty
+			faultyMsg := gossip.MessageFaulty{
+				Source:            TestAddress,
+				Destination:       faultyAddr,
+				IncarnationNumber: 0,
+			}
+			buffer, _, err := faultyMsg.AppendToBuffer(nil)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(list.DispatchDatagram(buffer)).To(Succeed())
+
+			Expect(list.Len()).To(Equal(1))
+
+			// Should only iterate over alive member
+			addresses := slices.Collect(list.All())
+			Expect(addresses).To(HaveLen(1))
+			Expect(addresses[0]).To(Equal(aliveAddr))
+			Expect(addresses).NotTo(ContainElement(faultyAddr))
+		})
+
+		It("should include suspect members", func() {
+			aliveAddr := encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1)
+			suspectAddr := encoding.NewAddress(net.IPv4(255, 255, 255, 255), 2)
+
+			list := newTestList(
+				membership.WithBootstrapMembers([]encoding.Address{aliveAddr, suspectAddr}),
+			)
+
+			// Mark one as suspect
+			suspectMsg := gossip.MessageSuspect{
+				Source:            TestAddress,
+				Destination:       suspectAddr,
+				IncarnationNumber: 0,
+			}
+			buffer, _, err := suspectMsg.AppendToBuffer(nil)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(list.DispatchDatagram(buffer)).To(Succeed())
+
+			Expect(list.Len()).To(Equal(2))
+
+			// Should iterate over both alive and suspect
+			addresses := slices.Collect(list.All())
+			Expect(addresses).To(HaveLen(2))
+			Expect(addresses).To(ContainElement(aliveAddr))
+			Expect(addresses).To(ContainElement(suspectAddr))
+		})
+	})
+
+	Context("DirectPing", func() {
+		It("should not send ping when member list is empty", func() {
+			var store transport.Store
+			list := newTestList(
+				membership.WithUDPClient(&store),
+			)
+
+			By("Executing 1 direct ping")
+			Expect(list.DirectPing()).To(Succeed())
+			Expect(store.Addresses).To(BeEmpty())
+			pendingPings := membership.DebugList(list).GetPendingDirectPings()
+			Expect(pendingPings).To(HaveLen(0))
+		})
+
+		It("should send ping to single member", func() {
+			var store transport.Store
+			bootstrapMembers := []encoding.Address{
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
+			}
+			list := newTestList(
+				membership.WithUDPClient(&store),
+				membership.WithBootstrapMembers(bootstrapMembers),
+			)
+
+			By("Executing 1 direct ping")
+			Expect(list.DirectPing()).To(Succeed())
+			Expect(store.Addresses).To(HaveLen(1))
+			Expect(store.Addresses[0]).To(Equal(bootstrapMembers[0]))
+			Expect(store.Buffers).To(HaveLen(1))
+			pendingPings := membership.DebugList(list).GetPendingDirectPings()
+			Expect(pendingPings).To(HaveLen(1))
+		})
+
+		It("should send pings to multiple members based on DirectPingMemberCount", func() {
+			var store transport.Store
+			bootstrapMembers := []encoding.Address{
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 2),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 3),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 4),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 5),
+			}
+			list := newTestList(
+				membership.WithUDPClient(&store),
+				membership.WithBootstrapMembers(bootstrapMembers),
+				membership.WithDirectPingMemberCount(3),
+			)
+
+			By("Executing 3 direct pings")
+			Expect(list.DirectPing()).To(Succeed())
+			Expect(store.Addresses).To(HaveLen(3))
+			Expect(store.Buffers).To(HaveLen(3))
+			pendingPings := membership.DebugList(list).GetPendingDirectPings()
+			Expect(pendingPings).To(HaveLen(3))
+		})
+
+		It("should use round-robin selection across multiple calls", func() {
+			var store transport.Store
+			bootstrapMembers := []encoding.Address{
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 2),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 3),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 4),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 5),
+			}
+			list := newTestList(
+				membership.WithUDPClient(&store),
+				membership.WithBootstrapMembers(bootstrapMembers),
+			)
+
+			By("Executing 10 direct ping (2 full rounds through 5 members)")
+			pingCounts := make(map[encoding.Address]int)
+			for range 10 {
+				store.Clear()
+				Expect(list.DirectPing()).To(Succeed())
+				Expect(store.Addresses).To(HaveLen(1))
+				Expect(store.Buffers).To(HaveLen(1))
+				pingCounts[store.Addresses[0]]++
+			}
+
+			Expect(pingCounts).To(HaveLen(5))
+			for addr, count := range pingCounts {
+				Expect(count).To(Equal(2), "Address %v should be pinged twice", addr)
+			}
+		})
+
+		It("should distribute pings evenly with larger DirectPingMemberCount", func() {
+			var store transport.Store
+			bootstrapMembers := []encoding.Address{
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 2),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 3),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 4),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 5),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 6),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 7),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 8),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 9),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 10),
+			}
+			list := newTestList(
+				membership.WithUDPClient(&store),
+				membership.WithDirectPingMemberCount(2),
+				membership.WithBootstrapMembers(bootstrapMembers),
+			)
+
+			By("Executing 20 direct pings (10 members, 2 pings each)")
+			pingCounts := make(map[encoding.Address]int)
+			for range 10 {
+				store.Clear()
+				Expect(list.DirectPing()).To(Succeed())
+				Expect(store.Addresses).To(HaveLen(2))
+				Expect(store.Buffers).To(HaveLen(2))
+				for _, addr := range store.Addresses {
+					pingCounts[addr]++
+				}
+			}
+
+			Expect(pingCounts).To(HaveLen(10))
+			for addr, count := range pingCounts {
+				Expect(count).To(Equal(2), "Address %v should be pinged twice", addr)
+			}
+		})
+
+		It("should handle DirectPingMemberCount larger than member list", func() {
+			var store transport.Store
+			bootstrapMembers := []encoding.Address{
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 2),
+			}
+			list := newTestList(
+				membership.WithUDPClient(&store),
+				membership.WithBootstrapMembers(bootstrapMembers),
+				membership.WithDirectPingMemberCount(5), // More than 2 members
+			)
+
+			By("Executing 2 direct pings")
+			Expect(list.DirectPing()).To(Succeed())
+			Expect(store.Addresses).To(HaveLen(2))
+			Expect(store.Buffers).To(HaveLen(2))
+			pendingPings := membership.DebugList(list).GetPendingDirectPings()
+			Expect(pendingPings).To(HaveLen(2))
+		})
+
+		It("should track pending pings for timeout detection", func() {
+			var store transport.Store
+			bootstrapMembers := []encoding.Address{
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
+			}
+			list := newTestList(
+				membership.WithUDPClient(&store),
+				membership.WithBootstrapMembers(bootstrapMembers),
+			)
+
+			By("Executing 1 direct ping")
+			Expect(list.DirectPing()).To(Succeed())
+			pendingPings := membership.DebugList(list).GetPendingDirectPings()
+			Expect(pendingPings).To(HaveLen(1))
+			Expect(pendingPings[0].Destination).To(Equal(bootstrapMembers[0]))
+		})
+
+		It("should increment sequence numbers for each ping", func() {
+			var store transport.Store
+			bootstrapMembers := []encoding.Address{
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
+			}
+			list := newTestList(
+				membership.WithUDPClient(&store),
+				membership.WithBootstrapMembers(bootstrapMembers),
+			)
+
+			By("Executing 1 direct ping")
+			Expect(list.DirectPing()).To(Succeed())
+			var msg1 membership.MessageDirectPing
+			Expect(msg1.FromBuffer(store.Buffers[0])).Error().ToNot(HaveOccurred())
+			seq1 := msg1.SequenceNumber
+
+			By("Executing 1 direct ping")
+			store.Clear()
+			Expect(list.DirectPing()).To(Succeed())
+			var msg2 membership.MessageDirectPing
+			Expect(msg2.FromBuffer(store.Buffers[0])).Error().ToNot(HaveOccurred())
+			seq2 := msg2.SequenceNumber
+
+			// Sequence numbers should increment
+			Expect(seq2).To(BeNumerically(">", seq1))
+		})
+
+		It("should ping suspect members", func() {
+			var store transport.Store
+			bootstrapMembers := []encoding.Address{
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 2),
+			}
+			list := newTestList(
+				membership.WithUDPClient(&store),
+				membership.WithBootstrapMembers(bootstrapMembers),
+				membership.WithDirectPingMemberCount(2),
+			)
+
+			By("Marking one member as suspect")
+			suspectMsg := gossip.MessageSuspect{
+				Source:            TestAddress,
+				Destination:       bootstrapMembers[1],
+				IncarnationNumber: 0,
+			}
+			buffer, _, err := suspectMsg.AppendToBuffer(nil)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(list.DispatchDatagram(buffer)).To(Succeed())
+
+			By("Executing 1 direct ping")
+			store.Clear()
+			Expect(list.DirectPing()).To(Succeed())
+
+			// Both members should be pinged (suspect members are still active)
+			Expect(store.Addresses).To(HaveLen(2))
+			Expect(store.Addresses).To(ContainElement(bootstrapMembers[0]))
+			Expect(store.Addresses).To(ContainElement(bootstrapMembers[1]))
+		})
+
+		It("should handle UDP send errors gracefully", func() {
+			bootstrapMembers := []encoding.Address{
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
+			}
+			list := newTestList(
+				membership.WithUDPClient(&transport.Error{}),
+				membership.WithBootstrapMembers(bootstrapMembers),
+			)
+
+			By("Executing 1 direct ping")
+			Expect(list.DirectPing()).ToNot(Succeed())
+		})
+	})
+
+	Context("IndirectPing", func() {
+		It("should not send indirect ping when no pending direct pings", func() {
+			var store transport.Store
+			bootstrapMembers := []encoding.Address{
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 2),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 3),
+			}
+			list := newTestList(
+				membership.WithUDPClient(&store),
+				membership.WithBootstrapMembers(bootstrapMembers),
+			)
+
+			By("Executing 1 indirect ping")
+			Expect(list.IndirectPing()).To(Succeed())
+			Expect(store.Addresses).To(BeEmpty())
+		})
+
+		It("should send indirect ping requests for pending direct pings", func() {
+			var store transport.Store
+			bootstrapMembers := []encoding.Address{
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 2),
+			}
+			list := newTestList(
+				membership.WithUDPClient(&store),
+				membership.WithBootstrapMembers(bootstrapMembers),
+			)
+
+			By("Executing 1 direct ping")
+			Expect(list.DirectPing()).To(Succeed())
+			pendingDirectPing := membership.DebugList(list).GetPendingDirectPings()[0]
+
+			By("Executing 1 indirect ping")
+			store.Clear()
+			Expect(list.IndirectPing()).To(Succeed())
+			Expect(store.Addresses).To(HaveLen(1))
+			Expect(store.Addresses[0]).ToNot(Equal(pendingDirectPing.Destination))
+
+			By("Verifying the network message")
+			var msg membership.MessageIndirectPing
+			Expect(msg.FromBuffer(store.Buffers[0])).Error().ToNot(HaveOccurred())
+			Expect(msg.Source).To(Equal(TestAddress))
+			Expect(msg.Destination).To(Equal(pendingDirectPing.Destination))
+		})
+
+		It("should use IndirectPingMemberCount for number of proxies", func() {
+			var store transport.Store
+			bootstrapMembers := []encoding.Address{
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 2),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 3),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 4),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 5),
+			}
+			list := newTestList(
+				membership.WithUDPClient(&store),
+				membership.WithBootstrapMembers(bootstrapMembers),
+				membership.WithIndirectPingMemberCount(3),
+			)
+
+			By("Executing 1 direct ping")
+			Expect(list.DirectPing()).To(Succeed())
+
+			By("Executing 3 indirect pings")
+			store.Clear()
+			Expect(list.IndirectPing()).To(Succeed())
+			Expect(store.Addresses).To(HaveLen(3))
+			Expect(store.Buffers).To(HaveLen(3))
+		})
+
+		It("should not use target member as proxy", func() {
+			var store transport.Store
+			bootstrapMembers := []encoding.Address{
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 2),
+			}
+			list := newTestList(
+				membership.WithUDPClient(&store),
+				membership.WithBootstrapMembers(bootstrapMembers),
+				membership.WithIndirectPingMemberCount(2),
+			)
+
+			By("Executing 1 direct ping")
+			Expect(list.DirectPing()).To(Succeed())
+			pendingDirectPings := membership.DebugList(list).GetPendingDirectPings()
+			Expect(pendingDirectPings).To(HaveLen(1))
+
+			By("Executing 1 indirect ping when 2 were requested")
+			store.Clear()
+			Expect(list.IndirectPing()).To(Succeed())
+			Expect(store.Addresses).To(HaveLen(1))
+			Expect(store.Addresses[0]).NotTo(Equal(pendingDirectPings[0].Destination))
+			pendingIndirectPings := membership.DebugList(list).GetPendingIndirectPings()
+			Expect(pendingIndirectPings).To(HaveLen(1))
+		})
+
+		It("should handle multiple pending direct pings", func() {
+			var store transport.Store
+			bootstrapMembers := []encoding.Address{
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 2),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 3),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 4),
+			}
+			list := newTestList(
+				membership.WithUDPClient(&store),
+				membership.WithBootstrapMembers(bootstrapMembers),
+				membership.WithDirectPingMemberCount(2),
+			)
+
+			By("Executing 2 direct pings")
+			Expect(list.DirectPing()).To(Succeed())
+			pendingDirectPings := membership.DebugList(list).GetPendingDirectPings()
+			Expect(pendingDirectPings).To(HaveLen(2))
+
+			By("Executing 6 indirect pings")
+			store.Clear()
+			Expect(list.IndirectPing()).To(Succeed())
+			Expect(store.Addresses).To(HaveLen(6))
+			pendingIndirectPings := membership.DebugList(list).GetPendingIndirectPings()
+			Expect(pendingIndirectPings).To(HaveLen(2))
+		})
+
+		It("should handle insufficient members for proxies", func() {
+			var store transport.Store
+			bootstrapMembers := []encoding.Address{
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
+			}
+			list := newTestList(
+				membership.WithUDPClient(&store),
+				membership.WithBootstrapMembers(bootstrapMembers),
+				membership.WithIndirectPingMemberCount(5),
+			)
+
+			By("Executing 1 direct ping")
+			Expect(list.DirectPing()).To(Succeed())
+
+			By("Executing 0 indirect ping")
+			store.Clear()
+			Expect(list.IndirectPing()).To(Succeed())
+			Expect(store.Addresses).To(BeEmpty())
+		})
+
+		It("should track pending indirect pings", func() {
+			var store transport.Store
+			bootstrapMembers := []encoding.Address{
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 2),
+			}
+			list := newTestList(
+				membership.WithUDPClient(&store),
+				membership.WithBootstrapMembers(bootstrapMembers),
+			)
+
+			By("Executing 1 direct ping")
+			Expect(list.DirectPing()).To(Succeed())
+			pendingDirectPing := membership.DebugList(list).GetPendingDirectPings()
+			Expect(pendingDirectPing).To(HaveLen(1))
+
+			By("Executing 1 indirect ping")
+			store.Clear()
+			Expect(list.IndirectPing()).To(Succeed())
+			Expect(store.Addresses).To(HaveLen(1))
+			pendingIndirectPings := membership.DebugList(list).GetPendingIndirectPings()
+			Expect(pendingIndirectPings).To(HaveLen(1))
+			Expect(pendingIndirectPings[0].MessageIndirectPing.Destination).To(Equal(pendingDirectPing[0].Destination))
+		})
+
+		It("should use same sequence number as direct ping", func() {
+			var store transport.Store
+			bootstrapMembers := []encoding.Address{
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 2),
+			}
+			list := newTestList(
+				membership.WithUDPClient(&store),
+				membership.WithBootstrapMembers(bootstrapMembers),
+			)
+
+			By("Executing 1 direct ping")
+			Expect(list.DirectPing()).To(Succeed())
+			var directMsg membership.MessageDirectPing
+			Expect(directMsg.FromBuffer(store.Buffers[0])).Error().ToNot(HaveOccurred())
+			directSeq := directMsg.SequenceNumber
+
+			By("Executing 1 indirect ping")
+			store.Clear()
+			Expect(list.IndirectPing()).To(Succeed())
+			var indirectMsg membership.MessageIndirectPing
+			Expect(indirectMsg.FromBuffer(store.Buffers[0])).Error().ToNot(HaveOccurred())
+			Expect(indirectMsg.SequenceNumber).To(Equal(directSeq))
+		})
+
+		It("should handle UDP send errors gracefully", func() {
+			bootstrapMembers := []encoding.Address{
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 2),
+			}
+			list := newTestList(
+				membership.WithUDPClient(&transport.Discard{}),
+				membership.WithBootstrapMembers(bootstrapMembers),
+			)
+
+			By("Executing 1 direct ping")
+			Expect(list.DirectPing()).To(Succeed())
+
+			By("Executing 1 indirect ping with broken network")
+			config := list.Config()
+			config.UDPClient = &transport.Error{}
+			membership.DebugList(list).SetConfig(config)
+			err := list.IndirectPing()
+			Expect(err).To(HaveOccurred())
+		})
+	})
+
 	// ========== OLD TESTS ==========
 
 	var list *membership.List
@@ -278,12 +866,6 @@ var _ = Describe("List", func() {
 			membership.WithRoundTripTimeTracker(roundtriptime.NewTracker()),
 		)
 		membership.DebugList(list).GetGossip().Clear()
-	})
-
-	It("should return the member list", func() {
-		list := createListWithMembers(8)
-		Expect(list.Get()).To(HaveLen(8))
-		Expect(list.Len()).To(Equal(8))
 	})
 
 	It("should trigger the member callbacks", func() {
@@ -334,65 +916,6 @@ var _ = Describe("List", func() {
 		callbacks.Wait()
 		Expect(int(membersAdded.Load())).To(Equal(10))
 		Expect(int(membersRemoved.Load())).To(Equal(10))
-	})
-
-	It("should not do a ping without members", func() {
-		var storeClient transport.Store
-		list := membership.NewList(
-			membership.WithLogger(GinkgoLogr),
-			membership.WithUDPClient(&storeClient),
-			membership.WithTCPClient(&transport.Discard{}),
-			membership.WithAdvertisedAddress(TestAddress),
-			membership.WithRoundTripTimeTracker(roundtriptime.NewTracker()),
-		)
-		membership.DebugList(list).GetGossip().Clear()
-
-		Expect(list.DirectPing()).To(Succeed())
-		Expect(storeClient.Addresses).To(BeEmpty())
-	})
-
-	It("should do round robin direct pings", func() {
-		var storeClient transport.Store
-		list := membership.NewList(
-			membership.WithLogger(GinkgoLogr),
-			membership.WithUDPClient(&storeClient),
-			membership.WithTCPClient(&transport.Discard{}),
-			membership.WithAdvertisedAddress(TestAddress),
-			membership.WithRoundTripTimeTracker(roundtriptime.NewTracker()),
-		)
-		membership.DebugList(list).GetGossip().Clear()
-
-		// Add a few members
-		for i := range 10 {
-			message := gossip.MessageAlive{
-				Destination:       encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+1+i),
-				IncarnationNumber: 0,
-			}
-			buffer, _, err := message.AppendToBuffer(nil)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(list.DispatchDatagram(buffer)).To(Succeed())
-		}
-
-		// Catch the direct ping messages and remember which address was pinged how often
-		directPingAddresses := make(map[encoding.Address]int)
-		for range 100 {
-			Expect(list.DirectPing()).To(Succeed())
-
-			Expect(storeClient.Addresses).To(HaveLen(1))
-			var message membership.MessageDirectPing
-			Expect(message.FromBuffer(storeClient.Buffers[0])).Error().ToNot(HaveOccurred())
-			Expect(message.Source).To(Equal(TestAddress))
-			directPingAddresses[storeClient.Addresses[0]]++
-
-			storeClient.Addresses = nil
-			storeClient.Buffers = nil
-		}
-
-		// We expect every address to be pinged the same number of times.
-		Expect(directPingAddresses).To(HaveLen(10))
-		for _, value := range directPingAddresses {
-			Expect(value).To(Equal(10))
-		}
 	})
 
 	It("should ignore alive about self", func() {
@@ -1171,7 +1694,7 @@ var _ = Describe("List", func() {
 				lists = append(lists, newList)
 			}
 			for _, list := range lists {
-				Expect(list.Get()).To(HaveLen(memberCount - 1))
+				Expect(slices.Collect(list.All())).To(HaveLen(memberCount - 1))
 			}
 
 			address := encoding.NewAddress(net.IPv4(255, 255, 255, 255), math.MaxUint16)
@@ -1212,7 +1735,7 @@ var _ = Describe("List", func() {
 			}
 
 			for _, list := range lists[:len(lists)-1] {
-				Expect(list.Get()).To(HaveLen(memberCount))
+				Expect(slices.Collect(list.All())).To(HaveLen(memberCount))
 			}
 		}
 	})
@@ -1220,7 +1743,8 @@ var _ = Describe("List", func() {
 
 func BenchmarkList_Get(b *testing.B) {
 	executeFunctionWithMembers(b, func(list *membership.List) {
-		_ = list.Get()
+		for range list.All() {
+		}
 	})
 }
 

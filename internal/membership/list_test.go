@@ -6,7 +6,6 @@ import (
 	"net"
 	"slices"
 	"sync"
-	"sync/atomic"
 	"testing"
 
 	"github.com/backbone81/membership/internal/roundtriptime"
@@ -853,6 +852,184 @@ var _ = Describe("List", func() {
 		})
 	})
 
+	Context("EndOfProtocolPeriod", func() {
+		It("should do nothing when no pending pings", func() {
+			bootstrapMembers := []encoding.Address{
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
+			}
+			list := newTestList(
+				membership.WithBootstrapMembers(bootstrapMembers),
+			)
+
+			By("Executing end of protocol period")
+			Expect(list.EndOfProtocolPeriod()).To(Succeed())
+
+			By("Verifying no state changes")
+			Expect(list.Len()).To(Equal(1))
+			members := membership.DebugList(list).GetMembers()
+			Expect(members[0].State).To(Equal(encoding.MemberStateAlive))
+		})
+
+		It("should mark member as suspect after failed direct ping", func() {
+			bootstrapMembers := []encoding.Address{
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
+			}
+			list := newTestList(
+				membership.WithBootstrapMembers(bootstrapMembers),
+			)
+
+			By("Executing 1 direct ping")
+			Expect(list.DirectPing()).To(Succeed())
+			Expect(membership.DebugList(list).GetPendingDirectPings()).To(HaveLen(1))
+
+			By("Executing end of protocol period")
+			membership.DebugList(list).ClearGossip()
+			Expect(list.EndOfProtocolPeriod()).To(Succeed())
+
+			By("Verifying member is now suspect")
+			members := membership.DebugList(list).GetMembers()
+			Expect(members).To(HaveLen(1))
+			Expect(members[0].State).To(Equal(encoding.MemberStateSuspect))
+			Expect(membership.DebugList(list).GetPendingDirectPings()).To(BeEmpty())
+			gossipQueue := membership.DebugList(list).GetGossip()
+			Expect(gossipQueue.Len()).To(Equal(1))
+
+			msg, ok := gossipQueue.Get(0).(*gossip.MessageSuspect)
+			Expect(ok).To(BeTrue())
+			Expect(msg.Destination).To(Equal(bootstrapMembers[0]))
+		})
+
+		It("should increment suspect counter for existing suspects", func() {
+			bootstrapMembers := []encoding.Address{
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
+			}
+			list := newTestList(
+				membership.WithBootstrapMembers(bootstrapMembers),
+				membership.WithSafetyFactor(1000),
+			)
+
+			By("Marking member as suspect")
+			Expect(list.DirectPing()).To(Succeed())
+			Expect(list.EndOfProtocolPeriod()).To(Succeed())
+			members := membership.DebugList(list).GetMembers()
+			Expect(members[0].State).To(Equal(encoding.MemberStateSuspect))
+			Expect(members[0].SuspicionPeriodCounter).To(Equal(1))
+
+			By("Executing end of protocol period")
+			Expect(list.EndOfProtocolPeriod()).To(Succeed())
+			members = membership.DebugList(list).GetMembers()
+			Expect(members[0].SuspicionPeriodCounter).To(Equal(2))
+
+			By("Executing another end of protocol period")
+			Expect(list.EndOfProtocolPeriod()).To(Succeed())
+			members = membership.DebugList(list).GetMembers()
+			Expect(members[0].SuspicionPeriodCounter).To(Equal(3))
+		})
+
+		It("should mark suspect as faulty after exceeding threshold", func() {
+			var store transport.Store
+			bootstrapMembers := []encoding.Address{
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
+			}
+			list := newTestList(
+				membership.WithUDPClient(&store),
+				membership.WithBootstrapMembers(bootstrapMembers),
+				membership.WithSafetyFactor(0), // Threshold = 0, immediate faulty
+			)
+
+			By("Marking member as suspect")
+			Expect(list.DirectPing()).To(Succeed())
+			membership.DebugList(list).ClearGossip()
+			Expect(list.EndOfProtocolPeriod()).To(Succeed())
+			Expect(membership.DebugList(list).GetMembers()).To(HaveLen(0))
+			members := membership.DebugList(list).GetFaultyMembers()
+			Expect(members).To(HaveLen(1))
+			Expect(members[0].State).To(Equal(encoding.MemberStateFaulty))
+
+			By("Verifying faulty gossip message added")
+			gossipQueue := membership.DebugList(list).GetGossip()
+			msg, ok := gossipQueue.Get(0).(*gossip.MessageFaulty)
+			Expect(ok).To(BeTrue())
+			Expect(msg.Destination).To(Equal(bootstrapMembers[0]))
+		})
+
+		It("should calculate correct suspicion threshold based on member count and safety factor", func() {
+			bootstrapMembers := []encoding.Address{
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 2),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 3),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 4),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 5),
+			}
+			list := newTestList(
+				membership.WithBootstrapMembers(bootstrapMembers),
+				membership.WithDirectPingMemberCount(5), // ping all members
+				membership.WithSafetyFactor(3.0),
+			)
+
+			expectedThreshold := int(math.Ceil(utility.DisseminationPeriods(3, len(bootstrapMembers))))
+
+			By("Marking members as suspect")
+			for range expectedThreshold {
+				Expect(list.DirectPing()).To(Succeed())
+				Expect(list.EndOfProtocolPeriod()).To(Succeed())
+			}
+			Expect(list.Len()).To(Equal(5))
+
+			By("Removing failed members")
+			Expect(list.DirectPing()).To(Succeed())
+			Expect(list.EndOfProtocolPeriod()).To(Succeed())
+			Expect(list.Len()).To(Equal(0))
+		})
+
+		It("should invoke member removed callback when marking as faulty", func() {
+			var removedMutex sync.Mutex
+			var removedCounter int
+
+			bootstrapMembers := []encoding.Address{
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
+			}
+			list := newTestList(
+				membership.WithBootstrapMembers(bootstrapMembers),
+				membership.WithSafetyFactor(0),
+				membership.WithMemberRemovedCallback(func(address encoding.Address) {
+					removedMutex.Lock()
+					defer removedMutex.Unlock()
+					removedCounter++
+				}),
+			)
+
+			By("Marking member as faulty")
+			Expect(list.DirectPing()).To(Succeed())
+			Expect(list.EndOfProtocolPeriod()).To(Succeed())
+
+			By("Verifying callback was invoked")
+			removedMutex.Lock()
+			defer removedMutex.Unlock()
+			Expect(removedCounter).To(Equal(1))
+			Expect(list.Len()).To(Equal(0))
+		})
+
+		It("should clear pending indirect pings", func() {
+			bootstrapMembers := []encoding.Address{
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 2),
+			}
+			list := newTestList(
+				membership.WithBootstrapMembers(bootstrapMembers),
+			)
+
+			By("Executing direct and indirect pings")
+			Expect(list.DirectPing()).To(Succeed())
+			Expect(list.IndirectPing()).To(Succeed())
+			Expect(membership.DebugList(list).GetPendingIndirectPings()).To(HaveLen(1))
+
+			By("Executing end of protocol period")
+			Expect(list.EndOfProtocolPeriod()).To(Succeed())
+			Expect(membership.DebugList(list).GetPendingIndirectPings()).To(BeEmpty())
+		})
+	})
+
 	// ========== OLD TESTS ==========
 
 	var list *membership.List
@@ -866,56 +1043,6 @@ var _ = Describe("List", func() {
 			membership.WithRoundTripTimeTracker(roundtriptime.NewTracker()),
 		)
 		membership.DebugList(list).GetGossip().Clear()
-	})
-
-	It("should trigger the member callbacks", func() {
-		var membersAdded, membersRemoved atomic.Int64
-		var callbacks sync.WaitGroup
-
-		list := membership.NewList(
-			membership.WithLogger(GinkgoLogr),
-			membership.WithUDPClient(&transport.Discard{}),
-			membership.WithTCPClient(&transport.Discard{}),
-			membership.WithMemberAddedCallback(func(address encoding.Address) {
-				membersAdded.Add(1)
-				callbacks.Done()
-			}),
-			membership.WithMemberRemovedCallback(func(address encoding.Address) {
-				membersRemoved.Add(1)
-				callbacks.Done()
-			}),
-			membership.WithRoundTripTimeTracker(roundtriptime.NewTracker()),
-		)
-		membership.DebugList(list).GetGossip().Clear()
-
-		for i := range 10 {
-			messageAlive := gossip.MessageAlive{
-				Destination:       encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
-				IncarnationNumber: 0,
-			}
-			buffer, _, err := messageAlive.AppendToBuffer(nil)
-			Expect(err).ToNot(HaveOccurred())
-			callbacks.Add(1)
-			Expect(list.DispatchDatagram(buffer)).To(Succeed())
-		}
-		callbacks.Wait()
-		Expect(int(membersAdded.Load())).To(Equal(10))
-		Expect(int(membersRemoved.Load())).To(Equal(0))
-
-		for i := range 10 {
-			messageAlive := gossip.MessageFaulty{
-				Source:            TestAddress,
-				Destination:       encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
-				IncarnationNumber: 0,
-			}
-			buffer, _, err := messageAlive.AppendToBuffer(nil)
-			Expect(err).ToNot(HaveOccurred())
-			callbacks.Add(1)
-			Expect(list.DispatchDatagram(buffer)).To(Succeed())
-		}
-		callbacks.Wait()
-		Expect(int(membersAdded.Load())).To(Equal(10))
-		Expect(int(membersRemoved.Load())).To(Equal(10))
 	})
 
 	It("should ignore alive about self", func() {
@@ -1665,10 +1792,6 @@ var _ = Describe("List", func() {
 		),
 	)
 
-	It("should remove a member after some time when no response", func() {
-		// TODO: implementation
-	})
-
 	// This test is flaky and therefore disabled.
 	PIt("newly joined member should propagate after a limited number of protocol periods", func() {
 		for memberCount := 1; memberCount <= 256; memberCount *= 2 {
@@ -1866,7 +1989,7 @@ func dispatchDatagramWithMembers(b *testing.B, message membership.Message) {
 }
 
 func executeFunctionWithMembers(b *testing.B, f func(list *membership.List)) {
-	for memberCount := 1; memberCount <= 16*1024; memberCount *= 2 {
+	for memberCount := range utility.ClusterSize(1, 16, 16*1024) {
 		list := createListWithMembers(memberCount)
 		b.Run(fmt.Sprintf("%d members", memberCount), func(b *testing.B) {
 			for b.Loop() {

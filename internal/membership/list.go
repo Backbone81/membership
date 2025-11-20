@@ -487,7 +487,7 @@ func (l *List) markSuspectsAsFaulty() {
 			continue
 		}
 		member.SuspicionPeriodCounter++
-		if member.SuspicionPeriodCounter < suspicionPeriodThreshold {
+		if member.SuspicionPeriodCounter <= suspicionPeriodThreshold {
 			// We are only interested in members exceeding the suspicion threshold.
 			continue
 		}

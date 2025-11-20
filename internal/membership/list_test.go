@@ -1030,6 +1030,47 @@ var _ = Describe("List", func() {
 		})
 	})
 
+	Context("RequestList", func() {
+		It("should not send request when member list is empty", func() {
+			var store transport.Store
+			list := newTestList(
+				membership.WithUDPClient(&store),
+			)
+
+			By("Executing list request")
+			Expect(list.RequestList()).To(Succeed())
+
+			By("Verifying no network messages sent")
+			Expect(store.Addresses).To(BeEmpty())
+		})
+
+		It("should send request to one of multiple members", func() {
+			var store transport.Store
+			bootstrapMembers := []encoding.Address{
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 2),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 3),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 4),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 5),
+			}
+			list := newTestList(
+				membership.WithUDPClient(&store),
+				membership.WithBootstrapMembers(bootstrapMembers),
+			)
+
+			By("Executing list request")
+			Expect(list.RequestList()).To(Succeed())
+
+			By("Verifying network message sent")
+			Expect(store.Addresses).To(HaveLen(1))
+			Expect(store.Buffers).To(HaveLen(1))
+
+			By("Verifying message is ListRequest")
+			var msg membership.MessageListRequest
+			Expect(msg.FromBuffer(store.Buffers[0])).Error().ToNot(HaveOccurred())
+		})
+	})
+
 	// ========== OLD TESTS ==========
 
 	var list *membership.List

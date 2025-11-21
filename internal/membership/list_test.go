@@ -5,7 +5,6 @@ import (
 	"math"
 	"net"
 	"slices"
-	"sync"
 	"testing"
 
 	"github.com/backbone81/membership/internal/roundtriptime"
@@ -192,13 +191,10 @@ var _ = Describe("List", func() {
 
 		It("should register member added callback", func() {
 			var addedCount int
-			var addedMutex sync.Mutex
 			var addedAddresses []encoding.Address
 
 			_ = newTestList(
 				membership.WithMemberAddedCallback(func(address encoding.Address) {
-					addedMutex.Lock()
-					defer addedMutex.Unlock()
 					addedCount++
 					addedAddresses = append(addedAddresses, address)
 				}),
@@ -209,14 +205,7 @@ var _ = Describe("List", func() {
 			)
 
 			// Callbacks should have been invoked for bootstrap members
-			Eventually(func() int {
-				addedMutex.Lock()
-				defer addedMutex.Unlock()
-				return addedCount
-			}).Should(Equal(2))
-
-			addedMutex.Lock()
-			defer addedMutex.Unlock()
+			Expect(addedCount).To(Equal(2))
 			Expect(addedAddresses).To(HaveLen(2))
 		})
 
@@ -983,9 +972,7 @@ var _ = Describe("List", func() {
 		})
 
 		It("should invoke member removed callback when marking as faulty", func() {
-			var removedMutex sync.Mutex
 			var removedCounter int
-
 			bootstrapMembers := []encoding.Address{
 				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
 			}
@@ -993,8 +980,6 @@ var _ = Describe("List", func() {
 				membership.WithBootstrapMembers(bootstrapMembers),
 				membership.WithSafetyFactor(0),
 				membership.WithMemberRemovedCallback(func(address encoding.Address) {
-					removedMutex.Lock()
-					defer removedMutex.Unlock()
 					removedCounter++
 				}),
 			)
@@ -1004,8 +989,6 @@ var _ = Describe("List", func() {
 			Expect(list.EndOfProtocolPeriod()).To(Succeed())
 
 			By("Verifying callback was invoked")
-			removedMutex.Lock()
-			defer removedMutex.Unlock()
 			Expect(removedCounter).To(Equal(1))
 			Expect(list.Len()).To(Equal(0))
 		})
@@ -1394,16 +1377,892 @@ var _ = Describe("List", func() {
 		})
 	})
 
-	Context("handleSuspect", func() {
+	Context("handleAlive", func() {
+		It("should ignore alive about self", func() {
+			list := newTestList()
+			membership.DebugList(list).GetGossip().Clear()
 
+			By("Receiving alive message")
+			message := gossip.MessageAlive{
+				Destination:       TestAddress,
+				IncarnationNumber: 0,
+			}
+			buffer, _, err := message.AppendToBuffer(nil)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(list.DispatchDatagram(buffer)).To(Succeed())
+
+			Expect(membership.DebugList(list).GetMembers()).To(BeEmpty())
+			Expect(membership.DebugList(list).GetFaultyMembers()).To(BeEmpty())
+			Expect(membership.DebugList(list).GetGossip().Len()).To(Equal(0))
+		})
+
+		It("should invoke member added callback when adding new member", func() {
+			var addedCount int
+			list := newTestList(
+				membership.WithMemberAddedCallback(func(address encoding.Address) {
+					addedCount++
+				}),
+			)
+
+			By("Sending alive message for new member")
+			aliveMsg := gossip.MessageAlive{
+				Destination:       TestAddress2,
+				IncarnationNumber: 5,
+			}
+			buffer, _, err := aliveMsg.AppendToBuffer(nil)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(list.DispatchDatagram(buffer)).To(Succeed())
+
+			By("Verifying callback invoked")
+			Expect(addedCount).To(Equal(1))
+		})
+
+		DescribeTable("Gossip should update the memberlist correctly",
+			func(beforeMembers []encoding.Member, beforeFaultyMembers []encoding.Member, message gossip.Message, afterMembers []encoding.Member, afterFaultyMembers []encoding.Member) {
+				list := membership.NewList(
+					membership.WithUDPClient(&transport.Discard{}),
+					membership.WithTCPClient(&transport.Discard{}),
+					membership.WithRoundTripTimeTracker(roundtriptime.NewTracker()),
+				)
+				membership.DebugList(list).GetGossip().Clear()
+				membership.DebugList(list).SetMembers(beforeMembers)
+				membership.DebugList(list).SetFaultyMembers(beforeFaultyMembers)
+
+				buffer, _, err := message.AppendToBuffer(nil)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(list.DispatchDatagram(buffer)).To(Succeed())
+
+				if afterMembers == nil {
+					Expect(membership.DebugList(list).GetMembers()).To(BeEmpty())
+				} else {
+					Expect(membership.DebugList(list).GetMembers()).To(Equal(afterMembers))
+				}
+				if afterFaultyMembers == nil {
+					Expect(membership.DebugList(list).GetFaultyMembers()).To(BeEmpty())
+				} else {
+					Expect(membership.DebugList(list).GetFaultyMembers()).To(Equal(afterFaultyMembers))
+				}
+			},
+			Entry("Alive should add a member",
+				nil,
+				nil,
+				&gossip.MessageAlive{
+					Destination:       TestAddress,
+					IncarnationNumber: 2,
+				},
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateAlive,
+						IncarnationNumber: 2,
+					},
+				},
+				nil,
+			),
+			Entry("Alive with lower incarnation number should NOT overwrite alive",
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateAlive,
+						IncarnationNumber: 2,
+					},
+				},
+				nil,
+				&gossip.MessageAlive{
+					Destination:       TestAddress,
+					IncarnationNumber: 1,
+				},
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateAlive,
+						IncarnationNumber: 2,
+					},
+				},
+				nil,
+			),
+			Entry("Alive with same incarnation number should NOT overwrite alive",
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateAlive,
+						IncarnationNumber: 2,
+					},
+				},
+				nil,
+				&gossip.MessageAlive{
+					Destination:       TestAddress,
+					IncarnationNumber: 2,
+				},
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateAlive,
+						IncarnationNumber: 2,
+					},
+				},
+				nil,
+			),
+			Entry("Alive with bigger incarnation number should overwrite alive",
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateAlive,
+						IncarnationNumber: 2,
+					},
+				},
+				nil,
+				&gossip.MessageAlive{
+					Destination:       TestAddress,
+					IncarnationNumber: 3,
+				},
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateAlive,
+						IncarnationNumber: 3,
+					},
+				},
+				nil,
+			),
+
+			Entry("Alive with lower incarnation number should NOT overwrite suspect",
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateSuspect,
+						IncarnationNumber: 2,
+					},
+				},
+				nil,
+				&gossip.MessageAlive{
+					Destination:       TestAddress,
+					IncarnationNumber: 1,
+				},
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateSuspect,
+						IncarnationNumber: 2,
+					},
+				},
+				nil,
+			),
+			Entry("Alive with same incarnation number should NOT overwrite suspect",
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateSuspect,
+						IncarnationNumber: 2,
+					},
+				},
+				nil,
+				&gossip.MessageAlive{
+					Destination:       TestAddress,
+					IncarnationNumber: 2,
+				},
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateSuspect,
+						IncarnationNumber: 2,
+					},
+				},
+				nil,
+			),
+			Entry("Alive with bigger incarnation number should overwrite suspect",
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateSuspect,
+						IncarnationNumber: 2,
+					},
+				},
+				nil,
+				&gossip.MessageAlive{
+					Destination:       TestAddress,
+					IncarnationNumber: 3,
+				},
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateAlive,
+						IncarnationNumber: 3,
+					},
+				},
+				nil,
+			),
+
+			Entry("Alive with lower incarnation number should NOT overwrite faulty",
+				nil,
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateFaulty,
+						IncarnationNumber: 2,
+					},
+				},
+				&gossip.MessageAlive{
+					Destination:       TestAddress,
+					IncarnationNumber: 1,
+				},
+				nil,
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateFaulty,
+						IncarnationNumber: 2,
+					},
+				},
+			),
+			Entry("Alive with same incarnation number should NOT overwrite faulty",
+				nil,
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateFaulty,
+						IncarnationNumber: 2,
+					},
+				},
+				&gossip.MessageAlive{
+					Destination:       TestAddress,
+					IncarnationNumber: 2,
+				},
+				nil,
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateFaulty,
+						IncarnationNumber: 2,
+					},
+				},
+			),
+			Entry("Alive with bigger incarnation number should overwrite faulty",
+				nil,
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateFaulty,
+						IncarnationNumber: 2,
+					},
+				},
+				&gossip.MessageAlive{
+					Destination:       TestAddress,
+					IncarnationNumber: 3,
+				},
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateAlive,
+						IncarnationNumber: 3,
+					},
+				},
+				nil,
+			),
+		)
 	})
 
-	Context("handleAlive", func() {
+	Context("handleSuspect", func() {
+		It("should refute suspect about self", func() {
+			list := newTestList()
+			membership.DebugList(list).GetGossip().Clear()
 
+			By("Receiving a suspect message")
+			message := gossip.MessageSuspect{
+				Source:            TestAddress2,
+				Destination:       TestAddress,
+				IncarnationNumber: 0,
+			}
+			buffer, _, err := message.AppendToBuffer(nil)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(list.DispatchDatagram(buffer)).To(Succeed())
+
+			Expect(membership.DebugList(list).GetMembers()).To(BeEmpty())
+			Expect(membership.DebugList(list).GetFaultyMembers()).To(BeEmpty())
+			Expect(membership.DebugList(list).GetGossip().Len()).To(Equal(1))
+			Expect(membership.DebugList(list).GetGossip().Get(0)).To(Equal(&gossip.MessageAlive{
+				Destination:       TestAddress,
+				IncarnationNumber: 1,
+			}))
+		})
+
+		It("should invoke member added callback when suspect", func() {
+			var addedCount int
+			list := newTestList(
+				membership.WithMemberAddedCallback(func(address encoding.Address) {
+					addedCount++
+				}),
+			)
+
+			By("Sending suspect message")
+			aliveMsg := gossip.MessageSuspect{
+				Destination:       TestAddress2,
+				IncarnationNumber: 5,
+			}
+			buffer, _, err := aliveMsg.AppendToBuffer(nil)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(list.DispatchDatagram(buffer)).To(Succeed())
+
+			By("Verifying callback invoked")
+			Expect(addedCount).To(Equal(1))
+		})
+
+		DescribeTable("Gossip should update the memberlist correctly",
+			func(beforeMembers []encoding.Member, beforeFaultyMembers []encoding.Member, message gossip.Message, afterMembers []encoding.Member, afterFaultyMembers []encoding.Member) {
+				list := membership.NewList(
+					membership.WithUDPClient(&transport.Discard{}),
+					membership.WithTCPClient(&transport.Discard{}),
+					membership.WithRoundTripTimeTracker(roundtriptime.NewTracker()),
+				)
+				membership.DebugList(list).GetGossip().Clear()
+				membership.DebugList(list).SetMembers(beforeMembers)
+				membership.DebugList(list).SetFaultyMembers(beforeFaultyMembers)
+
+				buffer, _, err := message.AppendToBuffer(nil)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(list.DispatchDatagram(buffer)).To(Succeed())
+
+				if afterMembers == nil {
+					Expect(membership.DebugList(list).GetMembers()).To(BeEmpty())
+				} else {
+					Expect(membership.DebugList(list).GetMembers()).To(Equal(afterMembers))
+				}
+				if afterFaultyMembers == nil {
+					Expect(membership.DebugList(list).GetFaultyMembers()).To(BeEmpty())
+				} else {
+					Expect(membership.DebugList(list).GetFaultyMembers()).To(Equal(afterFaultyMembers))
+				}
+			},
+			Entry("Suspect should add member",
+				nil,
+				nil,
+				&gossip.MessageSuspect{
+					Source:            TestAddress2,
+					Destination:       TestAddress,
+					IncarnationNumber: 2,
+				},
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateSuspect,
+						IncarnationNumber: 2,
+					},
+				},
+				nil,
+			),
+			Entry("Suspect with lower incarnation number should NOT overwrite alive",
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateAlive,
+						IncarnationNumber: 2,
+					},
+				},
+				nil,
+				&gossip.MessageSuspect{
+					Source:            TestAddress2,
+					Destination:       TestAddress,
+					IncarnationNumber: 1,
+				},
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateAlive,
+						IncarnationNumber: 2,
+					},
+				},
+				nil,
+			),
+			Entry("Suspect with same incarnation number should overwrite alive",
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateAlive,
+						IncarnationNumber: 2,
+					},
+				},
+				nil,
+				&gossip.MessageSuspect{
+					Source:            TestAddress2,
+					Destination:       TestAddress,
+					IncarnationNumber: 2,
+				},
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateSuspect,
+						IncarnationNumber: 2,
+					},
+				},
+				nil,
+			),
+			Entry("Suspect with bigger incarnation number should overwrite alive",
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateAlive,
+						IncarnationNumber: 2,
+					},
+				},
+				nil,
+				&gossip.MessageSuspect{
+					Source:            TestAddress2,
+					Destination:       TestAddress,
+					IncarnationNumber: 3,
+				},
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateSuspect,
+						IncarnationNumber: 3,
+					},
+				},
+				nil,
+			),
+
+			Entry("Suspect with lower incarnation number should NOT overwrite suspect",
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateSuspect,
+						IncarnationNumber: 2,
+					},
+				},
+				nil,
+				&gossip.MessageSuspect{
+					Source:            TestAddress2,
+					Destination:       TestAddress,
+					IncarnationNumber: 1,
+				},
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateSuspect,
+						IncarnationNumber: 2,
+					},
+				},
+				nil,
+			),
+			Entry("Suspect with same incarnation number should NOT overwrite suspect",
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateSuspect,
+						IncarnationNumber: 2,
+					},
+				},
+				nil,
+				&gossip.MessageSuspect{
+					Source:            TestAddress2,
+					Destination:       TestAddress,
+					IncarnationNumber: 2,
+				},
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateSuspect,
+						IncarnationNumber: 2,
+					},
+				},
+				nil,
+			),
+			Entry("Suspect with bigger incarnation number should NOT overwrite suspect",
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateSuspect,
+						IncarnationNumber: 2,
+					},
+				},
+				nil,
+				&gossip.MessageSuspect{
+					Source:            TestAddress2,
+					Destination:       TestAddress,
+					IncarnationNumber: 3,
+				},
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateSuspect,
+						IncarnationNumber: 3,
+					},
+				},
+				nil,
+			),
+
+			Entry("Suspect with lower incarnation number should NOT overwrite faulty",
+				nil,
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateFaulty,
+						IncarnationNumber: 2,
+					},
+				},
+				&gossip.MessageSuspect{
+					Source:            TestAddress2,
+					Destination:       TestAddress,
+					IncarnationNumber: 1,
+				},
+				nil,
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateFaulty,
+						IncarnationNumber: 2,
+					},
+				},
+			),
+			Entry("Suspect with same incarnation number should NOT overwrite faulty",
+				nil,
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateFaulty,
+						IncarnationNumber: 2,
+					},
+				},
+				&gossip.MessageSuspect{
+					Source:            TestAddress2,
+					Destination:       TestAddress,
+					IncarnationNumber: 2,
+				},
+				nil,
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateFaulty,
+						IncarnationNumber: 2,
+					},
+				},
+			),
+			Entry("Suspect with bigger incarnation number should overwrite faulty",
+				nil,
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateFaulty,
+						IncarnationNumber: 2,
+					},
+				},
+				&gossip.MessageSuspect{
+					Source:            TestAddress2,
+					Destination:       TestAddress,
+					IncarnationNumber: 3,
+				},
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateSuspect,
+						IncarnationNumber: 3,
+					},
+				},
+				nil,
+			),
+		)
 	})
 
 	Context("handleFaulty", func() {
+		It("should refute faulty about self", func() {
+			list := newTestList()
+			membership.DebugList(list).GetGossip().Clear()
 
+			message := gossip.MessageFaulty{
+				Source:            TestAddress2,
+				Destination:       TestAddress,
+				IncarnationNumber: 0,
+			}
+			buffer, _, err := message.AppendToBuffer(nil)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(list.DispatchDatagram(buffer)).To(Succeed())
+
+			Expect(membership.DebugList(list).GetMembers()).To(BeEmpty())
+			Expect(membership.DebugList(list).GetFaultyMembers()).To(BeEmpty())
+			Expect(membership.DebugList(list).GetGossip().Len()).To(Equal(1))
+			Expect(membership.DebugList(list).GetGossip().Get(0)).To(Equal(&gossip.MessageAlive{
+				Destination:       TestAddress,
+				IncarnationNumber: 1,
+			}))
+		})
+
+		It("should invoke member removed callback when faulty", func() {
+			var removedCount int
+			bootstrapMembers := []encoding.Address{
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
+			}
+			list := newTestList(
+				membership.WithBootstrapMembers(bootstrapMembers),
+				membership.WithMemberRemovedCallback(func(address encoding.Address) {
+					removedCount++
+				}),
+			)
+
+			By("Sending faulty message for existing")
+			aliveMsg := gossip.MessageFaulty{
+				Destination:       bootstrapMembers[0],
+				IncarnationNumber: 5,
+			}
+			buffer, _, err := aliveMsg.AppendToBuffer(nil)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(list.DispatchDatagram(buffer)).To(Succeed())
+
+			By("Verifying callback invoked")
+			Expect(removedCount).To(Equal(1))
+		})
+
+		DescribeTable("Gossip should update the memberlist correctly",
+			func(beforeMembers []encoding.Member, beforeFaultyMembers []encoding.Member, message gossip.Message, afterMembers []encoding.Member, afterFaultyMembers []encoding.Member) {
+				list := membership.NewList(
+					membership.WithUDPClient(&transport.Discard{}),
+					membership.WithTCPClient(&transport.Discard{}),
+					membership.WithRoundTripTimeTracker(roundtriptime.NewTracker()),
+				)
+				membership.DebugList(list).GetGossip().Clear()
+				membership.DebugList(list).SetMembers(beforeMembers)
+				membership.DebugList(list).SetFaultyMembers(beforeFaultyMembers)
+
+				buffer, _, err := message.AppendToBuffer(nil)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(list.DispatchDatagram(buffer)).To(Succeed())
+
+				if afterMembers == nil {
+					Expect(membership.DebugList(list).GetMembers()).To(BeEmpty())
+				} else {
+					Expect(membership.DebugList(list).GetMembers()).To(Equal(afterMembers))
+				}
+				if afterFaultyMembers == nil {
+					Expect(membership.DebugList(list).GetFaultyMembers()).To(BeEmpty())
+				} else {
+					Expect(membership.DebugList(list).GetFaultyMembers()).To(Equal(afterFaultyMembers))
+				}
+			},
+			Entry("Faulty should add faulty member",
+				nil,
+				nil,
+				&gossip.MessageFaulty{
+					Source:            TestAddress2,
+					Destination:       TestAddress,
+					IncarnationNumber: 2,
+				},
+				nil,
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateFaulty,
+						IncarnationNumber: 2,
+					},
+				},
+			),
+			Entry("Faulty with lower incarnation number should NOT overwrite alive",
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateAlive,
+						IncarnationNumber: 2,
+					},
+				},
+				nil,
+				&gossip.MessageFaulty{
+					Source:            TestAddress2,
+					Destination:       TestAddress,
+					IncarnationNumber: 1,
+				},
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateAlive,
+						IncarnationNumber: 2,
+					},
+				},
+				nil,
+			),
+			Entry("Faulty with same incarnation number should overwrite alive",
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateAlive,
+						IncarnationNumber: 2,
+					},
+				},
+				nil,
+				&gossip.MessageFaulty{
+					Source:            TestAddress2,
+					Destination:       TestAddress,
+					IncarnationNumber: 2,
+				},
+				nil,
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateFaulty,
+						IncarnationNumber: 2,
+					},
+				},
+			),
+			Entry("Faulty with bigger incarnation number should overwrite alive",
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateAlive,
+						IncarnationNumber: 2,
+					},
+				},
+				nil,
+				&gossip.MessageFaulty{
+					Source:            TestAddress2,
+					Destination:       TestAddress,
+					IncarnationNumber: 3,
+				},
+				nil,
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateFaulty,
+						IncarnationNumber: 3,
+					},
+				},
+			),
+
+			Entry("Faulty with lower incarnation number should NOT overwrite suspect",
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateSuspect,
+						IncarnationNumber: 2,
+					},
+				},
+				nil,
+				&gossip.MessageFaulty{
+					Source:            TestAddress2,
+					Destination:       TestAddress,
+					IncarnationNumber: 1,
+				},
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateSuspect,
+						IncarnationNumber: 2,
+					},
+				},
+				nil,
+			),
+			Entry("Faulty with same incarnation number should overwrite suspect",
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateSuspect,
+						IncarnationNumber: 2,
+					},
+				},
+				nil,
+				&gossip.MessageFaulty{
+					Source:            TestAddress2,
+					Destination:       TestAddress,
+					IncarnationNumber: 2,
+				},
+				nil,
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateFaulty,
+						IncarnationNumber: 2,
+					},
+				},
+			),
+			Entry("Faulty with bigger incarnation number should overwrite suspect",
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateSuspect,
+						IncarnationNumber: 2,
+					},
+				},
+				nil,
+				&gossip.MessageFaulty{
+					Source:            TestAddress2,
+					Destination:       TestAddress,
+					IncarnationNumber: 3,
+				},
+				nil,
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateFaulty,
+						IncarnationNumber: 3,
+					},
+				},
+			),
+
+			Entry("Faulty with lower incarnation number should NOT overwrite faulty",
+				nil,
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateFaulty,
+						IncarnationNumber: 2,
+					},
+				},
+				&gossip.MessageFaulty{
+					Source:            TestAddress2,
+					Destination:       TestAddress,
+					IncarnationNumber: 1,
+				},
+				nil,
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateFaulty,
+						IncarnationNumber: 2,
+					},
+				},
+			),
+			Entry("Faulty with same incarnation number should NOT overwrite faulty",
+				nil,
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateFaulty,
+						IncarnationNumber: 2,
+					},
+				},
+				&gossip.MessageFaulty{
+					Source:            TestAddress2,
+					Destination:       TestAddress,
+					IncarnationNumber: 2,
+				},
+				nil,
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateFaulty,
+						IncarnationNumber: 2,
+					},
+				},
+			),
+			Entry("Faulty with bigger incarnation number should NOT overwrite faulty",
+				nil,
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateFaulty,
+						IncarnationNumber: 2,
+					},
+				},
+				&gossip.MessageFaulty{
+					Source:            TestAddress2,
+					Destination:       TestAddress,
+					IncarnationNumber: 3,
+				},
+				nil,
+				[]encoding.Member{
+					{
+						Address:           TestAddress,
+						State:             encoding.MemberStateFaulty,
+						IncarnationNumber: 3,
+					},
+				},
+			),
+		)
 	})
 
 	Context("handleListRequest", func() {
@@ -1415,766 +2274,6 @@ var _ = Describe("List", func() {
 	})
 
 	// ========== OLD TESTS ==========
-
-	var list *membership.List
-
-	BeforeEach(func() {
-		list = membership.NewList(
-			membership.WithLogger(GinkgoLogr),
-			membership.WithUDPClient(&transport.Discard{}),
-			membership.WithTCPClient(&transport.Discard{}),
-			membership.WithAdvertisedAddress(TestAddress),
-			membership.WithRoundTripTimeTracker(roundtriptime.NewTracker()),
-		)
-		membership.DebugList(list).GetGossip().Clear()
-	})
-
-	It("should ignore alive about self", func() {
-		Expect(membership.DebugList(list).GetGossip().Len()).To(Equal(0))
-		message := gossip.MessageAlive{
-			Destination:       TestAddress,
-			IncarnationNumber: 0,
-		}
-		buffer, _, err := message.AppendToBuffer(nil)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(list.DispatchDatagram(buffer)).To(Succeed())
-
-		Expect(membership.DebugList(list).GetMembers()).To(BeEmpty())
-		Expect(membership.DebugList(list).GetFaultyMembers()).To(BeEmpty())
-		Expect(membership.DebugList(list).GetGossip().Len()).To(Equal(0))
-	})
-
-	It("should refute suspect about self", func() {
-		Expect(membership.DebugList(list).GetGossip().Len()).To(Equal(0))
-		message := gossip.MessageSuspect{
-			Source:            TestAddress2,
-			Destination:       TestAddress,
-			IncarnationNumber: 0,
-		}
-		buffer, _, err := message.AppendToBuffer(nil)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(list.DispatchDatagram(buffer)).To(Succeed())
-
-		Expect(membership.DebugList(list).GetMembers()).To(BeEmpty())
-		Expect(membership.DebugList(list).GetFaultyMembers()).To(BeEmpty())
-		Expect(membership.DebugList(list).GetGossip().Len()).To(Equal(1))
-		Expect(membership.DebugList(list).GetGossip().Get(0)).To(Equal(&gossip.MessageAlive{
-			Destination:       TestAddress,
-			IncarnationNumber: 1,
-		}))
-	})
-
-	It("should refute faulty about self", func() {
-		Expect(membership.DebugList(list).GetGossip().Len()).To(Equal(0))
-		message := gossip.MessageFaulty{
-			Source:            TestAddress2,
-			Destination:       TestAddress,
-			IncarnationNumber: 0,
-		}
-		buffer, _, err := message.AppendToBuffer(nil)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(list.DispatchDatagram(buffer)).To(Succeed())
-
-		Expect(membership.DebugList(list).GetMembers()).To(BeEmpty())
-		Expect(membership.DebugList(list).GetFaultyMembers()).To(BeEmpty())
-		Expect(membership.DebugList(list).GetGossip().Len()).To(Equal(1))
-		Expect(membership.DebugList(list).GetGossip().Get(0)).To(Equal(&gossip.MessageAlive{
-			Destination:       TestAddress,
-			IncarnationNumber: 1,
-		}))
-	})
-
-	DescribeTable("Gossip should update the memberlist correctly",
-		func(beforeMembers []encoding.Member, beforeFaultyMembers []encoding.Member, message gossip.Message, afterMembers []encoding.Member, afterFaultyMembers []encoding.Member) {
-			list := membership.NewList(
-				membership.WithUDPClient(&transport.Discard{}),
-				membership.WithTCPClient(&transport.Discard{}),
-				membership.WithRoundTripTimeTracker(roundtriptime.NewTracker()),
-			)
-			membership.DebugList(list).GetGossip().Clear()
-			membership.DebugList(list).SetMembers(beforeMembers)
-			membership.DebugList(list).SetFaultyMembers(beforeFaultyMembers)
-
-			buffer, _, err := message.AppendToBuffer(nil)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(list.DispatchDatagram(buffer)).To(Succeed())
-
-			if afterMembers == nil {
-				Expect(membership.DebugList(list).GetMembers()).To(BeEmpty())
-			} else {
-				Expect(membership.DebugList(list).GetMembers()).To(Equal(afterMembers))
-			}
-			if afterFaultyMembers == nil {
-				Expect(membership.DebugList(list).GetFaultyMembers()).To(BeEmpty())
-			} else {
-				Expect(membership.DebugList(list).GetFaultyMembers()).To(Equal(afterFaultyMembers))
-			}
-		},
-		Entry("Alive should add a member",
-			nil,
-			nil,
-			&gossip.MessageAlive{
-				Destination:       TestAddress,
-				IncarnationNumber: 2,
-			},
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateAlive,
-					IncarnationNumber: 2,
-				},
-			},
-			nil,
-		),
-		Entry("Alive with lower incarnation number should NOT overwrite alive",
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateAlive,
-					IncarnationNumber: 2,
-				},
-			},
-			nil,
-			&gossip.MessageAlive{
-				Destination:       TestAddress,
-				IncarnationNumber: 1,
-			},
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateAlive,
-					IncarnationNumber: 2,
-				},
-			},
-			nil,
-		),
-		Entry("Alive with same incarnation number should NOT overwrite alive",
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateAlive,
-					IncarnationNumber: 2,
-				},
-			},
-			nil,
-			&gossip.MessageAlive{
-				Destination:       TestAddress,
-				IncarnationNumber: 2,
-			},
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateAlive,
-					IncarnationNumber: 2,
-				},
-			},
-			nil,
-		),
-		Entry("Alive with bigger incarnation number should overwrite alive",
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateAlive,
-					IncarnationNumber: 2,
-				},
-			},
-			nil,
-			&gossip.MessageAlive{
-				Destination:       TestAddress,
-				IncarnationNumber: 3,
-			},
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateAlive,
-					IncarnationNumber: 3,
-				},
-			},
-			nil,
-		),
-		Entry("Suspect should add member",
-			nil,
-			nil,
-			&gossip.MessageSuspect{
-				Source:            TestAddress2,
-				Destination:       TestAddress,
-				IncarnationNumber: 2,
-			},
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateSuspect,
-					IncarnationNumber: 2,
-				},
-			},
-			nil,
-		),
-		Entry("Suspect with lower incarnation number should NOT overwrite alive",
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateAlive,
-					IncarnationNumber: 2,
-				},
-			},
-			nil,
-			&gossip.MessageSuspect{
-				Source:            TestAddress2,
-				Destination:       TestAddress,
-				IncarnationNumber: 1,
-			},
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateAlive,
-					IncarnationNumber: 2,
-				},
-			},
-			nil,
-		),
-		Entry("Suspect with same incarnation number should overwrite alive",
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateAlive,
-					IncarnationNumber: 2,
-				},
-			},
-			nil,
-			&gossip.MessageSuspect{
-				Source:            TestAddress2,
-				Destination:       TestAddress,
-				IncarnationNumber: 2,
-			},
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateSuspect,
-					IncarnationNumber: 2,
-				},
-			},
-			nil,
-		),
-		Entry("Suspect with bigger incarnation number should overwrite alive",
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateAlive,
-					IncarnationNumber: 2,
-				},
-			},
-			nil,
-			&gossip.MessageSuspect{
-				Source:            TestAddress2,
-				Destination:       TestAddress,
-				IncarnationNumber: 3,
-			},
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateSuspect,
-					IncarnationNumber: 3,
-				},
-			},
-			nil,
-		),
-		Entry("Faulty should add faulty member",
-			nil,
-			nil,
-			&gossip.MessageFaulty{
-				Source:            TestAddress2,
-				Destination:       TestAddress,
-				IncarnationNumber: 2,
-			},
-			nil,
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateFaulty,
-					IncarnationNumber: 2,
-				},
-			},
-		),
-		Entry("Faulty with lower incarnation number should NOT overwrite alive",
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateAlive,
-					IncarnationNumber: 2,
-				},
-			},
-			nil,
-			&gossip.MessageFaulty{
-				Source:            TestAddress2,
-				Destination:       TestAddress,
-				IncarnationNumber: 1,
-			},
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateAlive,
-					IncarnationNumber: 2,
-				},
-			},
-			nil,
-		),
-		Entry("Faulty with same incarnation number should overwrite alive",
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateAlive,
-					IncarnationNumber: 2,
-				},
-			},
-			nil,
-			&gossip.MessageFaulty{
-				Source:            TestAddress2,
-				Destination:       TestAddress,
-				IncarnationNumber: 2,
-			},
-			nil,
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateFaulty,
-					IncarnationNumber: 2,
-				},
-			},
-		),
-		Entry("Faulty with bigger incarnation number should overwrite alive",
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateAlive,
-					IncarnationNumber: 2,
-				},
-			},
-			nil,
-			&gossip.MessageFaulty{
-				Source:            TestAddress2,
-				Destination:       TestAddress,
-				IncarnationNumber: 3,
-			},
-			nil,
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateFaulty,
-					IncarnationNumber: 3,
-				},
-			},
-		),
-
-		Entry("Alive with lower incarnation number should NOT overwrite suspect",
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateSuspect,
-					IncarnationNumber: 2,
-				},
-			},
-			nil,
-			&gossip.MessageAlive{
-				Destination:       TestAddress,
-				IncarnationNumber: 1,
-			},
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateSuspect,
-					IncarnationNumber: 2,
-				},
-			},
-			nil,
-		),
-		Entry("Alive with same incarnation number should NOT overwrite suspect",
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateSuspect,
-					IncarnationNumber: 2,
-				},
-			},
-			nil,
-			&gossip.MessageAlive{
-				Destination:       TestAddress,
-				IncarnationNumber: 2,
-			},
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateSuspect,
-					IncarnationNumber: 2,
-				},
-			},
-			nil,
-		),
-		Entry("Alive with bigger incarnation number should overwrite suspect",
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateSuspect,
-					IncarnationNumber: 2,
-				},
-			},
-			nil,
-			&gossip.MessageAlive{
-				Destination:       TestAddress,
-				IncarnationNumber: 3,
-			},
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateAlive,
-					IncarnationNumber: 3,
-				},
-			},
-			nil,
-		),
-		Entry("Suspect with lower incarnation number should NOT overwrite suspect",
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateSuspect,
-					IncarnationNumber: 2,
-				},
-			},
-			nil,
-			&gossip.MessageSuspect{
-				Source:            TestAddress2,
-				Destination:       TestAddress,
-				IncarnationNumber: 1,
-			},
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateSuspect,
-					IncarnationNumber: 2,
-				},
-			},
-			nil,
-		),
-		Entry("Suspect with same incarnation number should NOT overwrite suspect",
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateSuspect,
-					IncarnationNumber: 2,
-				},
-			},
-			nil,
-			&gossip.MessageSuspect{
-				Source:            TestAddress2,
-				Destination:       TestAddress,
-				IncarnationNumber: 2,
-			},
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateSuspect,
-					IncarnationNumber: 2,
-				},
-			},
-			nil,
-		),
-		Entry("Suspect with bigger incarnation number should NOT overwrite suspect",
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateSuspect,
-					IncarnationNumber: 2,
-				},
-			},
-			nil,
-			&gossip.MessageSuspect{
-				Source:            TestAddress2,
-				Destination:       TestAddress,
-				IncarnationNumber: 3,
-			},
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateSuspect,
-					IncarnationNumber: 3,
-				},
-			},
-			nil,
-		),
-		Entry("Faulty with lower incarnation number should NOT overwrite suspect",
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateSuspect,
-					IncarnationNumber: 2,
-				},
-			},
-			nil,
-			&gossip.MessageFaulty{
-				Source:            TestAddress2,
-				Destination:       TestAddress,
-				IncarnationNumber: 1,
-			},
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateSuspect,
-					IncarnationNumber: 2,
-				},
-			},
-			nil,
-		),
-		Entry("Faulty with same incarnation number should overwrite suspect",
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateSuspect,
-					IncarnationNumber: 2,
-				},
-			},
-			nil,
-			&gossip.MessageFaulty{
-				Source:            TestAddress2,
-				Destination:       TestAddress,
-				IncarnationNumber: 2,
-			},
-			nil,
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateFaulty,
-					IncarnationNumber: 2,
-				},
-			},
-		),
-		Entry("Faulty with bigger incarnation number should overwrite suspect",
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateSuspect,
-					IncarnationNumber: 2,
-				},
-			},
-			nil,
-			&gossip.MessageFaulty{
-				Source:            TestAddress2,
-				Destination:       TestAddress,
-				IncarnationNumber: 3,
-			},
-			nil,
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateFaulty,
-					IncarnationNumber: 3,
-				},
-			},
-		),
-
-		Entry("Alive with lower incarnation number should NOT overwrite faulty",
-			nil,
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateFaulty,
-					IncarnationNumber: 2,
-				},
-			},
-			&gossip.MessageAlive{
-				Destination:       TestAddress,
-				IncarnationNumber: 1,
-			},
-			nil,
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateFaulty,
-					IncarnationNumber: 2,
-				},
-			},
-		),
-		Entry("Alive with same incarnation number should NOT overwrite faulty",
-			nil,
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateFaulty,
-					IncarnationNumber: 2,
-				},
-			},
-			&gossip.MessageAlive{
-				Destination:       TestAddress,
-				IncarnationNumber: 2,
-			},
-			nil,
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateFaulty,
-					IncarnationNumber: 2,
-				},
-			},
-		),
-		Entry("Alive with bigger incarnation number should overwrite faulty",
-			nil,
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateFaulty,
-					IncarnationNumber: 2,
-				},
-			},
-			&gossip.MessageAlive{
-				Destination:       TestAddress,
-				IncarnationNumber: 3,
-			},
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateAlive,
-					IncarnationNumber: 3,
-				},
-			},
-			nil,
-		),
-		Entry("Suspect with lower incarnation number should NOT overwrite faulty",
-			nil,
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateFaulty,
-					IncarnationNumber: 2,
-				},
-			},
-			&gossip.MessageSuspect{
-				Source:            TestAddress2,
-				Destination:       TestAddress,
-				IncarnationNumber: 1,
-			},
-			nil,
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateFaulty,
-					IncarnationNumber: 2,
-				},
-			},
-		),
-		Entry("Suspect with same incarnation number should NOT overwrite faulty",
-			nil,
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateFaulty,
-					IncarnationNumber: 2,
-				},
-			},
-			&gossip.MessageSuspect{
-				Source:            TestAddress2,
-				Destination:       TestAddress,
-				IncarnationNumber: 2,
-			},
-			nil,
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateFaulty,
-					IncarnationNumber: 2,
-				},
-			},
-		),
-		Entry("Suspect with bigger incarnation number should overwrite faulty",
-			nil,
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateFaulty,
-					IncarnationNumber: 2,
-				},
-			},
-			&gossip.MessageSuspect{
-				Source:            TestAddress2,
-				Destination:       TestAddress,
-				IncarnationNumber: 3,
-			},
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateSuspect,
-					IncarnationNumber: 3,
-				},
-			},
-			nil,
-		),
-		Entry("Faulty with lower incarnation number should NOT overwrite faulty",
-			nil,
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateFaulty,
-					IncarnationNumber: 2,
-				},
-			},
-			&gossip.MessageFaulty{
-				Source:            TestAddress2,
-				Destination:       TestAddress,
-				IncarnationNumber: 1,
-			},
-			nil,
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateFaulty,
-					IncarnationNumber: 2,
-				},
-			},
-		),
-		Entry("Faulty with same incarnation number should NOT overwrite faulty",
-			nil,
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateFaulty,
-					IncarnationNumber: 2,
-				},
-			},
-			&gossip.MessageFaulty{
-				Source:            TestAddress2,
-				Destination:       TestAddress,
-				IncarnationNumber: 2,
-			},
-			nil,
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateFaulty,
-					IncarnationNumber: 2,
-				},
-			},
-		),
-		Entry("Faulty with bigger incarnation number should NOT overwrite faulty",
-			nil,
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateFaulty,
-					IncarnationNumber: 2,
-				},
-			},
-			&gossip.MessageFaulty{
-				Source:            TestAddress2,
-				Destination:       TestAddress,
-				IncarnationNumber: 3,
-			},
-			nil,
-			[]encoding.Member{
-				{
-					Address:           TestAddress,
-					State:             encoding.MemberStateFaulty,
-					IncarnationNumber: 3,
-				},
-			},
-		),
-	)
 
 	// This test is flaky and therefore disabled.
 	PIt("newly joined member should propagate after a limited number of protocol periods", func() {

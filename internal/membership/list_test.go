@@ -2266,18 +2266,284 @@ var _ = Describe("List", func() {
 	})
 
 	Context("handleListRequest", func() {
+		It("should send list response with empty member list", func() {
+			var store transport.Store
+			list := newTestList(
+				membership.WithTCPClient(&store),
+			)
 
+			By("Sending list request")
+			sourceAddr := encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1)
+			requestMsg := membership.MessageListRequest{
+				Source: sourceAddr,
+			}
+			buffer, _, err := requestMsg.AppendToBuffer(nil)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(list.DispatchDatagram(buffer)).To(Succeed())
+
+			By("Verifying list response sent back to source")
+			Expect(store.Addresses).To(HaveLen(1))
+			Expect(store.Addresses[0]).To(Equal(sourceAddr))
+			Expect(store.Buffers).To(HaveLen(1))
+
+			By("Verifying response message format")
+			var responseMsg membership.MessageListResponse
+			Expect(responseMsg.FromBuffer(store.Buffers[0])).Error().ToNot(HaveOccurred())
+			Expect(responseMsg.Members).To(BeEmpty())
+		})
+
+		It("should send list response with alive members", func() {
+			var store transport.Store
+			bootstrapMembers := []encoding.Address{
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 2),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 3),
+			}
+			list := newTestList(
+				membership.WithTCPClient(&store),
+				membership.WithBootstrapMembers(bootstrapMembers),
+			)
+
+			By("Sending list request")
+			sourceAddr := encoding.NewAddress(net.IPv4(255, 255, 255, 255), 4)
+			requestMsg := membership.MessageListRequest{
+				Source: sourceAddr,
+			}
+			buffer, _, err := requestMsg.AppendToBuffer(nil)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(list.DispatchDatagram(buffer)).To(Succeed())
+
+			By("Verifying list response sent")
+			Expect(store.Addresses).To(HaveLen(1))
+			Expect(store.Addresses[0]).To(Equal(sourceAddr))
+
+			By("Verifying response contains all members")
+			var responseMsg membership.MessageListResponse
+			Expect(responseMsg.FromBuffer(store.Buffers[0])).Error().ToNot(HaveOccurred())
+			Expect(responseMsg.Members).To(HaveLen(3))
+			var responseAddresses []encoding.Address
+			for _, member := range responseMsg.Members {
+				responseAddresses = append(responseAddresses, member.Address)
+			}
+			Expect(responseAddresses).To(ConsistOf(bootstrapMembers))
+		})
+
+		It("should include suspect members in response", func() {
+			var store transport.Store
+			bootstrapMembers := []encoding.Address{
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 2),
+			}
+			list := newTestList(
+				membership.WithTCPClient(&store),
+				membership.WithBootstrapMembers(bootstrapMembers),
+			)
+
+			By("Marking one member as suspect")
+			Expect(list.DirectPing()).To(Succeed())
+			Expect(list.EndOfProtocolPeriod()).To(Succeed())
+
+			By("Sending list request")
+			store.Clear()
+			sourceAddr := encoding.NewAddress(net.IPv4(255, 255, 255, 255), 4)
+			requestMsg := membership.MessageListRequest{
+				Source: sourceAddr,
+			}
+			buffer, _, err := requestMsg.AppendToBuffer(nil)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(list.DispatchDatagram(buffer)).To(Succeed())
+
+			By("Verifying response contains both alive and suspect members")
+			var responseMsg membership.MessageListResponse
+			Expect(responseMsg.FromBuffer(store.Buffers[0])).Error().ToNot(HaveOccurred())
+			Expect(responseMsg.Members).To(HaveLen(2))
+			var responseAddresses []encoding.Address
+			for _, member := range responseMsg.Members {
+				responseAddresses = append(responseAddresses, member.Address)
+			}
+			Expect(responseAddresses).To(ConsistOf(bootstrapMembers))
+		})
+
+		It("should include faulty members in response", func() {
+			var store transport.Store
+			bootstrapMembers := []encoding.Address{
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 2),
+			}
+			list := newTestList(
+				membership.WithTCPClient(&store),
+				membership.WithBootstrapMembers(bootstrapMembers),
+				membership.WithSafetyFactor(0),
+			)
+
+			By("Marking one member as faulty")
+			Expect(list.DirectPing()).To(Succeed())
+			Expect(list.EndOfProtocolPeriod()).To(Succeed())
+			Expect(list.Len()).To(Equal(1))
+
+			By("Sending list request")
+			store.Clear()
+			requestMsg := membership.MessageListRequest{
+				Source: encoding.NewAddress(net.IPv4(255, 255, 255, 255), 4),
+			}
+			buffer, _, err := requestMsg.AppendToBuffer(nil)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(list.DispatchDatagram(buffer)).To(Succeed())
+
+			By("Verifying response contains falty member")
+			var responseMsg membership.MessageListResponse
+			Expect(responseMsg.FromBuffer(store.Buffers[0])).Error().ToNot(HaveOccurred())
+			Expect(responseMsg.Members).To(HaveLen(2))
+		})
+
+		It("should handle TCP send errors gracefully", func() {
+			list := newTestList(
+				membership.WithTCPClient(&transport.Error{}),
+			)
+
+			By("Sending list request")
+			requestMsg := membership.MessageListRequest{
+				Source: encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
+			}
+			buffer, _, err := requestMsg.AppendToBuffer(nil)
+			Expect(err).ToNot(HaveOccurred())
+
+			By("Expecting error but no panic")
+			Expect(list.DispatchDatagram(buffer)).ToNot(Succeed())
+		})
 	})
 
 	Context("handleListResponse", func() {
+		It("should add new members from response", func() {
+			list := newTestList()
 
+			By("Receiving list response with members")
+			responseMembers := []encoding.Member{
+				{
+					Address:           encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
+					State:             encoding.MemberStateAlive,
+					IncarnationNumber: 5,
+				},
+				{
+					Address:           encoding.NewAddress(net.IPv4(255, 255, 255, 255), 2),
+					State:             encoding.MemberStateSuspect,
+					IncarnationNumber: 3,
+				},
+				{
+					Address:           encoding.NewAddress(net.IPv4(255, 255, 255, 255), 3),
+					State:             encoding.MemberStateAlive,
+					IncarnationNumber: 0,
+				},
+			}
+			responseMsg := membership.MessageListResponse{
+				Source:  encoding.NewAddress(net.IPv4(255, 255, 255, 255), 4),
+				Members: responseMembers,
+			}
+			buffer, _, err := responseMsg.AppendToBuffer(nil)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(list.DispatchDatagram(buffer)).To(Succeed())
+
+			By("Verifying members added with correct state and incarnation")
+			Expect(list.Len()).To(Equal(3))
+			members := membership.DebugList(list).GetMembers()
+			Expect(members).To(HaveLen(3))
+			Expect(members).To(ContainElement(responseMembers[0]))
+			Expect(members).To(ContainElement(responseMembers[1]))
+			Expect(members).To(ContainElement(responseMembers[2]))
+		})
+
+		It("should handle empty member list", func() {
+			list := newTestList()
+
+			By("Receiving list response with no members")
+			responseMsg := membership.MessageListResponse{
+				Source:  encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
+				Members: []encoding.Member{},
+			}
+			buffer, _, err := responseMsg.AppendToBuffer(nil)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(list.DispatchDatagram(buffer)).To(Succeed())
+
+			By("Verifying no members added")
+			Expect(list.Len()).To(Equal(0))
+		})
+
+		It("should not add self to member list", func() {
+			list := newTestList()
+
+			By("Receiving list response containing self")
+			responseMembers := []encoding.Member{
+				{
+					Address:           TestAddress, // Self should be excluded
+					State:             encoding.MemberStateAlive,
+					IncarnationNumber: 2,
+				},
+				{
+					Address:           encoding.NewAddress(net.IPv4(255, 255, 255, 255), 2),
+					State:             encoding.MemberStateAlive,
+					IncarnationNumber: 0,
+				},
+				{
+					Address:           encoding.NewAddress(net.IPv4(255, 255, 255, 255), 3),
+					State:             encoding.MemberStateAlive,
+					IncarnationNumber: 0,
+				},
+			}
+			responseMsg := membership.MessageListResponse{
+				Source:  encoding.NewAddress(net.IPv4(255, 255, 255, 255), 4),
+				Members: responseMembers,
+			}
+			buffer, _, err := responseMsg.AppendToBuffer(nil)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(list.DispatchDatagram(buffer)).To(Succeed())
+
+			By("Verifying self excluded")
+			Expect(list.Len()).To(Equal(2))
+			members := membership.DebugList(list).GetMembers()
+			for _, member := range members {
+				Expect(member.Address).NotTo(Equal(TestAddress))
+			}
+		})
+
+		It("should not duplicate existing members", func() {
+			bootstrapMembers := []encoding.Address{
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 2),
+			}
+			list := newTestList(
+				membership.WithBootstrapMembers(bootstrapMembers),
+			)
+			Expect(list.Len()).To(Equal(2))
+
+			By("Receiving list response with overlapping members")
+			responseMembers := []encoding.Member{
+				{
+					Address:           encoding.NewAddress(net.IPv4(255, 255, 255, 255), 2), // Already exists
+					State:             encoding.MemberStateAlive,
+					IncarnationNumber: 0,
+				},
+				{
+					Address:           encoding.NewAddress(net.IPv4(255, 255, 255, 255), 3), // New
+					State:             encoding.MemberStateAlive,
+					IncarnationNumber: 0,
+				},
+			}
+			responseMsg := membership.MessageListResponse{
+				Source:  encoding.NewAddress(net.IPv4(255, 255, 255, 255), 4),
+				Members: responseMembers,
+			}
+			buffer, _, err := responseMsg.AppendToBuffer(nil)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(list.DispatchDatagram(buffer)).To(Succeed())
+
+			By("Verifying total member count")
+			Expect(list.Len()).To(Equal(3))
+		})
 	})
 
-	// ========== OLD TESTS ==========
-
-	// This test is flaky and therefore disabled.
-	PIt("newly joined member should propagate after a limited number of protocol periods", func() {
-		for memberCount := 1; memberCount <= 256; memberCount *= 2 {
+	It("newly joined member should propagate after a limited number of protocol periods", func() {
+		for memberCount := range utility.ClusterSize(2, 8, 512) {
+			By("Setting up the initial cluster")
 			memoryTransport := transport.NewMemory()
 			var lists []*membership.List
 			for i := range memberCount {
@@ -2300,9 +2566,10 @@ var _ = Describe("List", func() {
 				lists = append(lists, newList)
 			}
 			for _, list := range lists {
-				Expect(slices.Collect(list.All())).To(HaveLen(memberCount - 1))
+				Expect(list.Len()).To(Equal(memberCount - 1))
 			}
 
+			By("joining a new member")
 			address := encoding.NewAddress(net.IPv4(255, 255, 255, 255), math.MaxUint16)
 			options := []membership.Option{
 				membership.WithLogger(GinkgoLogr.WithValues("list", address)),
@@ -2318,36 +2585,52 @@ var _ = Describe("List", func() {
 			memoryTransport.AddTarget(address, newList)
 			lists = append(lists, newList)
 
-			// TODO: This is a bad test. It is so unreliable, think about something better.
-			periodCount := int(math.Ceil(utility.DisseminationPeriods(membership.DefaultConfig.SafetyFactor*16, len(lists))))
-			for i := range periodCount {
+			periodCount := int(math.Ceil(utility.DisseminationPeriods(membership.DefaultConfig.SafetyFactor, len(lists))))
+			for i := range max(periodCount, 128*len(lists)) {
 				GinkgoLogr.Info("> Start of protocol period", "period", i)
-				GinkgoLogr.Info("> Executing direct pings")
+				By("Executing direct ping")
 				for _, list := range lists {
 					Expect(list.DirectPing()).To(Succeed())
 				}
 				Expect(memoryTransport.FlushAllPendingSends()).To(Succeed())
 
-				GinkgoLogr.Info("> Executing indirect pings")
+				By("Executing indirect ping")
 				for _, list := range lists {
 					Expect(list.IndirectPing()).To(Succeed())
 				}
 				Expect(memoryTransport.FlushAllPendingSends()).To(Succeed())
 
-				GinkgoLogr.Info("> Executing end of protocol period")
+				if i > 0 && i%(periodCount*2) == 0 {
+					By("Executing request list")
+					for _, list := range lists {
+						Expect(list.RequestList()).To(Succeed())
+					}
+				}
+
+				By("Executing end of protocol period")
 				for _, list := range lists {
 					Expect(list.EndOfProtocolPeriod()).To(Succeed())
 				}
-			}
 
+				propagationDone := true
+				for _, list := range lists[:len(lists)-1] {
+					if list.Len() != memberCount {
+						propagationDone = false
+					}
+				}
+				if propagationDone {
+					// Exit early when we already have propagated to all.
+					break
+				}
+			}
 			for _, list := range lists[:len(lists)-1] {
-				Expect(slices.Collect(list.All())).To(HaveLen(memberCount))
+				Expect(list.Len()).To(Equal(memberCount))
 			}
 		}
 	})
 })
 
-func BenchmarkList_Get(b *testing.B) {
+func BenchmarkList_All(b *testing.B) {
 	executeFunctionWithMembers(b, func(list *membership.List) {
 		for range list.All() {
 		}
@@ -2381,6 +2664,14 @@ func BenchmarkList_EndOfProtocolPeriod(b *testing.B) {
 func BenchmarkList_RequestList(b *testing.B) {
 	executeFunctionWithMembers(b, func(list *membership.List) {
 		if err := list.RequestList(); err != nil {
+			b.Fatal(err)
+		}
+	})
+}
+
+func BenchmarkList_BroadcastShutdown(b *testing.B) {
+	executeFunctionWithMembers(b, func(list *membership.List) {
+		if err := list.BroadcastShutdown(); err != nil {
 			b.Fatal(err)
 		}
 	})
@@ -2439,6 +2730,7 @@ func BenchmarkList_handleAlive(b *testing.B) {
 func BenchmarkList_handleFaulty(b *testing.B) {
 	message := gossip.MessageFaulty{
 		Source:            BenchmarkAddress,
+		Destination:       TestAddress,
 		IncarnationNumber: 0,
 	}
 	dispatchDatagramWithMembers(b, &message)
@@ -2452,11 +2744,34 @@ func BenchmarkList_handleListRequest(b *testing.B) {
 }
 
 func BenchmarkList_handleListResponse(b *testing.B) {
-	message := membership.MessageListResponse{
-		Source:  TestAddress,
-		Members: nil, // TODO: We should setup the test in a way which allows us to send different member counts
+	for memberCount := range utility.ClusterSize(2, 8, 512) {
+		responseMembers := make([]encoding.Member, memberCount)
+		for i := range memberCount {
+			responseMembers[i] = encoding.Member{
+				Address:           encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1+i),
+				State:             encoding.MemberStateAlive,
+				IncarnationNumber: 0,
+			}
+		}
+
+		message := membership.MessageListResponse{
+			Source:  TestAddress,
+			Members: responseMembers,
+		}
+		buffer, _, err := message.AppendToBuffer(nil)
+		if err != nil {
+			b.Fatal(err)
+		}
+
+		b.Run(fmt.Sprintf("%d response members", memberCount), func(b *testing.B) {
+			for range b.N {
+				list := createListWithMembers(0)
+				if err := list.DispatchDatagram(buffer); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
 	}
-	dispatchDatagramWithMembers(b, &message)
 }
 
 func dispatchDatagramWithMembers(b *testing.B, message membership.Message) {
@@ -2472,7 +2787,7 @@ func dispatchDatagramWithMembers(b *testing.B, message membership.Message) {
 }
 
 func executeFunctionWithMembers(b *testing.B, f func(list *membership.List)) {
-	for memberCount := range utility.ClusterSize(1, 16, 16*1024) {
+	for memberCount := range utility.ClusterSize(2, 8, 512) {
 		list := createListWithMembers(memberCount)
 		b.Run(fmt.Sprintf("%d members", memberCount), func(b *testing.B) {
 			for b.Loop() {

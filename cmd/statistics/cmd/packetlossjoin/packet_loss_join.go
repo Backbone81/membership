@@ -16,7 +16,7 @@ import (
 // PacketLossJoin measures the cluster size during member joins with an unreliable transport.
 func PacketLossJoin(logger logr.Logger) error {
 	logger.Info("The cluster size during member joins with an unreliable transport.")
-	for memberCount := range utility.ClusterSize(17, 17, 17) {
+	for memberCount := range utility.ClusterSize(2, 8, 512) {
 		memoryTransport := transport.NewMemory()
 
 		if err := runProtocol(logger, memoryTransport, memberCount); err != nil {

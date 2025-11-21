@@ -5,6 +5,7 @@ import (
 	"net"
 	"testing"
 
+	"github.com/backbone81/membership/internal/utility"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -116,7 +117,7 @@ var _ = Describe("MessageListResponse", func() {
 })
 
 func BenchmarkMessageListResponse_AppendToBuffer(b *testing.B) {
-	for memberCount := 1; memberCount <= 16*1024; memberCount *= 2 {
+	for memberCount := range utility.ClusterSize(2, 8, 512) {
 		message := membership.MessageListResponse{
 			Source: encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 		}
@@ -139,7 +140,7 @@ func BenchmarkMessageListResponse_AppendToBuffer(b *testing.B) {
 }
 
 func BenchmarkMessageListResponse_FromBuffer(b *testing.B) {
-	for memberCount := 1; memberCount <= 16*1024; memberCount *= 2 {
+	for memberCount := range utility.ClusterSize(2, 8, 512) {
 		message := membership.MessageListResponse{
 			Source: encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 		}

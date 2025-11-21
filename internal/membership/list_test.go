@@ -1071,6 +1071,349 @@ var _ = Describe("List", func() {
 		})
 	})
 
+	Context("BroadcastShutdown", func() {
+		It("should not send shutdown when member list is empty", func() {
+			var store transport.Store
+			list := newTestList(
+				membership.WithUDPClient(&store),
+			)
+
+			By("Executing broadcast shutdown")
+			Expect(list.BroadcastShutdown()).To(Succeed())
+
+			By("Verifying no network messages sent")
+			Expect(store.Addresses).To(BeEmpty())
+		})
+
+		It("should send shutdown to single member", func() {
+			var store transport.Store
+			bootstrapMembers := []encoding.Address{
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
+			}
+			list := newTestList(
+				membership.WithUDPClient(&store),
+				membership.WithBootstrapMembers(bootstrapMembers),
+			)
+
+			By("Executing broadcast shutdown")
+			Expect(list.BroadcastShutdown()).To(Succeed())
+
+			By("Verifying network message sent")
+			Expect(store.Addresses).To(HaveLen(1))
+			Expect(store.Addresses[0]).To(Equal(bootstrapMembers[0]))
+			Expect(store.Buffers).To(HaveLen(1))
+		})
+
+		It("should send shutdown to multiple members based on ShutdownMemberCount", func() {
+			var store transport.Store
+			bootstrapMembers := []encoding.Address{
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 2),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 3),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 4),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 5),
+			}
+			list := newTestList(
+				membership.WithUDPClient(&store),
+				membership.WithBootstrapMembers(bootstrapMembers),
+				membership.WithShutdownMemberCount(3),
+			)
+
+			By("Executing broadcast shutdown")
+			Expect(list.BroadcastShutdown()).To(Succeed())
+
+			By("Verifying 3 shutdown messages sent")
+			Expect(store.Addresses).To(HaveLen(3))
+			Expect(store.Buffers).To(HaveLen(3))
+
+			By("Verifying all targets are different")
+			uniqueAddresses := make(map[encoding.Address]bool)
+			for _, addr := range store.Addresses {
+				uniqueAddresses[addr] = true
+			}
+			Expect(uniqueAddresses).To(HaveLen(3))
+		})
+	})
+
+	Context("handleDirectPing", func() {
+		It("should send direct ack when receiving direct ping", func() {
+			var store transport.Store
+			list := newTestList(
+				membership.WithUDPClient(&store),
+			)
+
+			By("Sending direct ping")
+			sourceAddr := encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1)
+			pingMsg := membership.MessageDirectPing{
+				Source:         sourceAddr,
+				SequenceNumber: 42,
+			}
+			buffer, _, err := pingMsg.AppendToBuffer(nil)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(list.DispatchDatagram(buffer)).To(Succeed())
+
+			By("Verifying direct ack sent back to source")
+			Expect(store.Addresses).To(HaveLen(1))
+			Expect(store.Addresses[0]).To(Equal(sourceAddr))
+			Expect(store.Buffers).To(HaveLen(1))
+
+			By("Verifying ack message format")
+			var ackMsg membership.MessageDirectAck
+			Expect(ackMsg.FromBuffer(store.Buffers[0])).Error().ToNot(HaveOccurred())
+			Expect(ackMsg.SequenceNumber).To(Equal(uint16(42)))
+		})
+
+		It("should handle UDP send errors gracefully", func() {
+			list := newTestList(
+				membership.WithUDPClient(&transport.Error{}),
+			)
+
+			By("Sending direct ping")
+			sourceAddr := encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1)
+			pingMsg := membership.MessageDirectPing{
+				Source:         sourceAddr,
+				SequenceNumber: 42,
+			}
+			buffer, _, err := pingMsg.AppendToBuffer(nil)
+			Expect(err).ToNot(HaveOccurred())
+
+			By("Expecting error but no panic")
+			Expect(list.DispatchDatagram(buffer)).ToNot(Succeed())
+		})
+	})
+
+	Context("handleDirectAck", func() {
+		It("should remove pending direct ping when receiving matching ack", func() {
+			var store transport.Store
+			bootstrapMembers := []encoding.Address{
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
+			}
+			list := newTestList(
+				membership.WithUDPClient(&store),
+				membership.WithBootstrapMembers(bootstrapMembers),
+			)
+
+			By("Executing direct ping")
+			Expect(list.DirectPing()).To(Succeed())
+			pendingPings := membership.DebugList(list).GetPendingDirectPings()
+			Expect(pendingPings).To(HaveLen(1))
+
+			targetAddr := pendingPings[0].Destination
+			seqNum := pendingPings[0].MessageDirectPing.SequenceNumber
+
+			By("Sending direct ack")
+			ackMsg := membership.MessageDirectAck{
+				Source:         targetAddr,
+				SequenceNumber: seqNum,
+			}
+			buffer, _, err := ackMsg.AppendToBuffer(nil)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(list.DispatchDatagram(buffer)).To(Succeed())
+
+			By("Verifying pending ping removed")
+			Expect(membership.DebugList(list).GetPendingDirectPings()).To(BeEmpty())
+		})
+
+		It("should ignore ack with non-matching sequence number", func() {
+			var store transport.Store
+			bootstrapMembers := []encoding.Address{
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
+			}
+			list := newTestList(
+				membership.WithUDPClient(&store),
+				membership.WithBootstrapMembers(bootstrapMembers),
+			)
+
+			By("Executing direct ping")
+			Expect(list.DirectPing()).To(Succeed())
+			pendingPings := membership.DebugList(list).GetPendingDirectPings()
+			Expect(pendingPings).To(HaveLen(1))
+
+			By("Sending ack with wrong sequence number")
+			ackMsg := membership.MessageDirectAck{
+				Source:         pendingPings[0].Destination,
+				SequenceNumber: 9999,
+			}
+			buffer, _, err := ackMsg.AppendToBuffer(nil)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(list.DispatchDatagram(buffer)).To(Succeed())
+
+			By("Verifying pending ping still present")
+			Expect(membership.DebugList(list).GetPendingDirectPings()).To(HaveLen(1))
+		})
+
+		It("should handle ack when no pending pings exist", func() {
+			list := newTestList()
+
+			By("Sending ack without any pending pings")
+			ackMsg := membership.MessageDirectAck{
+				Source:         encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
+				SequenceNumber: 42,
+			}
+			buffer, _, err := ackMsg.AppendToBuffer(nil)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(list.DispatchDatagram(buffer)).To(Succeed())
+		})
+	})
+
+	Context("handleIndirectPing", func() {
+		It("should send direct ping to target when receiving indirect ping request", func() {
+			var store transport.Store
+			list := newTestList(
+				membership.WithUDPClient(&store),
+			)
+
+			By("Sending indirect ping request")
+			sourceAddr := encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1)
+			targetAddr := encoding.NewAddress(net.IPv4(255, 255, 255, 255), 2)
+			indirectPingMsg := membership.MessageIndirectPing{
+				Source:         sourceAddr,
+				Destination:    targetAddr,
+				SequenceNumber: 42,
+			}
+			buffer, _, err := indirectPingMsg.AppendToBuffer(nil)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(list.DispatchDatagram(buffer)).To(Succeed())
+
+			By("Verifying direct ping sent to target")
+			Expect(store.Addresses).To(HaveLen(1))
+			Expect(store.Addresses[0]).To(Equal(targetAddr))
+			Expect(store.Buffers).To(HaveLen(1))
+
+			By("Verifying direct ping message format")
+			var directPingMsg membership.MessageDirectPing
+			Expect(directPingMsg.FromBuffer(store.Buffers[0])).Error().ToNot(HaveOccurred())
+		})
+
+		It("should handle UDP send errors gracefully", func() {
+			list := newTestList(
+				membership.WithUDPClient(&transport.Error{}),
+			)
+
+			By("Sending indirect ping request")
+			sourceAddr := encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1)
+			targetAddr := encoding.NewAddress(net.IPv4(255, 255, 255, 255), 2)
+			indirectPingMsg := membership.MessageIndirectPing{
+				Source:         sourceAddr,
+				Destination:    targetAddr,
+				SequenceNumber: 42,
+			}
+			buffer, _, err := indirectPingMsg.AppendToBuffer(nil)
+			Expect(err).ToNot(HaveOccurred())
+
+			By("Expecting error but no panic")
+			Expect(list.DispatchDatagram(buffer)).ToNot(Succeed())
+		})
+	})
+
+	Context("handleIndirectAck", func() {
+		It("should remove pending direct ping and indirect ping when receiving matching ack", func() {
+			var store transport.Store
+			bootstrapMembers := []encoding.Address{
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 2),
+			}
+			list := newTestList(
+				membership.WithUDPClient(&store),
+				membership.WithBootstrapMembers(bootstrapMembers),
+			)
+
+			By("Executing direct ping")
+			Expect(list.DirectPing()).To(Succeed())
+			pendingDirectPings := membership.DebugList(list).GetPendingDirectPings()
+			Expect(pendingDirectPings).To(HaveLen(1))
+
+			By("Executing indirect ping")
+			Expect(list.IndirectPing()).To(Succeed())
+			pendingIndirectPings := membership.DebugList(list).GetPendingIndirectPings()
+			Expect(pendingIndirectPings).To(HaveLen(1))
+
+			targetAddr := pendingDirectPings[0].Destination
+			seqNum := pendingDirectPings[0].MessageDirectPing.SequenceNumber
+
+			By("Sending indirect ack")
+			ackMsg := membership.MessageIndirectAck{
+				Source:         targetAddr,
+				SequenceNumber: seqNum,
+			}
+			buffer, _, err := ackMsg.AppendToBuffer(nil)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(list.DispatchDatagram(buffer)).To(Succeed())
+
+			By("Verifying both pending pings removed")
+			Expect(membership.DebugList(list).GetPendingDirectPings()).To(BeEmpty())
+			Expect(membership.DebugList(list).GetPendingIndirectPings()).To(BeEmpty())
+		})
+
+		It("should ignore ack with non-matching sequence number", func() {
+			var store transport.Store
+			bootstrapMembers := []encoding.Address{
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 2),
+			}
+			list := newTestList(
+				membership.WithUDPClient(&store),
+				membership.WithBootstrapMembers(bootstrapMembers),
+			)
+
+			By("Executing direct ping")
+			Expect(list.DirectPing()).To(Succeed())
+			pendingDirectPings := membership.DebugList(list).GetPendingDirectPings()
+			Expect(pendingDirectPings).To(HaveLen(1))
+
+			By("Executing indirect ping")
+			Expect(list.IndirectPing()).To(Succeed())
+			pendingIndirectPings := membership.DebugList(list).GetPendingIndirectPings()
+			Expect(pendingIndirectPings).To(HaveLen(1))
+
+			By("Sending ack with wrong sequence number")
+			ackMsg := membership.MessageIndirectAck{
+				Source:         pendingDirectPings[0].Destination,
+				SequenceNumber: 9999,
+			}
+			buffer, _, err := ackMsg.AppendToBuffer(nil)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(list.DispatchDatagram(buffer)).To(Succeed())
+
+			By("Verifying pending pings still present")
+			Expect(membership.DebugList(list).GetPendingDirectPings()).To(HaveLen(1))
+			Expect(membership.DebugList(list).GetPendingIndirectPings()).To(HaveLen(1))
+		})
+
+		It("should handle ack when no pending pings exist", func() {
+			list := newTestList()
+
+			By("Sending ack without any pending pings")
+			ackMsg := membership.MessageIndirectAck{
+				Source:         encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
+				SequenceNumber: 42,
+			}
+			buffer, _, err := ackMsg.AppendToBuffer(nil)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(list.DispatchDatagram(buffer)).To(Succeed())
+		})
+	})
+
+	Context("handleSuspect", func() {
+
+	})
+
+	Context("handleAlive", func() {
+
+	})
+
+	Context("handleFaulty", func() {
+
+	})
+
+	Context("handleListRequest", func() {
+
+	})
+
+	Context("handleListResponse", func() {
+
+	})
+
 	// ========== OLD TESTS ==========
 
 	var list *membership.List

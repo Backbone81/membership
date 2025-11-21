@@ -337,6 +337,9 @@ func (l *List) IndirectPing() error {
 // have minimal memory consumption even for large member lists.
 // WARNING: The member slice returned by this method is only valid until the next call to pickRandomMembers or
 // pickRandomMembersWithout. Create a copy if you need to retain the result longer.
+// TODO: We might think about replacing the returned slice with a range over function. This could free us from keeping
+// the return slice around to avoid memory allocations. pickRandomMembersWithout can the also be implemented as a filter
+// over that range over function. The swap map still needs to remain, but everything else would be simpler.
 func (l *List) pickRandomMembers(count int) []*encoding.Member {
 	count = min(count, len(l.members))
 	if count == 0 {

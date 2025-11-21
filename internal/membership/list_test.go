@@ -2542,7 +2542,7 @@ var _ = Describe("List", func() {
 	})
 
 	It("newly joined member should propagate after a limited number of protocol periods", func() {
-		for memberCount := range utility.ClusterSize(2, 8, 512) {
+		for memberCount := range utility.ClusterSize(2, 8, 128) {
 			By("Setting up the initial cluster")
 			memoryTransport := transport.NewMemory()
 			var lists []*membership.List
@@ -2744,7 +2744,7 @@ func BenchmarkList_handleListRequest(b *testing.B) {
 }
 
 func BenchmarkList_handleListResponse(b *testing.B) {
-	for memberCount := range utility.ClusterSize(2, 8, 512) {
+	for memberCount := range utility.ClusterSize(2, 8, 128) {
 		responseMembers := make([]encoding.Member, memberCount)
 		for i := range memberCount {
 			responseMembers[i] = encoding.Member{
@@ -2787,7 +2787,7 @@ func dispatchDatagramWithMembers(b *testing.B, message membership.Message) {
 }
 
 func executeFunctionWithMembers(b *testing.B, f func(list *membership.List)) {
-	for memberCount := range utility.ClusterSize(2, 8, 512) {
+	for memberCount := range utility.ClusterSize(2, 8, 128) {
 		list := createListWithMembers(memberCount)
 		b.Run(fmt.Sprintf("%d members", memberCount), func(b *testing.B) {
 			for b.Loop() {

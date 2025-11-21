@@ -17,7 +17,7 @@ import (
 // FirstFailureDetection measures the time in protocol periods in which a failed member is detected by any other member.
 func FirstFailureDetection(logger logr.Logger) error {
 	logger.Info("The number of protocol periods between a member failure and its first detection at some non-faulty member.")
-	for memberCount := range utility.ClusterSize(2, 8, 512) {
+	for memberCount := range utility.ClusterSize(2, 8, 128) {
 		memoryTransport := transport.NewMemory()
 
 		lists, err := buildCluster(memberCount, memoryTransport)

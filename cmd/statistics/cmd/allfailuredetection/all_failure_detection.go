@@ -20,7 +20,7 @@ import (
 // Either by ping other by gossip.
 func AllFailureDetection(logger logr.Logger) error {
 	logger.Info("The number of protocol periods between a member failure and its propagation to all non-faulty member.")
-	for memberCount := range utility.ClusterSize(2, 8, 512) {
+	for memberCount := range utility.ClusterSize(2, 8, 128) {
 		memoryTransport := transport.NewMemory()
 
 		lists, err := buildCluster(memberCount, memoryTransport)

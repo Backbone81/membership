@@ -117,7 +117,7 @@ var _ = Describe("MessageListResponse", func() {
 })
 
 func BenchmarkMessageListResponse_AppendToBuffer(b *testing.B) {
-	for memberCount := range utility.ClusterSize(2, 8, 512) {
+	for memberCount := range utility.ClusterSize(2, 8, 128) {
 		message := membership.MessageListResponse{
 			Source: encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 		}
@@ -140,7 +140,7 @@ func BenchmarkMessageListResponse_AppendToBuffer(b *testing.B) {
 }
 
 func BenchmarkMessageListResponse_FromBuffer(b *testing.B) {
-	for memberCount := range utility.ClusterSize(2, 8, 512) {
+	for memberCount := range utility.ClusterSize(2, 8, 128) {
 		message := membership.MessageListResponse{
 			Source: encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 		}

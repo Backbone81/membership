@@ -1356,20 +1356,23 @@ var _ = Describe("List", func() {
 	})
 
 	Context("handleAlive", func() {
-		It("should ignore alive about self", func() {
+		It("should refute alive about self", func() {
 			list := newTestList()
 			debugList := membership.DebugList(list)
 			debugList.GetGossip().Clear()
 
-			By("Receiving alive message")
 			Expect(DispatchDatagram(list, &gossip.MessageAlive{
 				Destination:       TestAddress,
-				IncarnationNumber: 0,
+				IncarnationNumber: 55,
 			})).To(Succeed())
 
 			Expect(debugList.GetMembers()).To(BeEmpty())
 			Expect(debugList.GetFaultyMembers()).To(BeEmpty())
-			Expect(debugList.GetGossip().Len()).To(Equal(0))
+			Expect(debugList.GetGossip().Len()).To(Equal(1))
+			Expect(debugList.GetGossip().Get(0)).To(Equal(&gossip.MessageAlive{
+				Destination:       TestAddress,
+				IncarnationNumber: 56,
+			}))
 		})
 
 		It("should invoke member added callback when adding new member", func() {
@@ -1644,7 +1647,7 @@ var _ = Describe("List", func() {
 			Expect(DispatchDatagram(list, &gossip.MessageSuspect{
 				Source:            TestAddress2,
 				Destination:       TestAddress,
-				IncarnationNumber: 0,
+				IncarnationNumber: 55,
 			})).To(Succeed())
 
 			Expect(debugList.GetMembers()).To(BeEmpty())
@@ -1652,7 +1655,7 @@ var _ = Describe("List", func() {
 			Expect(debugList.GetGossip().Len()).To(Equal(1))
 			Expect(debugList.GetGossip().Get(0)).To(Equal(&gossip.MessageAlive{
 				Destination:       TestAddress,
-				IncarnationNumber: 1,
+				IncarnationNumber: 56,
 			}))
 		})
 
@@ -1937,7 +1940,7 @@ var _ = Describe("List", func() {
 			Expect(DispatchDatagram(list, &gossip.MessageFaulty{
 				Source:            TestAddress2,
 				Destination:       TestAddress,
-				IncarnationNumber: 0,
+				IncarnationNumber: 55,
 			})).To(Succeed())
 
 			Expect(debugList.GetMembers()).To(BeEmpty())
@@ -1945,7 +1948,7 @@ var _ = Describe("List", func() {
 			Expect(debugList.GetGossip().Len()).To(Equal(1))
 			Expect(debugList.GetGossip().Get(0)).To(Equal(&gossip.MessageAlive{
 				Destination:       TestAddress,
-				IncarnationNumber: 1,
+				IncarnationNumber: 56,
 			}))
 		})
 

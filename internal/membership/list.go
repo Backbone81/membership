@@ -1080,7 +1080,29 @@ func (l *List) handleAlive(alive gossip.MessageAlive) {
 }
 
 func (l *List) handleAliveForSelf(alive gossip.MessageAlive) bool {
-	return alive.Destination.Equal(l.self)
+	if !alive.Destination.Equal(l.self) {
+		return false
+	}
+
+	if utility.IncarnationLessThan(alive.IncarnationNumber, l.incarnationNumber) {
+		// We have a more up-to-date state than the gossip. Nothing to do.
+		return true
+	}
+
+	// We need to update the incarnation number about ourselves. Add a new alive message to gossip.
+	// Also make sure that our incarnation number is bigger than before.
+	l.incarnationNumber = utility.IncarnationMax(l.incarnationNumber+1, alive.IncarnationNumber+1)
+	l.gossipQueue.Add(&gossip.MessageAlive{
+		Destination:       l.self,
+		IncarnationNumber: l.incarnationNumber,
+	})
+
+	l.logger.Info(
+		"Refuted gossip about being alive",
+		"incarnation-number", l.incarnationNumber,
+	)
+	MemberStateTransitionsTotal.WithLabelValues("refuted_alive").Inc()
+	return true
 }
 
 func (l *List) handleAliveForFaultyMembers(alive gossip.MessageAlive) bool {

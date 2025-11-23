@@ -54,7 +54,8 @@ var rootCmd = &cobra.Command{
 				)
 			}
 			newList := membership.NewList(options...)
-			membership.DebugList(newList).ClearGossip()
+			newDebugList := membership.DebugList(newList)
+			newDebugList.ClearGossip()
 			memoryTransport.AddTarget(address, newList)
 			lists = append(lists, newList)
 		}
@@ -127,7 +128,8 @@ func dumpClusterState(lists []*membership.List, protocolPeriod int) error {
 	defer file.Close()
 
 	for _, list := range lists {
-		if err := membership.DebugList(list).WriteInternalDebugState(file); err != nil {
+		debugList := membership.DebugList(list)
+		if err := debugList.WriteInternalDebugState(file); err != nil {
 			return err
 		}
 		if _, err := file.WriteString("\n"); err != nil {

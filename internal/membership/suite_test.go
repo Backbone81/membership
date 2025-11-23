@@ -5,6 +5,7 @@ import (
 	"net"
 	"testing"
 
+	"github.com/backbone81/membership/internal/membership"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -24,4 +25,10 @@ var (
 func TestSuite(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Membership Suite")
+}
+
+func DispatchDatagram(list *membership.List, message membership.Message) error {
+	buffer, _, err := message.AppendToBuffer(nil)
+	Expect(err).ToNot(HaveOccurred())
+	return list.DispatchDatagram(buffer)
 }

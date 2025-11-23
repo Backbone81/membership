@@ -22,12 +22,13 @@ var _ = Describe("List", func() {
 	Context("NewList", func() {
 		It("should create a list with default configuration", func() {
 			list := newTestList()
+			debugList := membership.DebugList(list)
 
 			Expect(list).NotTo(BeNil())
 			Expect(list.Len()).To(Equal(0))
 			Expect(slices.Collect(list.All())).To(BeEmpty())
-			Expect(membership.DebugList(list).GetMembers()).To(BeEmpty())
-			Expect(membership.DebugList(list).GetFaultyMembers()).To(BeEmpty())
+			Expect(debugList.GetMembers()).To(BeEmpty())
+			Expect(debugList.GetFaultyMembers()).To(BeEmpty())
 		})
 
 		It("should apply WithAdvertisedAddress option", func() {
@@ -140,9 +141,10 @@ var _ = Describe("List", func() {
 			list := newTestList(
 				membership.WithBootstrapMembers(bootstrap),
 			)
+			debugList := membership.DebugList(list)
 
 			Expect(list.Len()).To(Equal(3))
-			members := membership.DebugList(list).GetMembers()
+			members := debugList.GetMembers()
 			Expect(members).To(HaveLen(3))
 
 			for i, member := range members {
@@ -164,9 +166,10 @@ var _ = Describe("List", func() {
 				membership.WithAdvertisedAddress(self),
 				membership.WithBootstrapMembers(bootstrap),
 			)
+			debugList := membership.DebugList(list)
 
 			Expect(list.Len()).To(Equal(2), "Self should be excluded from member list")
-			members := membership.DebugList(list).GetMembers()
+			members := debugList.GetMembers()
 
 			for _, member := range members {
 				Expect(member.Address).NotTo(Equal(self))
@@ -242,11 +245,12 @@ var _ = Describe("List", func() {
 
 		It("should initialize with gossip about self", func() {
 			list := newTestList()
+			debugList := membership.DebugList(list)
 
-			gossipQueue := membership.DebugList(list).GetGossip()
+			gossipQueue := debugList.GetGossip()
 			Expect(gossipQueue.Len()).To(Equal(1))
 
-			msg := membership.DebugList(list).GetGossip().Get(0)
+			msg := debugList.GetGossip().Get(0)
 			aliveMsg, ok := msg.(*gossip.MessageAlive)
 			Expect(ok).To(BeTrue())
 			Expect(aliveMsg.Destination).To(Equal(TestAddress))
@@ -345,15 +349,11 @@ var _ = Describe("List", func() {
 			Expect(list.Len()).To(Equal(2))
 
 			// Mark as faulty
-			faultyMsg := gossip.MessageFaulty{
+			Expect(DispatchDatagram(list, &gossip.MessageFaulty{
 				Source:            TestAddress,
 				Destination:       faultyAddr,
 				IncarnationNumber: 0,
-			}
-			buffer, _, err := faultyMsg.AppendToBuffer(nil)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(list.DispatchDatagram(buffer)).To(Succeed())
-
+			})).To(Succeed())
 			Expect(list.Len()).To(Equal(1))
 
 			// Should only iterate over alive member
@@ -372,15 +372,11 @@ var _ = Describe("List", func() {
 			)
 
 			// Mark one as suspect
-			suspectMsg := gossip.MessageSuspect{
+			Expect(DispatchDatagram(list, &gossip.MessageSuspect{
 				Source:            TestAddress,
 				Destination:       suspectAddr,
 				IncarnationNumber: 0,
-			}
-			buffer, _, err := suspectMsg.AppendToBuffer(nil)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(list.DispatchDatagram(buffer)).To(Succeed())
-
+			})).To(Succeed())
 			Expect(list.Len()).To(Equal(2))
 
 			// Should iterate over both alive and suspect
@@ -397,11 +393,12 @@ var _ = Describe("List", func() {
 			list := newTestList(
 				membership.WithUDPClient(&store),
 			)
+			debugList := membership.DebugList(list)
 
 			By("Executing 1 direct ping")
 			Expect(list.DirectPing()).To(Succeed())
 			Expect(store.Addresses).To(BeEmpty())
-			pendingPings := membership.DebugList(list).GetPendingDirectPings()
+			pendingPings := debugList.GetPendingDirectPings()
 			Expect(pendingPings).To(HaveLen(0))
 		})
 
@@ -414,13 +411,14 @@ var _ = Describe("List", func() {
 				membership.WithUDPClient(&store),
 				membership.WithBootstrapMembers(bootstrapMembers),
 			)
+			debugList := membership.DebugList(list)
 
 			By("Executing 1 direct ping")
 			Expect(list.DirectPing()).To(Succeed())
 			Expect(store.Addresses).To(HaveLen(1))
 			Expect(store.Addresses[0]).To(Equal(bootstrapMembers[0]))
 			Expect(store.Buffers).To(HaveLen(1))
-			pendingPings := membership.DebugList(list).GetPendingDirectPings()
+			pendingPings := debugList.GetPendingDirectPings()
 			Expect(pendingPings).To(HaveLen(1))
 		})
 
@@ -438,12 +436,13 @@ var _ = Describe("List", func() {
 				membership.WithBootstrapMembers(bootstrapMembers),
 				membership.WithDirectPingMemberCount(3),
 			)
+			debugList := membership.DebugList(list)
 
 			By("Executing 3 direct pings")
 			Expect(list.DirectPing()).To(Succeed())
 			Expect(store.Addresses).To(HaveLen(3))
 			Expect(store.Buffers).To(HaveLen(3))
-			pendingPings := membership.DebugList(list).GetPendingDirectPings()
+			pendingPings := debugList.GetPendingDirectPings()
 			Expect(pendingPings).To(HaveLen(3))
 		})
 
@@ -526,12 +525,13 @@ var _ = Describe("List", func() {
 				membership.WithBootstrapMembers(bootstrapMembers),
 				membership.WithDirectPingMemberCount(5), // More than 2 members
 			)
+			debugList := membership.DebugList(list)
 
 			By("Executing 2 direct pings")
 			Expect(list.DirectPing()).To(Succeed())
 			Expect(store.Addresses).To(HaveLen(2))
 			Expect(store.Buffers).To(HaveLen(2))
-			pendingPings := membership.DebugList(list).GetPendingDirectPings()
+			pendingPings := debugList.GetPendingDirectPings()
 			Expect(pendingPings).To(HaveLen(2))
 		})
 
@@ -544,10 +544,11 @@ var _ = Describe("List", func() {
 				membership.WithUDPClient(&store),
 				membership.WithBootstrapMembers(bootstrapMembers),
 			)
+			debugList := membership.DebugList(list)
 
 			By("Executing 1 direct ping")
 			Expect(list.DirectPing()).To(Succeed())
-			pendingPings := membership.DebugList(list).GetPendingDirectPings()
+			pendingPings := debugList.GetPendingDirectPings()
 			Expect(pendingPings).To(HaveLen(1))
 			Expect(pendingPings[0].Destination).To(Equal(bootstrapMembers[0]))
 		})
@@ -592,14 +593,11 @@ var _ = Describe("List", func() {
 			)
 
 			By("Marking one member as suspect")
-			suspectMsg := gossip.MessageSuspect{
+			Expect(DispatchDatagram(list, &gossip.MessageSuspect{
 				Source:            TestAddress,
 				Destination:       bootstrapMembers[1],
 				IncarnationNumber: 0,
-			}
-			buffer, _, err := suspectMsg.AppendToBuffer(nil)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(list.DispatchDatagram(buffer)).To(Succeed())
+			})).To(Succeed())
 
 			By("Executing 1 direct ping")
 			store.Clear()
@@ -653,10 +651,11 @@ var _ = Describe("List", func() {
 				membership.WithUDPClient(&store),
 				membership.WithBootstrapMembers(bootstrapMembers),
 			)
+			debugList := membership.DebugList(list)
 
 			By("Executing 1 direct ping")
 			Expect(list.DirectPing()).To(Succeed())
-			pendingDirectPing := membership.DebugList(list).GetPendingDirectPings()[0]
+			pendingDirectPing := debugList.GetPendingDirectPings()[0]
 
 			By("Executing 1 indirect ping")
 			store.Clear()
@@ -707,10 +706,11 @@ var _ = Describe("List", func() {
 				membership.WithBootstrapMembers(bootstrapMembers),
 				membership.WithIndirectPingMemberCount(2),
 			)
+			debugList := membership.DebugList(list)
 
 			By("Executing 1 direct ping")
 			Expect(list.DirectPing()).To(Succeed())
-			pendingDirectPings := membership.DebugList(list).GetPendingDirectPings()
+			pendingDirectPings := debugList.GetPendingDirectPings()
 			Expect(pendingDirectPings).To(HaveLen(1))
 
 			By("Executing 1 indirect ping when 2 were requested")
@@ -718,7 +718,7 @@ var _ = Describe("List", func() {
 			Expect(list.IndirectPing()).To(Succeed())
 			Expect(store.Addresses).To(HaveLen(1))
 			Expect(store.Addresses[0]).NotTo(Equal(pendingDirectPings[0].Destination))
-			pendingIndirectPings := membership.DebugList(list).GetPendingIndirectPings()
+			pendingIndirectPings := debugList.GetPendingIndirectPings()
 			Expect(pendingIndirectPings).To(HaveLen(1))
 		})
 
@@ -735,17 +735,18 @@ var _ = Describe("List", func() {
 				membership.WithBootstrapMembers(bootstrapMembers),
 				membership.WithDirectPingMemberCount(2),
 			)
+			debugList := membership.DebugList(list)
 
 			By("Executing 2 direct pings")
 			Expect(list.DirectPing()).To(Succeed())
-			pendingDirectPings := membership.DebugList(list).GetPendingDirectPings()
+			pendingDirectPings := debugList.GetPendingDirectPings()
 			Expect(pendingDirectPings).To(HaveLen(2))
 
 			By("Executing 6 indirect pings")
 			store.Clear()
 			Expect(list.IndirectPing()).To(Succeed())
 			Expect(store.Addresses).To(HaveLen(6))
-			pendingIndirectPings := membership.DebugList(list).GetPendingIndirectPings()
+			pendingIndirectPings := debugList.GetPendingIndirectPings()
 			Expect(pendingIndirectPings).To(HaveLen(2))
 		})
 
@@ -779,17 +780,18 @@ var _ = Describe("List", func() {
 				membership.WithUDPClient(&store),
 				membership.WithBootstrapMembers(bootstrapMembers),
 			)
+			debugList := membership.DebugList(list)
 
 			By("Executing 1 direct ping")
 			Expect(list.DirectPing()).To(Succeed())
-			pendingDirectPing := membership.DebugList(list).GetPendingDirectPings()
+			pendingDirectPing := debugList.GetPendingDirectPings()
 			Expect(pendingDirectPing).To(HaveLen(1))
 
 			By("Executing 1 indirect ping")
 			store.Clear()
 			Expect(list.IndirectPing()).To(Succeed())
 			Expect(store.Addresses).To(HaveLen(1))
-			pendingIndirectPings := membership.DebugList(list).GetPendingIndirectPings()
+			pendingIndirectPings := debugList.GetPendingIndirectPings()
 			Expect(pendingIndirectPings).To(HaveLen(1))
 			Expect(pendingIndirectPings[0].MessageIndirectPing.Destination).To(Equal(pendingDirectPing[0].Destination))
 		})
@@ -828,6 +830,7 @@ var _ = Describe("List", func() {
 				membership.WithUDPClient(&transport.Discard{}),
 				membership.WithBootstrapMembers(bootstrapMembers),
 			)
+			debugList := membership.DebugList(list)
 
 			By("Executing 1 direct ping")
 			Expect(list.DirectPing()).To(Succeed())
@@ -835,7 +838,7 @@ var _ = Describe("List", func() {
 			By("Executing 1 indirect ping with broken network")
 			config := list.Config()
 			config.UDPClient = &transport.Error{}
-			membership.DebugList(list).SetConfig(config)
+			debugList.SetConfig(config)
 			err := list.IndirectPing()
 			Expect(err).To(HaveOccurred())
 		})
@@ -849,13 +852,14 @@ var _ = Describe("List", func() {
 			list := newTestList(
 				membership.WithBootstrapMembers(bootstrapMembers),
 			)
+			debugList := membership.DebugList(list)
 
 			By("Executing end of protocol period")
 			Expect(list.EndOfProtocolPeriod()).To(Succeed())
 
 			By("Verifying no state changes")
 			Expect(list.Len()).To(Equal(1))
-			members := membership.DebugList(list).GetMembers()
+			members := debugList.GetMembers()
 			Expect(members[0].State).To(Equal(encoding.MemberStateAlive))
 		})
 
@@ -866,21 +870,22 @@ var _ = Describe("List", func() {
 			list := newTestList(
 				membership.WithBootstrapMembers(bootstrapMembers),
 			)
+			debugList := membership.DebugList(list)
 
 			By("Executing 1 direct ping")
 			Expect(list.DirectPing()).To(Succeed())
-			Expect(membership.DebugList(list).GetPendingDirectPings()).To(HaveLen(1))
+			Expect(debugList.GetPendingDirectPings()).To(HaveLen(1))
 
 			By("Executing end of protocol period")
-			membership.DebugList(list).ClearGossip()
+			debugList.ClearGossip()
 			Expect(list.EndOfProtocolPeriod()).To(Succeed())
 
 			By("Verifying member is now suspect")
-			members := membership.DebugList(list).GetMembers()
+			members := debugList.GetMembers()
 			Expect(members).To(HaveLen(1))
 			Expect(members[0].State).To(Equal(encoding.MemberStateSuspect))
-			Expect(membership.DebugList(list).GetPendingDirectPings()).To(BeEmpty())
-			gossipQueue := membership.DebugList(list).GetGossip()
+			Expect(debugList.GetPendingDirectPings()).To(BeEmpty())
+			gossipQueue := debugList.GetGossip()
 			Expect(gossipQueue.Len()).To(Equal(1))
 
 			msg, ok := gossipQueue.Get(0).(*gossip.MessageSuspect)
@@ -896,22 +901,23 @@ var _ = Describe("List", func() {
 				membership.WithBootstrapMembers(bootstrapMembers),
 				membership.WithSafetyFactor(1000),
 			)
+			debugList := membership.DebugList(list)
 
 			By("Marking member as suspect")
 			Expect(list.DirectPing()).To(Succeed())
 			Expect(list.EndOfProtocolPeriod()).To(Succeed())
-			members := membership.DebugList(list).GetMembers()
+			members := debugList.GetMembers()
 			Expect(members[0].State).To(Equal(encoding.MemberStateSuspect))
 			Expect(members[0].SuspicionPeriodCounter).To(Equal(1))
 
 			By("Executing end of protocol period")
 			Expect(list.EndOfProtocolPeriod()).To(Succeed())
-			members = membership.DebugList(list).GetMembers()
+			members = debugList.GetMembers()
 			Expect(members[0].SuspicionPeriodCounter).To(Equal(2))
 
 			By("Executing another end of protocol period")
 			Expect(list.EndOfProtocolPeriod()).To(Succeed())
-			members = membership.DebugList(list).GetMembers()
+			members = debugList.GetMembers()
 			Expect(members[0].SuspicionPeriodCounter).To(Equal(3))
 		})
 
@@ -925,18 +931,19 @@ var _ = Describe("List", func() {
 				membership.WithBootstrapMembers(bootstrapMembers),
 				membership.WithSafetyFactor(0), // Threshold = 0, immediate faulty
 			)
+			debugList := membership.DebugList(list)
 
 			By("Marking member as suspect")
 			Expect(list.DirectPing()).To(Succeed())
-			membership.DebugList(list).ClearGossip()
+			debugList.ClearGossip()
 			Expect(list.EndOfProtocolPeriod()).To(Succeed())
-			Expect(membership.DebugList(list).GetMembers()).To(HaveLen(0))
-			members := membership.DebugList(list).GetFaultyMembers()
+			Expect(debugList.GetMembers()).To(HaveLen(0))
+			members := debugList.GetFaultyMembers()
 			Expect(members).To(HaveLen(1))
 			Expect(members[0].State).To(Equal(encoding.MemberStateFaulty))
 
 			By("Verifying faulty gossip message added")
-			gossipQueue := membership.DebugList(list).GetGossip()
+			gossipQueue := debugList.GetGossip()
 			msg, ok := gossipQueue.Get(0).(*gossip.MessageFaulty)
 			Expect(ok).To(BeTrue())
 			Expect(msg.Destination).To(Equal(bootstrapMembers[0]))
@@ -1001,15 +1008,16 @@ var _ = Describe("List", func() {
 			list := newTestList(
 				membership.WithBootstrapMembers(bootstrapMembers),
 			)
+			debugList := membership.DebugList(list)
 
 			By("Executing direct and indirect pings")
 			Expect(list.DirectPing()).To(Succeed())
 			Expect(list.IndirectPing()).To(Succeed())
-			Expect(membership.DebugList(list).GetPendingIndirectPings()).To(HaveLen(1))
+			Expect(debugList.GetPendingIndirectPings()).To(HaveLen(1))
 
 			By("Executing end of protocol period")
 			Expect(list.EndOfProtocolPeriod()).To(Succeed())
-			Expect(membership.DebugList(list).GetPendingIndirectPings()).To(BeEmpty())
+			Expect(debugList.GetPendingIndirectPings()).To(BeEmpty())
 		})
 	})
 
@@ -1127,13 +1135,10 @@ var _ = Describe("List", func() {
 
 			By("Sending direct ping")
 			sourceAddr := encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1)
-			pingMsg := membership.MessageDirectPing{
+			Expect(DispatchDatagram(list, &membership.MessageDirectPing{
 				Source:         sourceAddr,
 				SequenceNumber: 42,
-			}
-			buffer, _, err := pingMsg.AppendToBuffer(nil)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(list.DispatchDatagram(buffer)).To(Succeed())
+			})).To(Succeed())
 
 			By("Verifying direct ack sent back to source")
 			Expect(store.Addresses).To(HaveLen(1))
@@ -1153,15 +1158,10 @@ var _ = Describe("List", func() {
 
 			By("Sending direct ping")
 			sourceAddr := encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1)
-			pingMsg := membership.MessageDirectPing{
+			Expect(DispatchDatagram(list, &membership.MessageDirectPing{
 				Source:         sourceAddr,
 				SequenceNumber: 42,
-			}
-			buffer, _, err := pingMsg.AppendToBuffer(nil)
-			Expect(err).ToNot(HaveOccurred())
-
-			By("Expecting error but no panic")
-			Expect(list.DispatchDatagram(buffer)).ToNot(Succeed())
+			})).ToNot(Succeed())
 		})
 	})
 
@@ -1175,26 +1175,24 @@ var _ = Describe("List", func() {
 				membership.WithUDPClient(&store),
 				membership.WithBootstrapMembers(bootstrapMembers),
 			)
+			debugList := membership.DebugList(list)
 
 			By("Executing direct ping")
 			Expect(list.DirectPing()).To(Succeed())
-			pendingPings := membership.DebugList(list).GetPendingDirectPings()
+			pendingPings := debugList.GetPendingDirectPings()
 			Expect(pendingPings).To(HaveLen(1))
 
 			targetAddr := pendingPings[0].Destination
 			seqNum := pendingPings[0].MessageDirectPing.SequenceNumber
 
 			By("Sending direct ack")
-			ackMsg := membership.MessageDirectAck{
+			Expect(DispatchDatagram(list, &membership.MessageDirectAck{
 				Source:         targetAddr,
 				SequenceNumber: seqNum,
-			}
-			buffer, _, err := ackMsg.AppendToBuffer(nil)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(list.DispatchDatagram(buffer)).To(Succeed())
+			})).To(Succeed())
 
 			By("Verifying pending ping removed")
-			Expect(membership.DebugList(list).GetPendingDirectPings()).To(BeEmpty())
+			Expect(debugList.GetPendingDirectPings()).To(BeEmpty())
 		})
 
 		It("should ignore ack with non-matching sequence number", func() {
@@ -1206,36 +1204,31 @@ var _ = Describe("List", func() {
 				membership.WithUDPClient(&store),
 				membership.WithBootstrapMembers(bootstrapMembers),
 			)
+			debugList := membership.DebugList(list)
 
 			By("Executing direct ping")
 			Expect(list.DirectPing()).To(Succeed())
-			pendingPings := membership.DebugList(list).GetPendingDirectPings()
+			pendingPings := debugList.GetPendingDirectPings()
 			Expect(pendingPings).To(HaveLen(1))
 
 			By("Sending ack with wrong sequence number")
-			ackMsg := membership.MessageDirectAck{
+			Expect(DispatchDatagram(list, &membership.MessageDirectAck{
 				Source:         pendingPings[0].Destination,
 				SequenceNumber: 9999,
-			}
-			buffer, _, err := ackMsg.AppendToBuffer(nil)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(list.DispatchDatagram(buffer)).To(Succeed())
+			})).To(Succeed())
 
 			By("Verifying pending ping still present")
-			Expect(membership.DebugList(list).GetPendingDirectPings()).To(HaveLen(1))
+			Expect(debugList.GetPendingDirectPings()).To(HaveLen(1))
 		})
 
 		It("should handle ack when no pending pings exist", func() {
 			list := newTestList()
 
 			By("Sending ack without any pending pings")
-			ackMsg := membership.MessageDirectAck{
+			Expect(DispatchDatagram(list, &membership.MessageDirectAck{
 				Source:         encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
 				SequenceNumber: 42,
-			}
-			buffer, _, err := ackMsg.AppendToBuffer(nil)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(list.DispatchDatagram(buffer)).To(Succeed())
+			})).To(Succeed())
 		})
 	})
 
@@ -1249,14 +1242,11 @@ var _ = Describe("List", func() {
 			By("Sending indirect ping request")
 			sourceAddr := encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1)
 			targetAddr := encoding.NewAddress(net.IPv4(255, 255, 255, 255), 2)
-			indirectPingMsg := membership.MessageIndirectPing{
+			Expect(DispatchDatagram(list, &membership.MessageIndirectPing{
 				Source:         sourceAddr,
 				Destination:    targetAddr,
 				SequenceNumber: 42,
-			}
-			buffer, _, err := indirectPingMsg.AppendToBuffer(nil)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(list.DispatchDatagram(buffer)).To(Succeed())
+			})).To(Succeed())
 
 			By("Verifying direct ping sent to target")
 			Expect(store.Addresses).To(HaveLen(1))
@@ -1276,16 +1266,11 @@ var _ = Describe("List", func() {
 			By("Sending indirect ping request")
 			sourceAddr := encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1)
 			targetAddr := encoding.NewAddress(net.IPv4(255, 255, 255, 255), 2)
-			indirectPingMsg := membership.MessageIndirectPing{
+			Expect(DispatchDatagram(list, &membership.MessageIndirectPing{
 				Source:         sourceAddr,
 				Destination:    targetAddr,
 				SequenceNumber: 42,
-			}
-			buffer, _, err := indirectPingMsg.AppendToBuffer(nil)
-			Expect(err).ToNot(HaveOccurred())
-
-			By("Expecting error but no panic")
-			Expect(list.DispatchDatagram(buffer)).ToNot(Succeed())
+			})).ToNot(Succeed())
 		})
 	})
 
@@ -1300,32 +1285,30 @@ var _ = Describe("List", func() {
 				membership.WithUDPClient(&store),
 				membership.WithBootstrapMembers(bootstrapMembers),
 			)
+			debugList := membership.DebugList(list)
 
 			By("Executing direct ping")
 			Expect(list.DirectPing()).To(Succeed())
-			pendingDirectPings := membership.DebugList(list).GetPendingDirectPings()
+			pendingDirectPings := debugList.GetPendingDirectPings()
 			Expect(pendingDirectPings).To(HaveLen(1))
 
 			By("Executing indirect ping")
 			Expect(list.IndirectPing()).To(Succeed())
-			pendingIndirectPings := membership.DebugList(list).GetPendingIndirectPings()
+			pendingIndirectPings := debugList.GetPendingIndirectPings()
 			Expect(pendingIndirectPings).To(HaveLen(1))
 
 			targetAddr := pendingDirectPings[0].Destination
 			seqNum := pendingDirectPings[0].MessageDirectPing.SequenceNumber
 
 			By("Sending indirect ack")
-			ackMsg := membership.MessageIndirectAck{
+			Expect(DispatchDatagram(list, &membership.MessageIndirectAck{
 				Source:         targetAddr,
 				SequenceNumber: seqNum,
-			}
-			buffer, _, err := ackMsg.AppendToBuffer(nil)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(list.DispatchDatagram(buffer)).To(Succeed())
+			})).To(Succeed())
 
 			By("Verifying both pending pings removed")
-			Expect(membership.DebugList(list).GetPendingDirectPings()).To(BeEmpty())
-			Expect(membership.DebugList(list).GetPendingIndirectPings()).To(BeEmpty())
+			Expect(debugList.GetPendingDirectPings()).To(BeEmpty())
+			Expect(debugList.GetPendingIndirectPings()).To(BeEmpty())
 		})
 
 		It("should ignore ack with non-matching sequence number", func() {
@@ -1338,62 +1321,55 @@ var _ = Describe("List", func() {
 				membership.WithUDPClient(&store),
 				membership.WithBootstrapMembers(bootstrapMembers),
 			)
+			debugList := membership.DebugList(list)
 
 			By("Executing direct ping")
 			Expect(list.DirectPing()).To(Succeed())
-			pendingDirectPings := membership.DebugList(list).GetPendingDirectPings()
+			pendingDirectPings := debugList.GetPendingDirectPings()
 			Expect(pendingDirectPings).To(HaveLen(1))
 
 			By("Executing indirect ping")
 			Expect(list.IndirectPing()).To(Succeed())
-			pendingIndirectPings := membership.DebugList(list).GetPendingIndirectPings()
+			pendingIndirectPings := debugList.GetPendingIndirectPings()
 			Expect(pendingIndirectPings).To(HaveLen(1))
 
 			By("Sending ack with wrong sequence number")
-			ackMsg := membership.MessageIndirectAck{
+			Expect(DispatchDatagram(list, &membership.MessageIndirectAck{
 				Source:         pendingDirectPings[0].Destination,
 				SequenceNumber: 9999,
-			}
-			buffer, _, err := ackMsg.AppendToBuffer(nil)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(list.DispatchDatagram(buffer)).To(Succeed())
+			})).To(Succeed())
 
 			By("Verifying pending pings still present")
-			Expect(membership.DebugList(list).GetPendingDirectPings()).To(HaveLen(1))
-			Expect(membership.DebugList(list).GetPendingIndirectPings()).To(HaveLen(1))
+			Expect(debugList.GetPendingDirectPings()).To(HaveLen(1))
+			Expect(debugList.GetPendingIndirectPings()).To(HaveLen(1))
 		})
 
 		It("should handle ack when no pending pings exist", func() {
 			list := newTestList()
 
 			By("Sending ack without any pending pings")
-			ackMsg := membership.MessageIndirectAck{
+			Expect(DispatchDatagram(list, &membership.MessageIndirectAck{
 				Source:         encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
 				SequenceNumber: 42,
-			}
-			buffer, _, err := ackMsg.AppendToBuffer(nil)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(list.DispatchDatagram(buffer)).To(Succeed())
+			})).To(Succeed())
 		})
 	})
 
 	Context("handleAlive", func() {
 		It("should ignore alive about self", func() {
 			list := newTestList()
-			membership.DebugList(list).GetGossip().Clear()
+			debugList := membership.DebugList(list)
+			debugList.GetGossip().Clear()
 
 			By("Receiving alive message")
-			message := gossip.MessageAlive{
+			Expect(DispatchDatagram(list, &gossip.MessageAlive{
 				Destination:       TestAddress,
 				IncarnationNumber: 0,
-			}
-			buffer, _, err := message.AppendToBuffer(nil)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(list.DispatchDatagram(buffer)).To(Succeed())
+			})).To(Succeed())
 
-			Expect(membership.DebugList(list).GetMembers()).To(BeEmpty())
-			Expect(membership.DebugList(list).GetFaultyMembers()).To(BeEmpty())
-			Expect(membership.DebugList(list).GetGossip().Len()).To(Equal(0))
+			Expect(debugList.GetMembers()).To(BeEmpty())
+			Expect(debugList.GetFaultyMembers()).To(BeEmpty())
+			Expect(debugList.GetGossip().Len()).To(Equal(0))
 		})
 
 		It("should invoke member added callback when adding new member", func() {
@@ -1405,13 +1381,10 @@ var _ = Describe("List", func() {
 			)
 
 			By("Sending alive message for new member")
-			aliveMsg := gossip.MessageAlive{
+			Expect(DispatchDatagram(list, &gossip.MessageAlive{
 				Destination:       TestAddress2,
 				IncarnationNumber: 5,
-			}
-			buffer, _, err := aliveMsg.AppendToBuffer(nil)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(list.DispatchDatagram(buffer)).To(Succeed())
+			})).To(Succeed())
 
 			By("Verifying callback invoked")
 			Expect(addedCount).To(Equal(1))
@@ -1424,23 +1397,22 @@ var _ = Describe("List", func() {
 					membership.WithTCPClient(&transport.Discard{}),
 					membership.WithRoundTripTimeTracker(roundtriptime.NewTracker()),
 				)
-				membership.DebugList(list).GetGossip().Clear()
-				membership.DebugList(list).SetMembers(beforeMembers)
-				membership.DebugList(list).SetFaultyMembers(beforeFaultyMembers)
+				debugList := membership.DebugList(list)
+				debugList.GetGossip().Clear()
+				debugList.SetMembers(beforeMembers)
+				debugList.SetFaultyMembers(beforeFaultyMembers)
 
-				buffer, _, err := message.AppendToBuffer(nil)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(list.DispatchDatagram(buffer)).To(Succeed())
+				Expect(DispatchDatagram(list, message)).To(Succeed())
 
 				if afterMembers == nil {
-					Expect(membership.DebugList(list).GetMembers()).To(BeEmpty())
+					Expect(debugList.GetMembers()).To(BeEmpty())
 				} else {
-					Expect(membership.DebugList(list).GetMembers()).To(Equal(afterMembers))
+					Expect(debugList.GetMembers()).To(Equal(afterMembers))
 				}
 				if afterFaultyMembers == nil {
-					Expect(membership.DebugList(list).GetFaultyMembers()).To(BeEmpty())
+					Expect(debugList.GetFaultyMembers()).To(BeEmpty())
 				} else {
-					Expect(membership.DebugList(list).GetFaultyMembers()).To(Equal(afterFaultyMembers))
+					Expect(debugList.GetFaultyMembers()).To(Equal(afterFaultyMembers))
 				}
 			},
 			Entry("Alive should add a member",
@@ -1665,22 +1637,20 @@ var _ = Describe("List", func() {
 	Context("handleSuspect", func() {
 		It("should refute suspect about self", func() {
 			list := newTestList()
-			membership.DebugList(list).GetGossip().Clear()
+			debugList := membership.DebugList(list)
+			debugList.GetGossip().Clear()
 
 			By("Receiving a suspect message")
-			message := gossip.MessageSuspect{
+			Expect(DispatchDatagram(list, &gossip.MessageSuspect{
 				Source:            TestAddress2,
 				Destination:       TestAddress,
 				IncarnationNumber: 0,
-			}
-			buffer, _, err := message.AppendToBuffer(nil)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(list.DispatchDatagram(buffer)).To(Succeed())
+			})).To(Succeed())
 
-			Expect(membership.DebugList(list).GetMembers()).To(BeEmpty())
-			Expect(membership.DebugList(list).GetFaultyMembers()).To(BeEmpty())
-			Expect(membership.DebugList(list).GetGossip().Len()).To(Equal(1))
-			Expect(membership.DebugList(list).GetGossip().Get(0)).To(Equal(&gossip.MessageAlive{
+			Expect(debugList.GetMembers()).To(BeEmpty())
+			Expect(debugList.GetFaultyMembers()).To(BeEmpty())
+			Expect(debugList.GetGossip().Len()).To(Equal(1))
+			Expect(debugList.GetGossip().Get(0)).To(Equal(&gossip.MessageAlive{
 				Destination:       TestAddress,
 				IncarnationNumber: 1,
 			}))
@@ -1695,13 +1665,10 @@ var _ = Describe("List", func() {
 			)
 
 			By("Sending suspect message")
-			aliveMsg := gossip.MessageSuspect{
+			Expect(DispatchDatagram(list, &gossip.MessageSuspect{
 				Destination:       TestAddress2,
 				IncarnationNumber: 5,
-			}
-			buffer, _, err := aliveMsg.AppendToBuffer(nil)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(list.DispatchDatagram(buffer)).To(Succeed())
+			})).To(Succeed())
 
 			By("Verifying callback invoked")
 			Expect(addedCount).To(Equal(1))
@@ -1714,23 +1681,22 @@ var _ = Describe("List", func() {
 					membership.WithTCPClient(&transport.Discard{}),
 					membership.WithRoundTripTimeTracker(roundtriptime.NewTracker()),
 				)
-				membership.DebugList(list).GetGossip().Clear()
-				membership.DebugList(list).SetMembers(beforeMembers)
-				membership.DebugList(list).SetFaultyMembers(beforeFaultyMembers)
+				debugList := membership.DebugList(list)
+				debugList.GetGossip().Clear()
+				debugList.SetMembers(beforeMembers)
+				debugList.SetFaultyMembers(beforeFaultyMembers)
 
-				buffer, _, err := message.AppendToBuffer(nil)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(list.DispatchDatagram(buffer)).To(Succeed())
+				Expect(DispatchDatagram(list, message)).To(Succeed())
 
 				if afterMembers == nil {
-					Expect(membership.DebugList(list).GetMembers()).To(BeEmpty())
+					Expect(debugList.GetMembers()).To(BeEmpty())
 				} else {
-					Expect(membership.DebugList(list).GetMembers()).To(Equal(afterMembers))
+					Expect(debugList.GetMembers()).To(Equal(afterMembers))
 				}
 				if afterFaultyMembers == nil {
-					Expect(membership.DebugList(list).GetFaultyMembers()).To(BeEmpty())
+					Expect(debugList.GetFaultyMembers()).To(BeEmpty())
 				} else {
-					Expect(membership.DebugList(list).GetFaultyMembers()).To(Equal(afterFaultyMembers))
+					Expect(debugList.GetFaultyMembers()).To(Equal(afterFaultyMembers))
 				}
 			},
 			Entry("Suspect should add member",
@@ -1965,21 +1931,19 @@ var _ = Describe("List", func() {
 	Context("handleFaulty", func() {
 		It("should refute faulty about self", func() {
 			list := newTestList()
-			membership.DebugList(list).GetGossip().Clear()
+			debugList := membership.DebugList(list)
+			debugList.GetGossip().Clear()
 
-			message := gossip.MessageFaulty{
+			Expect(DispatchDatagram(list, &gossip.MessageFaulty{
 				Source:            TestAddress2,
 				Destination:       TestAddress,
 				IncarnationNumber: 0,
-			}
-			buffer, _, err := message.AppendToBuffer(nil)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(list.DispatchDatagram(buffer)).To(Succeed())
+			})).To(Succeed())
 
-			Expect(membership.DebugList(list).GetMembers()).To(BeEmpty())
-			Expect(membership.DebugList(list).GetFaultyMembers()).To(BeEmpty())
-			Expect(membership.DebugList(list).GetGossip().Len()).To(Equal(1))
-			Expect(membership.DebugList(list).GetGossip().Get(0)).To(Equal(&gossip.MessageAlive{
+			Expect(debugList.GetMembers()).To(BeEmpty())
+			Expect(debugList.GetFaultyMembers()).To(BeEmpty())
+			Expect(debugList.GetGossip().Len()).To(Equal(1))
+			Expect(debugList.GetGossip().Get(0)).To(Equal(&gossip.MessageAlive{
 				Destination:       TestAddress,
 				IncarnationNumber: 1,
 			}))
@@ -1998,13 +1962,10 @@ var _ = Describe("List", func() {
 			)
 
 			By("Sending faulty message for existing")
-			aliveMsg := gossip.MessageFaulty{
+			Expect(DispatchDatagram(list, &gossip.MessageFaulty{
 				Destination:       bootstrapMembers[0],
 				IncarnationNumber: 5,
-			}
-			buffer, _, err := aliveMsg.AppendToBuffer(nil)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(list.DispatchDatagram(buffer)).To(Succeed())
+			})).To(Succeed())
 
 			By("Verifying callback invoked")
 			Expect(removedCount).To(Equal(1))
@@ -2017,23 +1978,22 @@ var _ = Describe("List", func() {
 					membership.WithTCPClient(&transport.Discard{}),
 					membership.WithRoundTripTimeTracker(roundtriptime.NewTracker()),
 				)
-				membership.DebugList(list).GetGossip().Clear()
-				membership.DebugList(list).SetMembers(beforeMembers)
-				membership.DebugList(list).SetFaultyMembers(beforeFaultyMembers)
+				debugList := membership.DebugList(list)
+				debugList.GetGossip().Clear()
+				debugList.SetMembers(beforeMembers)
+				debugList.SetFaultyMembers(beforeFaultyMembers)
 
-				buffer, _, err := message.AppendToBuffer(nil)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(list.DispatchDatagram(buffer)).To(Succeed())
+				Expect(DispatchDatagram(list, message)).To(Succeed())
 
 				if afterMembers == nil {
-					Expect(membership.DebugList(list).GetMembers()).To(BeEmpty())
+					Expect(debugList.GetMembers()).To(BeEmpty())
 				} else {
-					Expect(membership.DebugList(list).GetMembers()).To(Equal(afterMembers))
+					Expect(debugList.GetMembers()).To(Equal(afterMembers))
 				}
 				if afterFaultyMembers == nil {
-					Expect(membership.DebugList(list).GetFaultyMembers()).To(BeEmpty())
+					Expect(debugList.GetFaultyMembers()).To(BeEmpty())
 				} else {
-					Expect(membership.DebugList(list).GetFaultyMembers()).To(Equal(afterFaultyMembers))
+					Expect(debugList.GetFaultyMembers()).To(Equal(afterFaultyMembers))
 				}
 			},
 			Entry("Faulty should add faulty member",
@@ -2274,12 +2234,9 @@ var _ = Describe("List", func() {
 
 			By("Sending list request")
 			sourceAddr := encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1)
-			requestMsg := membership.MessageListRequest{
+			Expect(DispatchDatagram(list, &membership.MessageListRequest{
 				Source: sourceAddr,
-			}
-			buffer, _, err := requestMsg.AppendToBuffer(nil)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(list.DispatchDatagram(buffer)).To(Succeed())
+			})).To(Succeed())
 
 			By("Verifying list response sent back to source")
 			Expect(store.Addresses).To(HaveLen(1))
@@ -2306,12 +2263,9 @@ var _ = Describe("List", func() {
 
 			By("Sending list request")
 			sourceAddr := encoding.NewAddress(net.IPv4(255, 255, 255, 255), 4)
-			requestMsg := membership.MessageListRequest{
+			Expect(DispatchDatagram(list, &membership.MessageListRequest{
 				Source: sourceAddr,
-			}
-			buffer, _, err := requestMsg.AppendToBuffer(nil)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(list.DispatchDatagram(buffer)).To(Succeed())
+			})).To(Succeed())
 
 			By("Verifying list response sent")
 			Expect(store.Addresses).To(HaveLen(1))
@@ -2346,12 +2300,9 @@ var _ = Describe("List", func() {
 			By("Sending list request")
 			store.Clear()
 			sourceAddr := encoding.NewAddress(net.IPv4(255, 255, 255, 255), 4)
-			requestMsg := membership.MessageListRequest{
+			Expect(DispatchDatagram(list, &membership.MessageListRequest{
 				Source: sourceAddr,
-			}
-			buffer, _, err := requestMsg.AppendToBuffer(nil)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(list.DispatchDatagram(buffer)).To(Succeed())
+			})).To(Succeed())
 
 			By("Verifying response contains both alive and suspect members")
 			var responseMsg membership.MessageListResponse
@@ -2383,12 +2334,9 @@ var _ = Describe("List", func() {
 
 			By("Sending list request")
 			store.Clear()
-			requestMsg := membership.MessageListRequest{
+			Expect(DispatchDatagram(list, &membership.MessageListRequest{
 				Source: encoding.NewAddress(net.IPv4(255, 255, 255, 255), 4),
-			}
-			buffer, _, err := requestMsg.AppendToBuffer(nil)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(list.DispatchDatagram(buffer)).To(Succeed())
+			})).To(Succeed())
 
 			By("Verifying response contains falty member")
 			var responseMsg membership.MessageListResponse
@@ -2402,20 +2350,16 @@ var _ = Describe("List", func() {
 			)
 
 			By("Sending list request")
-			requestMsg := membership.MessageListRequest{
+			Expect(DispatchDatagram(list, &membership.MessageListRequest{
 				Source: encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
-			}
-			buffer, _, err := requestMsg.AppendToBuffer(nil)
-			Expect(err).ToNot(HaveOccurred())
-
-			By("Expecting error but no panic")
-			Expect(list.DispatchDatagram(buffer)).ToNot(Succeed())
+			})).ToNot(Succeed())
 		})
 	})
 
 	Context("handleListResponse", func() {
 		It("should add new members from response", func() {
 			list := newTestList()
+			debugList := membership.DebugList(list)
 
 			By("Receiving list response with members")
 			responseMembers := []encoding.Member{
@@ -2435,17 +2379,14 @@ var _ = Describe("List", func() {
 					IncarnationNumber: 0,
 				},
 			}
-			responseMsg := membership.MessageListResponse{
+			Expect(DispatchDatagram(list, &membership.MessageListResponse{
 				Source:  encoding.NewAddress(net.IPv4(255, 255, 255, 255), 4),
 				Members: responseMembers,
-			}
-			buffer, _, err := responseMsg.AppendToBuffer(nil)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(list.DispatchDatagram(buffer)).To(Succeed())
+			})).To(Succeed())
 
 			By("Verifying members added with correct state and incarnation")
 			Expect(list.Len()).To(Equal(3))
-			members := membership.DebugList(list).GetMembers()
+			members := debugList.GetMembers()
 			Expect(members).To(HaveLen(3))
 			Expect(members).To(ContainElement(responseMembers[0]))
 			Expect(members).To(ContainElement(responseMembers[1]))
@@ -2456,13 +2397,10 @@ var _ = Describe("List", func() {
 			list := newTestList()
 
 			By("Receiving list response with no members")
-			responseMsg := membership.MessageListResponse{
+			Expect(DispatchDatagram(list, &membership.MessageListResponse{
 				Source:  encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
 				Members: []encoding.Member{},
-			}
-			buffer, _, err := responseMsg.AppendToBuffer(nil)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(list.DispatchDatagram(buffer)).To(Succeed())
+			})).To(Succeed())
 
 			By("Verifying no members added")
 			Expect(list.Len()).To(Equal(0))
@@ -2470,6 +2408,7 @@ var _ = Describe("List", func() {
 
 		It("should not add self to member list", func() {
 			list := newTestList()
+			debugList := membership.DebugList(list)
 
 			By("Receiving list response containing self")
 			responseMembers := []encoding.Member{
@@ -2489,17 +2428,14 @@ var _ = Describe("List", func() {
 					IncarnationNumber: 0,
 				},
 			}
-			responseMsg := membership.MessageListResponse{
+			Expect(DispatchDatagram(list, &membership.MessageListResponse{
 				Source:  encoding.NewAddress(net.IPv4(255, 255, 255, 255), 4),
 				Members: responseMembers,
-			}
-			buffer, _, err := responseMsg.AppendToBuffer(nil)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(list.DispatchDatagram(buffer)).To(Succeed())
+			})).To(Succeed())
 
 			By("Verifying self excluded")
 			Expect(list.Len()).To(Equal(2))
-			members := membership.DebugList(list).GetMembers()
+			members := debugList.GetMembers()
 			for _, member := range members {
 				Expect(member.Address).NotTo(Equal(TestAddress))
 			}
@@ -2528,13 +2464,10 @@ var _ = Describe("List", func() {
 					IncarnationNumber: 0,
 				},
 			}
-			responseMsg := membership.MessageListResponse{
+			Expect(DispatchDatagram(list, &membership.MessageListResponse{
 				Source:  encoding.NewAddress(net.IPv4(255, 255, 255, 255), 4),
 				Members: responseMembers,
-			}
-			buffer, _, err := responseMsg.AppendToBuffer(nil)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(list.DispatchDatagram(buffer)).To(Succeed())
+			})).To(Succeed())
 
 			By("Verifying total member count")
 			Expect(list.Len()).To(Equal(3))
@@ -2561,7 +2494,8 @@ var _ = Describe("List", func() {
 					)
 				}
 				newList := membership.NewList(options...)
-				membership.DebugList(newList).ClearGossip()
+				debugList := membership.DebugList(newList)
+				debugList.ClearGossip()
 				memoryTransport.AddTarget(address, newList)
 				lists = append(lists, newList)
 			}
@@ -2803,6 +2737,7 @@ func createListWithMembers(memberCount int) *membership.List {
 		membership.WithTCPClient(&transport.Discard{}),
 		membership.WithRoundTripTimeTracker(roundtriptime.NewTracker()),
 	)
+	debugList := membership.DebugList(list)
 
 	for i := range memberCount {
 		messageAlive := gossip.MessageAlive{
@@ -2820,7 +2755,7 @@ func createListWithMembers(memberCount int) *membership.List {
 	if list.Len() != memberCount {
 		panic("member count does not match expected value")
 	}
-	membership.DebugList(list).GetGossip().Clear()
+	debugList.GetGossip().Clear()
 	return list
 }
 

@@ -2,6 +2,7 @@ package membership
 
 import (
 	intscheduler "github.com/backbone81/membership/internal/scheduler"
+	inttransport "github.com/backbone81/membership/internal/transport"
 	"github.com/prometheus/client_golang/prometheus"
 
 	intgossip "github.com/backbone81/membership/internal/gossip"
@@ -17,6 +18,9 @@ func RegisterMetrics(registerer prometheus.Registerer) error {
 		return err
 	}
 	if err := intscheduler.RegisterMetrics(registerer); err != nil {
+		return err
+	}
+	if err := inttransport.RegisterMetrics(registerer); err != nil {
 		return err
 	}
 	return nil

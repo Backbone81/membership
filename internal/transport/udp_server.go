@@ -88,7 +88,9 @@ func (t *UDPServer) backgroundTask() {
 	buffer := make([]byte, t.receiveBufferLength)
 	for {
 		n, _, err := t.connection.ReadFromUDP(buffer)
+		ReceiveBytes.WithLabelValues("udp_server").Add(float64(n))
 		if err != nil {
+			ReceiveErrors.WithLabelValues("udp_server").Inc()
 			if !errors.Is(err, net.ErrClosed) {
 				t.logger.Error(err, "Reading UDP message.")
 			}

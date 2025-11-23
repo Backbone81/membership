@@ -44,7 +44,10 @@ func (c *UDPClient) send(address encoding.Address, buffer []byte) error {
 	}
 	defer connection.Close()
 
-	if _, err := connection.Write(buffer); err != nil {
+	n, err := connection.Write(buffer)
+	TransmitBytes.WithLabelValues("udp_client").Add(float64(n))
+	if err != nil {
+		TransmitErrors.WithLabelValues("udp_client").Inc()
 		return fmt.Errorf("sending the datagram payload: %w", err)
 	}
 	return nil

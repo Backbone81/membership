@@ -415,6 +415,12 @@ func (l *List) EndOfProtocolPeriod() error {
 	// benchmarks where we can only observe the list state through the public interface.
 	l.processFailedPings()
 	l.markSuspectsAsFaulty()
+
+	// TODO: We do not account for suspect members right now, because that would require scanning the whole member
+	// list. We extend the suspect metric as soon as we have dedicated suspect member tracking (we have some other todo)
+	// for that already.
+	MembersByState.WithLabelValues("alive").Set(float64(len(l.members)))
+	MembersByState.WithLabelValues("faulty").Set(float64(len(l.faultyMembers)))
 	return nil
 }
 
@@ -452,6 +458,7 @@ func (l *List) processFailedPings() {
 			"destination", member.Address,
 			"incarnation-number", member.IncarnationNumber,
 		)
+		MemberStateTransitionsTotal.WithLabelValues("declared_suspect").Inc()
 
 		// We need to mark the member as suspect and gossip about it.
 		member.State = encoding.MemberStateSuspect
@@ -501,6 +508,8 @@ func (l *List) markSuspectsAsFaulty() {
 			"destination", member.Address,
 			"incarnation-number", member.IncarnationNumber,
 		)
+		MemberStateTransitionsTotal.WithLabelValues("declared_faulty").Inc()
+
 		member.State = encoding.MemberStateFaulty
 		faultyMemberIndex, found := slices.BinarySearchFunc(
 			l.faultyMembers,
@@ -628,7 +637,7 @@ func (l *List) addMember(member encoding.Member) {
 	if l.config.MemberAddedCallback != nil {
 		l.config.MemberAddedCallback(member.Address)
 	}
-	MembersAddedTotal.Inc()
+	MemberStateTransitionsTotal.WithLabelValues("added").Inc()
 }
 
 // removeMemberByAddress removes the member with the given address from the list of members. Updating the relevant
@@ -672,7 +681,7 @@ func (l *List) removeMemberByIndex(index int) {
 
 	l.members = slices.Delete(l.members, index, index+1)
 	l.randomIndexes = slices.Delete(l.randomIndexes, randomIndex, randomIndex+1)
-	MembersRemovedTotal.Inc()
+	MemberStateTransitionsTotal.WithLabelValues("removed").Inc()
 }
 
 // DispatchDatagram is the entrypoint which processes messages received by other members. The buffer provided as
@@ -691,6 +700,7 @@ func (l *List) DispatchDatagram(buffer []byte) error {
 
 		switch messageType {
 		case encoding.MessageTypeDirectPing:
+			MessagesReceivedTotal.WithLabelValues("direct_ping").Inc()
 			var message MessageDirectPing
 			n, err := message.FromBuffer(buffer)
 			if err != nil {
@@ -701,6 +711,7 @@ func (l *List) DispatchDatagram(buffer []byte) error {
 				joinedErr = errors.Join(joinedErr, err)
 			}
 		case encoding.MessageTypeDirectAck:
+			MessagesReceivedTotal.WithLabelValues("direct_ack").Inc()
 			var message MessageDirectAck
 			n, err := message.FromBuffer(buffer)
 			if err != nil {
@@ -711,6 +722,7 @@ func (l *List) DispatchDatagram(buffer []byte) error {
 				joinedErr = errors.Join(joinedErr, err)
 			}
 		case encoding.MessageTypeIndirectPing:
+			MessagesReceivedTotal.WithLabelValues("indirect_ping").Inc()
 			var message MessageIndirectPing
 			n, err := message.FromBuffer(buffer)
 			if err != nil {
@@ -721,6 +733,7 @@ func (l *List) DispatchDatagram(buffer []byte) error {
 				joinedErr = errors.Join(joinedErr, err)
 			}
 		case encoding.MessageTypeIndirectAck:
+			MessagesReceivedTotal.WithLabelValues("indirect_ack").Inc()
 			var message MessageIndirectAck
 			n, err := message.FromBuffer(buffer)
 			if err != nil {
@@ -729,6 +742,7 @@ func (l *List) DispatchDatagram(buffer []byte) error {
 			buffer = buffer[n:]
 			l.handleIndirectAck(message)
 		case encoding.MessageTypeSuspect:
+			MessagesReceivedTotal.WithLabelValues("suspect").Inc()
 			var message gossip.MessageSuspect
 			n, err := message.FromBuffer(buffer)
 			if err != nil {
@@ -737,6 +751,7 @@ func (l *List) DispatchDatagram(buffer []byte) error {
 			buffer = buffer[n:]
 			l.handleSuspect(message)
 		case encoding.MessageTypeAlive:
+			MessagesReceivedTotal.WithLabelValues("alive").Inc()
 			var message gossip.MessageAlive
 			n, err := message.FromBuffer(buffer)
 			if err != nil {
@@ -745,6 +760,7 @@ func (l *List) DispatchDatagram(buffer []byte) error {
 			buffer = buffer[n:]
 			l.handleAlive(message)
 		case encoding.MessageTypeFaulty:
+			MessagesReceivedTotal.WithLabelValues("faulty").Inc()
 			var message gossip.MessageFaulty
 			n, err := message.FromBuffer(buffer)
 			if err != nil {
@@ -753,6 +769,7 @@ func (l *List) DispatchDatagram(buffer []byte) error {
 			buffer = buffer[n:]
 			l.handleFaulty(message)
 		case encoding.MessageTypeListRequest:
+			MessagesReceivedTotal.WithLabelValues("list_request").Inc()
 			var message MessageListRequest
 			n, err := message.FromBuffer(buffer)
 			if err != nil {
@@ -763,6 +780,7 @@ func (l *List) DispatchDatagram(buffer []byte) error {
 				joinedErr = errors.Join(joinedErr, err)
 			}
 		case encoding.MessageTypeListResponse:
+			MessagesReceivedTotal.WithLabelValues("list_response").Inc()
 			var message MessageListResponse
 			n, err := message.FromBuffer(buffer)
 			if err != nil {
@@ -964,6 +982,12 @@ func (l *List) handleSuspectForSelf(suspect gossip.MessageSuspect) bool {
 		Destination:       l.self,
 		IncarnationNumber: l.incarnationNumber,
 	})
+
+	l.logger.Info(
+		"Refuted gossip about being suspect",
+		"incarnation-number", l.incarnationNumber,
+	)
+	MemberStateTransitionsTotal.WithLabelValues("refuted_suspect").Inc()
 	return true
 }
 
@@ -1162,6 +1186,12 @@ func (l *List) handleFaultyForSelf(faulty gossip.MessageFaulty) bool {
 		Destination:       l.self,
 		IncarnationNumber: l.incarnationNumber,
 	})
+
+	l.logger.Info(
+		"Refuted gossip about being faulty",
+		"incarnation-number", l.incarnationNumber,
+	)
+	MemberStateTransitionsTotal.WithLabelValues("refuted_faulty").Inc()
 	return true
 }
 

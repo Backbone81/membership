@@ -45,7 +45,10 @@ func (c *TCPClient) send(address encoding.Address, buffer []byte) error {
 	if _, err := connection.Write(lengthBuffer[:]); err != nil {
 		return fmt.Errorf("sending the datagram length: %w", err)
 	}
-	if _, err := connection.Write(buffer); err != nil {
+	n, err := connection.Write(buffer)
+	TransmitBytes.WithLabelValues("tcp_client").Add(float64(n))
+	if err != nil {
+		TransmitErrors.WithLabelValues("tcp_client").Inc()
 		return fmt.Errorf("sending the datagram payload: %w", err)
 	}
 	return nil

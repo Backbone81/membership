@@ -108,7 +108,10 @@ func (t *TCPServer) handleConnectionImpl(connection net.Conn) error {
 	buffer := make([]byte, 1024)
 
 	// First let's read the datagram length which is an uint32.
-	if _, err := io.ReadFull(connection, buffer[:4]); err != nil {
+	n, err := io.ReadFull(connection, buffer[:4])
+	ReceiveBytes.WithLabelValues("tcp_server").Add(float64(n))
+	if err != nil {
+		ReceiveErrors.WithLabelValues("tcp_server").Inc()
 		return err
 	}
 	datagramLength := int(encoding.Endian.Uint32(buffer[:4]))
@@ -124,7 +127,10 @@ func (t *TCPServer) handleConnectionImpl(connection net.Conn) error {
 		copy(newBuffer, buffer[:4])
 		buffer = newBuffer
 	}
-	if _, err := io.ReadFull(connection, buffer[4:4+datagramLength]); err != nil {
+	n, err = io.ReadFull(connection, buffer[4:4+datagramLength])
+	ReceiveBytes.WithLabelValues("tcp_server").Add(float64(n))
+	if err != nil {
+		ReceiveErrors.WithLabelValues("tcp_server").Inc()
 		return err
 	}
 

@@ -58,7 +58,6 @@ is picked and the full membership list is requested.
 - We should find a mechanic which tells a member the last known incarnation number to allow joining members without
   having to remember the incarnation number. This could be done with the full list sync. We would need to update our
   own incarnation number when we learn about ourselves.
-- Extend metrics for better insights.
 
 ### More Advanced Topics
 

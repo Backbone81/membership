@@ -130,7 +130,7 @@ func NewList(options ...Option) *List {
 	}
 
 	// We need to gossip our own alive. Otherwise, nobody will pick us up into their own member list.
-	newList.gossipQueue.Add(&gossip.MessageAlive{
+	newList.gossipQueue.Add(&encoding.MessageAlive{
 		Destination:       config.AdvertisedAddress,
 		IncarnationNumber: 0,
 	})
@@ -192,7 +192,7 @@ func (l *List) DirectPing() error {
 	// As we are supporting to directly ping multiple members, we need to make sure that we are not exceeding the
 	// current member count. Otherwise, we would ping the same member multiple times in the same protocol period.
 	for range min(len(l.members), l.config.DirectPingMemberCount) {
-		directPing := MessageDirectPing{
+		directPing := encoding.MessageDirectPing{
 			Source:         l.self,
 			SequenceNumber: l.nextSequenceNumber,
 		}
@@ -298,7 +298,7 @@ func (l *List) IndirectPing() error {
 			continue
 		}
 
-		indirectPing := MessageIndirectPing{
+		indirectPing := encoding.MessageIndirectPing{
 			Source:      l.self,
 			Destination: directPing.Destination,
 
@@ -463,7 +463,7 @@ func (l *List) processFailedPings() {
 		// We need to mark the member as suspect and gossip about it.
 		member.State = encoding.MemberStateSuspect
 		member.SuspicionPeriodCounter = 0
-		l.gossipQueue.Add(&gossip.MessageSuspect{
+		l.gossipQueue.Add(&encoding.MessageSuspect{
 			Source:            l.self,
 			Destination:       member.Address,
 			IncarnationNumber: member.IncarnationNumber,
@@ -522,7 +522,7 @@ func (l *List) markSuspectsAsFaulty() {
 		} else {
 			l.faultyMembers = slices.Insert(l.faultyMembers, faultyMemberIndex, *member)
 		}
-		l.gossipQueue.Add(&gossip.MessageFaulty{
+		l.gossipQueue.Add(&encoding.MessageFaulty{
 			Source:            l.self,
 			Destination:       member.Address,
 			IncarnationNumber: member.IncarnationNumber,
@@ -547,7 +547,7 @@ func (l *List) RequestList() error {
 		return nil
 	}
 
-	listRequest := MessageListRequest{
+	listRequest := encoding.MessageListRequest{
 		Source: l.self,
 	}
 
@@ -568,7 +568,7 @@ func (l *List) BroadcastShutdown() error {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
 
-	faultyMessage := gossip.MessageFaulty{
+	faultyMessage := encoding.MessageFaulty{
 		Source:            l.self,
 		Destination:       l.self,
 		IncarnationNumber: l.incarnationNumber,
@@ -701,7 +701,7 @@ func (l *List) DispatchDatagram(buffer []byte) error {
 		switch messageType {
 		case encoding.MessageTypeDirectPing:
 			MessagesReceivedTotal.WithLabelValues("direct_ping").Inc()
-			var message MessageDirectPing
+			var message encoding.MessageDirectPing
 			n, err := message.FromBuffer(buffer)
 			if err != nil {
 				return err
@@ -712,7 +712,7 @@ func (l *List) DispatchDatagram(buffer []byte) error {
 			}
 		case encoding.MessageTypeDirectAck:
 			MessagesReceivedTotal.WithLabelValues("direct_ack").Inc()
-			var message MessageDirectAck
+			var message encoding.MessageDirectAck
 			n, err := message.FromBuffer(buffer)
 			if err != nil {
 				return err
@@ -723,7 +723,7 @@ func (l *List) DispatchDatagram(buffer []byte) error {
 			}
 		case encoding.MessageTypeIndirectPing:
 			MessagesReceivedTotal.WithLabelValues("indirect_ping").Inc()
-			var message MessageIndirectPing
+			var message encoding.MessageIndirectPing
 			n, err := message.FromBuffer(buffer)
 			if err != nil {
 				return err
@@ -734,7 +734,7 @@ func (l *List) DispatchDatagram(buffer []byte) error {
 			}
 		case encoding.MessageTypeIndirectAck:
 			MessagesReceivedTotal.WithLabelValues("indirect_ack").Inc()
-			var message MessageIndirectAck
+			var message encoding.MessageIndirectAck
 			n, err := message.FromBuffer(buffer)
 			if err != nil {
 				return err
@@ -743,7 +743,7 @@ func (l *List) DispatchDatagram(buffer []byte) error {
 			l.handleIndirectAck(message)
 		case encoding.MessageTypeSuspect:
 			MessagesReceivedTotal.WithLabelValues("suspect").Inc()
-			var message gossip.MessageSuspect
+			var message encoding.MessageSuspect
 			n, err := message.FromBuffer(buffer)
 			if err != nil {
 				return err
@@ -752,7 +752,7 @@ func (l *List) DispatchDatagram(buffer []byte) error {
 			l.handleSuspect(message)
 		case encoding.MessageTypeAlive:
 			MessagesReceivedTotal.WithLabelValues("alive").Inc()
-			var message gossip.MessageAlive
+			var message encoding.MessageAlive
 			n, err := message.FromBuffer(buffer)
 			if err != nil {
 				return err
@@ -761,7 +761,7 @@ func (l *List) DispatchDatagram(buffer []byte) error {
 			l.handleAlive(message)
 		case encoding.MessageTypeFaulty:
 			MessagesReceivedTotal.WithLabelValues("faulty").Inc()
-			var message gossip.MessageFaulty
+			var message encoding.MessageFaulty
 			n, err := message.FromBuffer(buffer)
 			if err != nil {
 				return err
@@ -770,7 +770,7 @@ func (l *List) DispatchDatagram(buffer []byte) error {
 			l.handleFaulty(message)
 		case encoding.MessageTypeListRequest:
 			MessagesReceivedTotal.WithLabelValues("list_request").Inc()
-			var message MessageListRequest
+			var message encoding.MessageListRequest
 			n, err := message.FromBuffer(buffer)
 			if err != nil {
 				return err
@@ -781,7 +781,7 @@ func (l *List) DispatchDatagram(buffer []byte) error {
 			}
 		case encoding.MessageTypeListResponse:
 			MessagesReceivedTotal.WithLabelValues("list_response").Inc()
-			var message MessageListResponse
+			var message encoding.MessageListResponse
 			n, err := message.FromBuffer(buffer)
 			if err != nil {
 				return err
@@ -800,13 +800,13 @@ func (l *List) DispatchDatagram(buffer []byte) error {
 	return joinedErr
 }
 
-func (l *List) handleDirectPing(directPing MessageDirectPing) error {
+func (l *List) handleDirectPing(directPing encoding.MessageDirectPing) error {
 	l.logger.V(2).Info(
 		"Received direct ping",
 		"source", directPing.Source,
 		"sequence-number", directPing.SequenceNumber,
 	)
-	directAck := MessageDirectAck{
+	directAck := encoding.MessageDirectAck{
 		Source:         l.self,
 		SequenceNumber: directPing.SequenceNumber,
 	}
@@ -816,7 +816,7 @@ func (l *List) handleDirectPing(directPing MessageDirectPing) error {
 	return nil
 }
 
-func (l *List) handleDirectAck(directAck MessageDirectAck) error {
+func (l *List) handleDirectAck(directAck encoding.MessageDirectAck) error {
 	l.logger.V(2).Info(
 		"Received direct ack",
 		"source", directAck.Source,
@@ -835,7 +835,7 @@ func (l *List) handleDirectAck(directAck MessageDirectAck) error {
 	return nil
 }
 
-func (l *List) handleDirectAckForPendingDirectPings(pendingDirectPings []PendingDirectPing, directAck MessageDirectAck) ([]PendingDirectPing, error) {
+func (l *List) handleDirectAckForPendingDirectPings(pendingDirectPings []PendingDirectPing, directAck encoding.MessageDirectAck) ([]PendingDirectPing, error) {
 	// As we now got a direct ack, we don't have to wait for a direct ack anymore.
 	pendingDirectPingIndex := slices.IndexFunc(pendingDirectPings, func(record PendingDirectPing) bool {
 		return record.MessageDirectPing.SequenceNumber == directAck.SequenceNumber &&
@@ -856,7 +856,7 @@ func (l *List) handleDirectAckForPendingDirectPings(pendingDirectPings []Pending
 		return pendingDirectPings, nil
 	}
 
-	indirectAck := MessageIndirectAck{
+	indirectAck := encoding.MessageIndirectAck{
 		Source:         directAck.Source,
 		SequenceNumber: pendingDirectPing.MessageIndirectPing.SequenceNumber,
 	}
@@ -866,7 +866,7 @@ func (l *List) handleDirectAckForPendingDirectPings(pendingDirectPings []Pending
 	return pendingDirectPings, nil
 }
 
-func (l *List) handleDirectAckForPendingIndirectPings(directAck MessageDirectAck) {
+func (l *List) handleDirectAckForPendingIndirectPings(directAck encoding.MessageDirectAck) {
 	// We don't have to wait for the indirect ack anymore.
 	pendingIndirectPingIndex := slices.IndexFunc(l.pendingIndirectPings, func(record PendingIndirectPing) bool {
 		return record.MessageIndirectPing.SequenceNumber == directAck.SequenceNumber &&
@@ -878,14 +878,14 @@ func (l *List) handleDirectAckForPendingIndirectPings(directAck MessageDirectAck
 	l.pendingIndirectPings = utility.SwapDelete(l.pendingIndirectPings, pendingIndirectPingIndex)
 }
 
-func (l *List) handleIndirectPing(indirectPing MessageIndirectPing) error {
+func (l *List) handleIndirectPing(indirectPing encoding.MessageIndirectPing) error {
 	l.logger.V(2).Info(
 		"Received indirect ping",
 		"source", indirectPing.Source,
 		"destination", indirectPing.Destination,
 		"sequence-number", indirectPing.SequenceNumber,
 	)
-	directPing := MessageDirectPing{
+	directPing := encoding.MessageDirectPing{
 		Source:         l.self,
 		SequenceNumber: l.nextSequenceNumber,
 	}
@@ -904,7 +904,7 @@ func (l *List) handleIndirectPing(indirectPing MessageIndirectPing) error {
 	return nil
 }
 
-func (l *List) handleIndirectAck(indirectAck MessageIndirectAck) {
+func (l *List) handleIndirectAck(indirectAck encoding.MessageIndirectAck) {
 	l.logger.V(2).Info(
 		"Received indirect ack",
 		"source", indirectAck.Source,
@@ -914,7 +914,7 @@ func (l *List) handleIndirectAck(indirectAck MessageIndirectAck) {
 	l.handleIndirectAckForPendingIndirectPings(indirectAck)
 }
 
-func (l *List) handleIndirectAckForPendingDirectPings(indirectAck MessageIndirectAck) {
+func (l *List) handleIndirectAckForPendingDirectPings(indirectAck encoding.MessageIndirectAck) {
 	// As we now got an indirect ack, we don't have to wait for a direct ack anymore.
 	pendingDirectPingIndex := slices.IndexFunc(l.pendingDirectPings, func(record PendingDirectPing) bool {
 		return record.MessageDirectPing.SequenceNumber == indirectAck.SequenceNumber &&
@@ -927,7 +927,7 @@ func (l *List) handleIndirectAckForPendingDirectPings(indirectAck MessageIndirec
 	l.pendingDirectPings = utility.SwapDelete(l.pendingDirectPings, pendingDirectPingIndex)
 }
 
-func (l *List) handleIndirectAckForPendingIndirectPings(indirectAck MessageIndirectAck) {
+func (l *List) handleIndirectAckForPendingIndirectPings(indirectAck encoding.MessageIndirectAck) {
 	// We don't have to wait for the indirect ack anymore.
 	pendingIndirectPingIndex := slices.IndexFunc(l.pendingIndirectPings, func(record PendingIndirectPing) bool {
 		return record.MessageIndirectPing.SequenceNumber == indirectAck.SequenceNumber &&
@@ -946,7 +946,7 @@ func (l *List) handleIndirectAckForPendingIndirectPings(indirectAck MessageIndir
 	l.pendingIndirectPings = utility.SwapDelete(l.pendingIndirectPings, pendingIndirectPingIndex)
 }
 
-func (l *List) handleSuspect(suspect gossip.MessageSuspect) {
+func (l *List) handleSuspect(suspect encoding.MessageSuspect) {
 	l.logger.V(3).Info(
 		"Received gossip about suspect",
 		"source", suspect.Source,
@@ -965,7 +965,7 @@ func (l *List) handleSuspect(suspect gossip.MessageSuspect) {
 	l.handleSuspectForUnknown(suspect)
 }
 
-func (l *List) handleSuspectForSelf(suspect gossip.MessageSuspect) bool {
+func (l *List) handleSuspectForSelf(suspect encoding.MessageSuspect) bool {
 	if !suspect.Destination.Equal(l.self) {
 		return false
 	}
@@ -978,7 +978,7 @@ func (l *List) handleSuspectForSelf(suspect gossip.MessageSuspect) bool {
 	// We need to refute the suspect about ourselves. Add a new alive message to gossip.
 	// Also make sure that our incarnation number is bigger than before.
 	l.incarnationNumber = utility.IncarnationMax(l.incarnationNumber+1, suspect.IncarnationNumber+1)
-	l.gossipQueue.Add(&gossip.MessageAlive{
+	l.gossipQueue.Add(&encoding.MessageAlive{
 		Destination:       l.self,
 		IncarnationNumber: l.incarnationNumber,
 	})
@@ -991,7 +991,7 @@ func (l *List) handleSuspectForSelf(suspect gossip.MessageSuspect) bool {
 	return true
 }
 
-func (l *List) handleSuspectForFaultyMembers(suspect gossip.MessageSuspect) bool {
+func (l *List) handleSuspectForFaultyMembers(suspect encoding.MessageSuspect) bool {
 	faultyMemberIndex, found := slices.BinarySearchFunc(
 		l.faultyMembers,
 		encoding.Member{Address: suspect.Destination},
@@ -1020,7 +1020,7 @@ func (l *List) handleSuspectForFaultyMembers(suspect gossip.MessageSuspect) bool
 	return true
 }
 
-func (l *List) handleSuspectForMembers(suspect gossip.MessageSuspect) bool {
+func (l *List) handleSuspectForMembers(suspect encoding.MessageSuspect) bool {
 	memberIndex, found := slices.BinarySearchFunc(
 		l.members,
 		encoding.Member{Address: suspect.Destination},
@@ -1050,7 +1050,7 @@ func (l *List) handleSuspectForMembers(suspect gossip.MessageSuspect) bool {
 	return true
 }
 
-func (l *List) handleSuspectForUnknown(suspect gossip.MessageSuspect) {
+func (l *List) handleSuspectForUnknown(suspect encoding.MessageSuspect) {
 	// We don't know about this member yet. Add it to our member list and gossip about it.
 	l.addMember(encoding.Member{
 		Address:                suspect.Destination,
@@ -1061,7 +1061,7 @@ func (l *List) handleSuspectForUnknown(suspect gossip.MessageSuspect) {
 	l.gossipQueue.Add(&suspect)
 }
 
-func (l *List) handleAlive(alive gossip.MessageAlive) {
+func (l *List) handleAlive(alive encoding.MessageAlive) {
 	l.logger.V(3).Info(
 		"Received gossip about alive",
 		"source", alive.Destination,
@@ -1079,7 +1079,7 @@ func (l *List) handleAlive(alive gossip.MessageAlive) {
 	l.handleAliveForUnknown(alive)
 }
 
-func (l *List) handleAliveForSelf(alive gossip.MessageAlive) bool {
+func (l *List) handleAliveForSelf(alive encoding.MessageAlive) bool {
 	if !alive.Destination.Equal(l.self) {
 		return false
 	}
@@ -1092,7 +1092,7 @@ func (l *List) handleAliveForSelf(alive gossip.MessageAlive) bool {
 	// We need to update the incarnation number about ourselves. Add a new alive message to gossip.
 	// Also make sure that our incarnation number is bigger than before.
 	l.incarnationNumber = utility.IncarnationMax(l.incarnationNumber+1, alive.IncarnationNumber+1)
-	l.gossipQueue.Add(&gossip.MessageAlive{
+	l.gossipQueue.Add(&encoding.MessageAlive{
 		Destination:       l.self,
 		IncarnationNumber: l.incarnationNumber,
 	})
@@ -1105,7 +1105,7 @@ func (l *List) handleAliveForSelf(alive gossip.MessageAlive) bool {
 	return true
 }
 
-func (l *List) handleAliveForFaultyMembers(alive gossip.MessageAlive) bool {
+func (l *List) handleAliveForFaultyMembers(alive encoding.MessageAlive) bool {
 	faultyMemberIndex, found := slices.BinarySearchFunc(
 		l.faultyMembers,
 		encoding.Member{Address: alive.Destination},
@@ -1133,7 +1133,7 @@ func (l *List) handleAliveForFaultyMembers(alive gossip.MessageAlive) bool {
 	return true
 }
 
-func (l *List) handleAliveForMembers(alive gossip.MessageAlive) bool {
+func (l *List) handleAliveForMembers(alive encoding.MessageAlive) bool {
 	memberIndex, found := slices.BinarySearchFunc(
 		l.members,
 		encoding.Member{Address: alive.Destination},
@@ -1162,7 +1162,7 @@ func (l *List) handleAliveForMembers(alive gossip.MessageAlive) bool {
 	return true
 }
 
-func (l *List) handleAliveForUnknown(alive gossip.MessageAlive) {
+func (l *List) handleAliveForUnknown(alive encoding.MessageAlive) {
 	// We don't know about this member yet. Add it to our member list and gossip about it.
 	l.addMember(encoding.Member{
 		Address:           alive.Destination,
@@ -1172,7 +1172,7 @@ func (l *List) handleAliveForUnknown(alive gossip.MessageAlive) {
 	l.gossipQueue.Add(&alive)
 }
 
-func (l *List) handleFaulty(faulty gossip.MessageFaulty) {
+func (l *List) handleFaulty(faulty encoding.MessageFaulty) {
 	l.logger.V(3).Info(
 		"Received gossip about faulty",
 		"source", faulty.Source,
@@ -1191,7 +1191,7 @@ func (l *List) handleFaulty(faulty gossip.MessageFaulty) {
 	l.handleFaultyForUnknown(faulty)
 }
 
-func (l *List) handleFaultyForSelf(faulty gossip.MessageFaulty) bool {
+func (l *List) handleFaultyForSelf(faulty encoding.MessageFaulty) bool {
 	if !faulty.Destination.Equal(l.self) {
 		return false
 	}
@@ -1204,7 +1204,7 @@ func (l *List) handleFaultyForSelf(faulty gossip.MessageFaulty) bool {
 	// We need to re-join. Add a new alive message to gossip.
 	// Also make sure that our incarnation number is bigger than before.
 	l.incarnationNumber = utility.IncarnationMax(l.incarnationNumber+1, faulty.IncarnationNumber+1)
-	l.gossipQueue.Add(&gossip.MessageAlive{
+	l.gossipQueue.Add(&encoding.MessageAlive{
 		Destination:       l.self,
 		IncarnationNumber: l.incarnationNumber,
 	})
@@ -1217,7 +1217,7 @@ func (l *List) handleFaultyForSelf(faulty gossip.MessageFaulty) bool {
 	return true
 }
 
-func (l *List) handleFaultyForFaultyMembers(faulty gossip.MessageFaulty) bool {
+func (l *List) handleFaultyForFaultyMembers(faulty encoding.MessageFaulty) bool {
 	faultyMemberIndex, found := slices.BinarySearchFunc(
 		l.faultyMembers,
 		encoding.Member{Address: faulty.Destination},
@@ -1239,7 +1239,7 @@ func (l *List) handleFaultyForFaultyMembers(faulty gossip.MessageFaulty) bool {
 	return true
 }
 
-func (l *List) handleFaultyForMembers(faulty gossip.MessageFaulty) bool {
+func (l *List) handleFaultyForMembers(faulty encoding.MessageFaulty) bool {
 	memberIndex, found := slices.BinarySearchFunc(
 		l.members,
 		encoding.Member{Address: faulty.Destination},
@@ -1275,7 +1275,7 @@ func (l *List) handleFaultyForMembers(faulty gossip.MessageFaulty) bool {
 	return true
 }
 
-func (l *List) handleFaultyForUnknown(faulty gossip.MessageFaulty) {
+func (l *List) handleFaultyForUnknown(faulty encoding.MessageFaulty) {
 	// We don't know about this member yet. Add it to our faulty member list and gossip about it.
 	faultyMember := encoding.Member{
 		Address:           faulty.Destination,
@@ -1296,13 +1296,13 @@ func (l *List) handleFaultyForUnknown(faulty gossip.MessageFaulty) {
 	l.gossipQueue.Add(&faulty)
 }
 
-func (l *List) handleListRequest(listRequest MessageListRequest) error {
+func (l *List) handleListRequest(listRequest encoding.MessageListRequest) error {
 	l.logger.V(2).Info(
 		"Received list request",
 		"source", listRequest.Source,
 	)
 
-	listResponse := MessageListResponse{
+	listResponse := encoding.MessageListResponse{
 		Source:  l.self,
 		Members: append(l.members, l.faultyMembers...),
 	}
@@ -1317,7 +1317,7 @@ func (l *List) handleListRequest(listRequest MessageListRequest) error {
 	return nil
 }
 
-func (l *List) handleListResponse(listResponse MessageListResponse) error {
+func (l *List) handleListResponse(listResponse encoding.MessageListResponse) error {
 	l.logger.V(2).Info(
 		"Received list response",
 		"source", listResponse.Source,
@@ -1325,18 +1325,18 @@ func (l *List) handleListResponse(listResponse MessageListResponse) error {
 	for _, member := range listResponse.Members {
 		switch member.State {
 		case encoding.MemberStateAlive:
-			l.handleAlive(gossip.MessageAlive{
+			l.handleAlive(encoding.MessageAlive{
 				Destination:       member.Address,
 				IncarnationNumber: member.IncarnationNumber,
 			})
 		case encoding.MemberStateSuspect:
-			l.handleSuspect(gossip.MessageSuspect{
+			l.handleSuspect(encoding.MessageSuspect{
 				Source:            listResponse.Source,
 				Destination:       member.Address,
 				IncarnationNumber: member.IncarnationNumber,
 			})
 		case encoding.MemberStateFaulty:
-			l.handleFaulty(gossip.MessageFaulty{
+			l.handleFaulty(encoding.MessageFaulty{
 				Source:            listResponse.Source,
 				Destination:       member.Address,
 				IncarnationNumber: member.IncarnationNumber,

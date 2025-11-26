@@ -1,21 +1,19 @@
-package membership_test
+package encoding_test
 
 import (
 	"fmt"
 	"net"
 	"testing"
 
+	"github.com/backbone81/membership/internal/encoding"
 	"github.com/backbone81/membership/internal/utility"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-
-	"github.com/backbone81/membership/internal/encoding"
-	"github.com/backbone81/membership/internal/membership"
 )
 
 var _ = Describe("MessageListResponse", func() {
 	It("should append to nil buffer", func() {
-		message := membership.MessageListResponse{
+		message := encoding.MessageListResponse{
 			Source: encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 			Members: []encoding.Member{
 				{
@@ -37,7 +35,7 @@ var _ = Describe("MessageListResponse", func() {
 
 	It("should append to buffer", func() {
 		var localBuffer [10]byte
-		message := membership.MessageListResponse{
+		message := encoding.MessageListResponse{
 			Source: encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 			Members: []encoding.Member{
 				{
@@ -58,7 +56,7 @@ var _ = Describe("MessageListResponse", func() {
 	})
 
 	It("should read from buffer", func() {
-		appendMessage := membership.MessageListResponse{
+		appendMessage := encoding.MessageListResponse{
 			Source: encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 			Members: []encoding.Member{
 				{
@@ -77,7 +75,7 @@ var _ = Describe("MessageListResponse", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(buffer).ToNot(BeNil())
 
-		var readMessage membership.MessageListResponse
+		var readMessage encoding.MessageListResponse
 		readN, err := readMessage.FromBuffer(buffer)
 		Expect(err).ToNot(HaveOccurred())
 
@@ -86,12 +84,12 @@ var _ = Describe("MessageListResponse", func() {
 	})
 
 	It("should fail to read from nil buffer", func() {
-		var readMessage membership.MessageListResponse
+		var readMessage encoding.MessageListResponse
 		Expect(readMessage.FromBuffer(nil)).Error().To(HaveOccurred())
 	})
 
 	It("should fail to read from buffer which is too small", func() {
-		message := membership.MessageListResponse{
+		message := encoding.MessageListResponse{
 			Source: encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 			Members: []encoding.Member{
 				{
@@ -118,7 +116,7 @@ var _ = Describe("MessageListResponse", func() {
 
 func BenchmarkMessageListResponse_AppendToBuffer(b *testing.B) {
 	for memberCount := range utility.ClusterSize(2, 8, 128) {
-		message := membership.MessageListResponse{
+		message := encoding.MessageListResponse{
 			Source: encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 		}
 		for i := range memberCount {
@@ -141,7 +139,7 @@ func BenchmarkMessageListResponse_AppendToBuffer(b *testing.B) {
 
 func BenchmarkMessageListResponse_FromBuffer(b *testing.B) {
 	for memberCount := range utility.ClusterSize(2, 8, 128) {
-		message := membership.MessageListResponse{
+		message := encoding.MessageListResponse{
 			Source: encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 		}
 		for i := range memberCount {
@@ -156,7 +154,7 @@ func BenchmarkMessageListResponse_FromBuffer(b *testing.B) {
 			b.Fatal(err)
 		}
 		b.Run(fmt.Sprintf("%d members", memberCount), func(b *testing.B) {
-			var readMessage membership.MessageListResponse
+			var readMessage encoding.MessageListResponse
 			readMessage.Members = make([]encoding.Member, memberCount)
 			for b.Loop() {
 				if _, err := readMessage.FromBuffer(buffer); err != nil {

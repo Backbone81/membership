@@ -1,21 +1,18 @@
-package membership_test
+package encoding_test
 
 import (
 	"net"
 	"testing"
 
+	"github.com/backbone81/membership/internal/encoding"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-
-	"github.com/backbone81/membership/internal/encoding"
-	"github.com/backbone81/membership/internal/membership"
 )
 
-var _ = Describe("MessageIndirectPing", func() {
+var _ = Describe("MessageIndirectAck", func() {
 	It("should append to nil buffer", func() {
-		message := membership.MessageIndirectPing{
+		message := encoding.MessageIndirectAck{
 			Source:         encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
-			Destination:    encoding.NewAddress(net.IPv4(11, 12, 13, 14), 1024),
 			SequenceNumber: 7,
 		}
 		buffer, _, err := message.AppendToBuffer(nil)
@@ -25,9 +22,8 @@ var _ = Describe("MessageIndirectPing", func() {
 
 	It("should append to buffer", func() {
 		var localBuffer [10]byte
-		message := membership.MessageIndirectPing{
+		message := encoding.MessageIndirectAck{
 			Source:         encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
-			Destination:    encoding.NewAddress(net.IPv4(11, 12, 13, 14), 1024),
 			SequenceNumber: 7,
 		}
 		buffer, _, err := message.AppendToBuffer(localBuffer[:0])
@@ -36,16 +32,15 @@ var _ = Describe("MessageIndirectPing", func() {
 	})
 
 	It("should read from buffer", func() {
-		appendMessage := membership.MessageIndirectPing{
+		appendMessage := encoding.MessageIndirectAck{
 			Source:         encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
-			Destination:    encoding.NewAddress(net.IPv4(11, 12, 13, 14), 1024),
 			SequenceNumber: 7,
 		}
 		buffer, appendN, err := appendMessage.AppendToBuffer(nil)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(buffer).ToNot(BeNil())
 
-		var readMessage membership.MessageIndirectPing
+		var readMessage encoding.MessageIndirectAck
 		readN, err := readMessage.FromBuffer(buffer)
 		Expect(err).ToNot(HaveOccurred())
 
@@ -54,14 +49,13 @@ var _ = Describe("MessageIndirectPing", func() {
 	})
 
 	It("should fail to read from nil buffer", func() {
-		var readMessage membership.MessageIndirectPing
+		var readMessage encoding.MessageIndirectAck
 		Expect(readMessage.FromBuffer(nil)).Error().To(HaveOccurred())
 	})
 
 	It("should fail to read from buffer which is too small", func() {
-		message := membership.MessageIndirectPing{
+		message := encoding.MessageIndirectAck{
 			Source:         encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
-			Destination:    encoding.NewAddress(net.IPv4(11, 12, 13, 14), 1024),
 			SequenceNumber: 7,
 		}
 		buffer, _, err := message.AppendToBuffer(nil)
@@ -74,10 +68,9 @@ var _ = Describe("MessageIndirectPing", func() {
 	})
 })
 
-func BenchmarkMessageIndirectPing_AppendToBuffer(b *testing.B) {
-	message := membership.MessageIndirectPing{
+func BenchmarkMessageIndirectAck_AppendToBuffer(b *testing.B) {
+	message := encoding.MessageIndirectAck{
 		Source:         encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
-		Destination:    encoding.NewAddress(net.IPv4(11, 12, 13, 14), 1024),
 		SequenceNumber: 7,
 	}
 	var buffer [1024]byte
@@ -88,10 +81,9 @@ func BenchmarkMessageIndirectPing_AppendToBuffer(b *testing.B) {
 	}
 }
 
-func BenchmarkMessageIndirectPing_FromBuffer(b *testing.B) {
-	message := membership.MessageIndirectPing{
+func BenchmarkMessageIndirectAck_FromBuffer(b *testing.B) {
+	message := encoding.MessageIndirectAck{
 		Source:         encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
-		Destination:    encoding.NewAddress(net.IPv4(11, 12, 13, 14), 1024),
 		SequenceNumber: 7,
 	}
 	buffer, _, err := message.AppendToBuffer(nil)

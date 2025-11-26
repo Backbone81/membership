@@ -15,9 +15,9 @@ type PendingDirectPing struct {
 	Destination encoding.Address
 
 	// MessageDirectPing is a copy of the message which was sent for the direct ping.
-	MessageDirectPing MessageDirectPing
+	MessageDirectPing encoding.MessageDirectPing
 
 	// MessageIndirectPing is a copy of a received indirect ping request. It is the zero value in case the direct
 	// ping was not initiated in response to an indirect ping request.
-	MessageIndirectPing MessageIndirectPing
+	MessageIndirectPing encoding.MessageIndirectPing
 }

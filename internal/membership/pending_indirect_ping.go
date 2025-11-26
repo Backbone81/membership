@@ -1,6 +1,10 @@
 package membership
 
-import "time"
+import (
+	"time"
+
+	"github.com/backbone81/membership/internal/encoding"
+)
 
 // PendingIndirectPing provides bookkeeping for an indirect ping which is still active.
 type PendingIndirectPing struct {
@@ -8,5 +12,5 @@ type PendingIndirectPing struct {
 	Timestamp time.Time
 
 	// MessageIndirectPing is a copy of the message which was sent for an indirect ping.
-	MessageIndirectPing MessageIndirectPing
+	MessageIndirectPing encoding.MessageIndirectPing
 }

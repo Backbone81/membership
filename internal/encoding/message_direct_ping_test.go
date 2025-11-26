@@ -1,19 +1,17 @@
-package membership_test
+package encoding_test
 
 import (
 	"net"
 	"testing"
 
+	"github.com/backbone81/membership/internal/encoding"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-
-	"github.com/backbone81/membership/internal/encoding"
-	"github.com/backbone81/membership/internal/membership"
 )
 
-var _ = Describe("MessageIndirectAck", func() {
+var _ = Describe("MessageDirectPing", func() {
 	It("should append to nil buffer", func() {
-		message := membership.MessageIndirectAck{
+		message := encoding.MessageDirectPing{
 			Source:         encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 			SequenceNumber: 7,
 		}
@@ -24,7 +22,7 @@ var _ = Describe("MessageIndirectAck", func() {
 
 	It("should append to buffer", func() {
 		var localBuffer [10]byte
-		message := membership.MessageIndirectAck{
+		message := encoding.MessageDirectPing{
 			Source:         encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 			SequenceNumber: 7,
 		}
@@ -34,7 +32,7 @@ var _ = Describe("MessageIndirectAck", func() {
 	})
 
 	It("should read from buffer", func() {
-		appendMessage := membership.MessageIndirectAck{
+		appendMessage := encoding.MessageDirectPing{
 			Source:         encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 			SequenceNumber: 7,
 		}
@@ -42,7 +40,7 @@ var _ = Describe("MessageIndirectAck", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(buffer).ToNot(BeNil())
 
-		var readMessage membership.MessageIndirectAck
+		var readMessage encoding.MessageDirectPing
 		readN, err := readMessage.FromBuffer(buffer)
 		Expect(err).ToNot(HaveOccurred())
 
@@ -51,12 +49,12 @@ var _ = Describe("MessageIndirectAck", func() {
 	})
 
 	It("should fail to read from nil buffer", func() {
-		var readMessage membership.MessageIndirectAck
+		var readMessage encoding.MessageDirectPing
 		Expect(readMessage.FromBuffer(nil)).Error().To(HaveOccurred())
 	})
 
 	It("should fail to read from buffer which is too small", func() {
-		message := membership.MessageIndirectAck{
+		message := encoding.MessageDirectPing{
 			Source:         encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 			SequenceNumber: 7,
 		}
@@ -70,8 +68,8 @@ var _ = Describe("MessageIndirectAck", func() {
 	})
 })
 
-func BenchmarkMessageIndirectAck_AppendToBuffer(b *testing.B) {
-	message := membership.MessageIndirectAck{
+func BenchmarkMessageDirectPing_AppendToBuffer(b *testing.B) {
+	message := encoding.MessageDirectPing{
 		Source:         encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 		SequenceNumber: 7,
 	}
@@ -83,8 +81,8 @@ func BenchmarkMessageIndirectAck_AppendToBuffer(b *testing.B) {
 	}
 }
 
-func BenchmarkMessageIndirectAck_FromBuffer(b *testing.B) {
-	message := membership.MessageIndirectAck{
+func BenchmarkMessageDirectPing_FromBuffer(b *testing.B) {
+	message := encoding.MessageDirectPing{
 		Source:         encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 		SequenceNumber: 7,
 	}

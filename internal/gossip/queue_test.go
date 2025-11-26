@@ -91,7 +91,7 @@ var _ = Describe("Queue", func() {
 	Context("Clear", func() {
 		It("should clear queue with single message", func() {
 			queue := gossip.NewQueue()
-			queue.Add(&gossip.MessageAlive{
+			queue.Add(&encoding.MessageAlive{
 				Destination:       TestAddress,
 				IncarnationNumber: 0,
 			})
@@ -114,7 +114,7 @@ var _ = Describe("Queue", func() {
 			queue := gossip.NewQueue()
 
 			for i := 0; i < 10; i++ {
-				queue.Add(&gossip.MessageAlive{
+				queue.Add(&encoding.MessageAlive{
 					Destination:       encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
 					IncarnationNumber: 0,
 				})
@@ -138,7 +138,7 @@ var _ = Describe("Queue", func() {
 			queue := gossip.NewQueue()
 
 			for i := 0; i < 10; i++ {
-				queue.Add(&gossip.MessageAlive{
+				queue.Add(&encoding.MessageAlive{
 					Destination:       encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
 					IncarnationNumber: 0,
 				})
@@ -194,7 +194,7 @@ var _ = Describe("Queue", func() {
 			queue := gossip.NewQueue(gossip.WithMaxTransmissionCount(4))
 
 			for i := 0; i < 10; i++ {
-				queue.Add(&gossip.MessageAlive{
+				queue.Add(&encoding.MessageAlive{
 					Destination:       encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
 					IncarnationNumber: 0,
 				})
@@ -235,7 +235,7 @@ var _ = Describe("Queue", func() {
 	Context("Add", func() {
 		It("should add message to empty queue", func() {
 			queue := gossip.NewQueue()
-			message := &gossip.MessageAlive{
+			message := &encoding.MessageAlive{
 				Destination:       TestAddress,
 				IncarnationNumber: 0,
 			}
@@ -249,11 +249,11 @@ var _ = Describe("Queue", func() {
 
 		It("should add multiple messages with different addresses", func() {
 			queue := gossip.NewQueue()
-			message1 := &gossip.MessageAlive{
+			message1 := &encoding.MessageAlive{
 				Destination:       TestAddress,
 				IncarnationNumber: 0,
 			}
-			message2 := &gossip.MessageAlive{
+			message2 := &encoding.MessageAlive{
 				Destination:       TestAddress2,
 				IncarnationNumber: 0,
 			}
@@ -269,11 +269,11 @@ var _ = Describe("Queue", func() {
 
 		It("should not add duplicate message for same address", func() {
 			queue := gossip.NewQueue()
-			message1 := &gossip.MessageAlive{
+			message1 := &encoding.MessageAlive{
 				Destination:       TestAddress,
 				IncarnationNumber: 0,
 			}
-			message2 := &gossip.MessageAlive{
+			message2 := &encoding.MessageAlive{
 				Destination:       TestAddress,
 				IncarnationNumber: 0,
 			}
@@ -289,7 +289,7 @@ var _ = Describe("Queue", func() {
 		It("should grow ring buffer when capacity is reached", func() {
 			queue := gossip.NewQueue(gossip.WithPreAllocationCount(4))
 			for i := 0; i < 3; i++ {
-				queue.Add(&gossip.MessageAlive{
+				queue.Add(&encoding.MessageAlive{
 					Destination:       encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
 					IncarnationNumber: 0,
 				})
@@ -297,7 +297,7 @@ var _ = Describe("Queue", func() {
 			Expect(queue.Cap()).To(Equal(4))
 			Expect(queue.Len()).To(Equal(3))
 
-			queue.Add(&gossip.MessageAlive{
+			queue.Add(&encoding.MessageAlive{
 				Destination:       encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+3),
 				IncarnationNumber: 0,
 			})
@@ -317,7 +317,7 @@ var _ = Describe("Queue", func() {
 			)
 
 			for i := 0; i < 3; i++ {
-				queue.Add(&gossip.MessageAlive{
+				queue.Add(&encoding.MessageAlive{
 					Destination:       encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
 					IncarnationNumber: 0,
 				})
@@ -330,7 +330,7 @@ var _ = Describe("Queue", func() {
 
 			// Now add messages that will cause wraparound + growth
 			for i := 3; i < 7; i++ {
-				queue.Add(&gossip.MessageAlive{
+				queue.Add(&encoding.MessageAlive{
 					Destination:       encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
 					IncarnationNumber: 0,
 				})
@@ -348,7 +348,7 @@ var _ = Describe("Queue", func() {
 
 		It("should move overwritten message back to bucket 0", func() {
 			queue := gossip.NewQueue()
-			message1 := &gossip.MessageAlive{
+			message1 := &encoding.MessageAlive{
 				Destination:       TestAddress,
 				IncarnationNumber: 1,
 			}
@@ -356,7 +356,7 @@ var _ = Describe("Queue", func() {
 			queue.MarkTransmitted(1)
 			queue.MarkTransmitted(1)
 
-			message2 := &gossip.MessageAlive{
+			message2 := &encoding.MessageAlive{
 				Destination:       TestAddress2,
 				IncarnationNumber: 0,
 			}
@@ -366,7 +366,7 @@ var _ = Describe("Queue", func() {
 			Expect(queue.Get(0)).To(Equal(message2))
 			Expect(queue.Get(1)).To(Equal(message1))
 
-			message1Updated := &gossip.MessageAlive{
+			message1Updated := &encoding.MessageAlive{
 				Destination:       TestAddress,
 				IncarnationNumber: 2,
 			}
@@ -391,44 +391,44 @@ var _ = Describe("Queue", func() {
 				Expect(queue.ValidateInternalState()).To(Succeed())
 			},
 			Entry("Alive with lower incarnation number should NOT overwrite alive",
-				&gossip.MessageAlive{
+				&encoding.MessageAlive{
 					Destination:       TestAddress,
 					IncarnationNumber: 2,
 				},
-				&gossip.MessageAlive{
+				&encoding.MessageAlive{
 					Destination:       TestAddress,
 					IncarnationNumber: 1,
 				},
 				false,
 			),
 			Entry("Alive with same incarnation number should NOT overwrite alive",
-				&gossip.MessageAlive{
+				&encoding.MessageAlive{
 					Destination:       TestAddress,
 					IncarnationNumber: 2,
 				},
-				&gossip.MessageAlive{
+				&encoding.MessageAlive{
 					Destination:       TestAddress,
 					IncarnationNumber: 2,
 				},
 				false,
 			),
 			Entry("Alive with bigger incarnation number should overwrite alive",
-				&gossip.MessageAlive{
+				&encoding.MessageAlive{
 					Destination:       TestAddress,
 					IncarnationNumber: 2,
 				},
-				&gossip.MessageAlive{
+				&encoding.MessageAlive{
 					Destination:       TestAddress,
 					IncarnationNumber: 3,
 				},
 				true,
 			),
 			Entry("Suspect with lower incarnation number should NOT overwrite alive",
-				&gossip.MessageAlive{
+				&encoding.MessageAlive{
 					Destination:       TestAddress,
 					IncarnationNumber: 2,
 				},
-				&gossip.MessageSuspect{
+				&encoding.MessageSuspect{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 1,
@@ -436,11 +436,11 @@ var _ = Describe("Queue", func() {
 				false,
 			),
 			Entry("Suspect with same incarnation number should overwrite alive",
-				&gossip.MessageAlive{
+				&encoding.MessageAlive{
 					Destination:       TestAddress,
 					IncarnationNumber: 2,
 				},
-				&gossip.MessageSuspect{
+				&encoding.MessageSuspect{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 2,
@@ -448,11 +448,11 @@ var _ = Describe("Queue", func() {
 				true,
 			),
 			Entry("Suspect with bigger incarnation number should overwrite alive",
-				&gossip.MessageAlive{
+				&encoding.MessageAlive{
 					Destination:       TestAddress,
 					IncarnationNumber: 2,
 				},
-				&gossip.MessageSuspect{
+				&encoding.MessageSuspect{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 3,
@@ -460,11 +460,11 @@ var _ = Describe("Queue", func() {
 				true,
 			),
 			Entry("Faulty with lower incarnation number should NOT overwrite alive",
-				&gossip.MessageAlive{
+				&encoding.MessageAlive{
 					Destination:       TestAddress,
 					IncarnationNumber: 2,
 				},
-				&gossip.MessageFaulty{
+				&encoding.MessageFaulty{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 1,
@@ -472,11 +472,11 @@ var _ = Describe("Queue", func() {
 				false,
 			),
 			Entry("Faulty with same incarnation number should overwrite alive",
-				&gossip.MessageAlive{
+				&encoding.MessageAlive{
 					Destination:       TestAddress,
 					IncarnationNumber: 2,
 				},
-				&gossip.MessageFaulty{
+				&encoding.MessageFaulty{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 2,
@@ -484,11 +484,11 @@ var _ = Describe("Queue", func() {
 				true,
 			),
 			Entry("Faulty with bigger incarnation number should overwrite alive",
-				&gossip.MessageAlive{
+				&encoding.MessageAlive{
 					Destination:       TestAddress,
 					IncarnationNumber: 2,
 				},
-				&gossip.MessageFaulty{
+				&encoding.MessageFaulty{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 3,
@@ -497,48 +497,48 @@ var _ = Describe("Queue", func() {
 			),
 
 			Entry("Alive with lower incarnation number should NOT overwrite suspect",
-				&gossip.MessageSuspect{
+				&encoding.MessageSuspect{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 2,
 				},
-				&gossip.MessageAlive{
+				&encoding.MessageAlive{
 					Destination:       TestAddress,
 					IncarnationNumber: 1,
 				},
 				false,
 			),
 			Entry("Alive with same incarnation number should NOT overwrite suspect",
-				&gossip.MessageSuspect{
+				&encoding.MessageSuspect{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 2,
 				},
-				&gossip.MessageAlive{
+				&encoding.MessageAlive{
 					Destination:       TestAddress,
 					IncarnationNumber: 2,
 				},
 				false,
 			),
 			Entry("Alive with bigger incarnation number should overwrite suspect",
-				&gossip.MessageSuspect{
+				&encoding.MessageSuspect{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 2,
 				},
-				&gossip.MessageAlive{
+				&encoding.MessageAlive{
 					Destination:       TestAddress,
 					IncarnationNumber: 3,
 				},
 				true,
 			),
 			Entry("Suspect with lower incarnation number should NOT overwrite suspect",
-				&gossip.MessageSuspect{
+				&encoding.MessageSuspect{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 2,
 				},
-				&gossip.MessageSuspect{
+				&encoding.MessageSuspect{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 1,
@@ -546,12 +546,12 @@ var _ = Describe("Queue", func() {
 				false,
 			),
 			Entry("Suspect with same incarnation number should NOT overwrite suspect",
-				&gossip.MessageSuspect{
+				&encoding.MessageSuspect{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 2,
 				},
-				&gossip.MessageSuspect{
+				&encoding.MessageSuspect{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 2,
@@ -559,12 +559,12 @@ var _ = Describe("Queue", func() {
 				false,
 			),
 			Entry("Suspect with bigger incarnation number should overwrite suspect",
-				&gossip.MessageSuspect{
+				&encoding.MessageSuspect{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 2,
 				},
-				&gossip.MessageSuspect{
+				&encoding.MessageSuspect{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 3,
@@ -572,12 +572,12 @@ var _ = Describe("Queue", func() {
 				true,
 			),
 			Entry("Faulty with lower incarnation number should NOT overwrite suspect",
-				&gossip.MessageSuspect{
+				&encoding.MessageSuspect{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 2,
 				},
-				&gossip.MessageFaulty{
+				&encoding.MessageFaulty{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 1,
@@ -585,12 +585,12 @@ var _ = Describe("Queue", func() {
 				false,
 			),
 			Entry("Faulty with same incarnation number should overwrite suspect",
-				&gossip.MessageSuspect{
+				&encoding.MessageSuspect{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 2,
 				},
-				&gossip.MessageFaulty{
+				&encoding.MessageFaulty{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 2,
@@ -598,12 +598,12 @@ var _ = Describe("Queue", func() {
 				true,
 			),
 			Entry("Faulty with bigger incarnation number should overwrite suspect",
-				&gossip.MessageSuspect{
+				&encoding.MessageSuspect{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 2,
 				},
-				&gossip.MessageFaulty{
+				&encoding.MessageFaulty{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 3,
@@ -612,48 +612,48 @@ var _ = Describe("Queue", func() {
 			),
 
 			Entry("Alive with lower incarnation number should NOT overwrite faulty",
-				&gossip.MessageFaulty{
+				&encoding.MessageFaulty{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 2,
 				},
-				&gossip.MessageAlive{
+				&encoding.MessageAlive{
 					Destination:       TestAddress,
 					IncarnationNumber: 1,
 				},
 				false,
 			),
 			Entry("Alive with same incarnation number should NOT overwrite faulty",
-				&gossip.MessageFaulty{
+				&encoding.MessageFaulty{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 2,
 				},
-				&gossip.MessageAlive{
+				&encoding.MessageAlive{
 					Destination:       TestAddress,
 					IncarnationNumber: 2,
 				},
 				false,
 			),
 			Entry("Alive with bigger incarnation number should overwrite faulty",
-				&gossip.MessageFaulty{
+				&encoding.MessageFaulty{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 2,
 				},
-				&gossip.MessageAlive{
+				&encoding.MessageAlive{
 					Destination:       TestAddress,
 					IncarnationNumber: 3,
 				},
 				true,
 			),
 			Entry("Suspect with lower incarnation number should NOT overwrite faulty",
-				&gossip.MessageFaulty{
+				&encoding.MessageFaulty{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 2,
 				},
-				&gossip.MessageSuspect{
+				&encoding.MessageSuspect{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 1,
@@ -661,12 +661,12 @@ var _ = Describe("Queue", func() {
 				false,
 			),
 			Entry("Suspect with same incarnation number should NOT overwrite faulty",
-				&gossip.MessageFaulty{
+				&encoding.MessageFaulty{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 2,
 				},
-				&gossip.MessageSuspect{
+				&encoding.MessageSuspect{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 2,
@@ -674,12 +674,12 @@ var _ = Describe("Queue", func() {
 				false,
 			),
 			Entry("Suspect with bigger incarnation number should overwrite faulty",
-				&gossip.MessageFaulty{
+				&encoding.MessageFaulty{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 2,
 				},
-				&gossip.MessageSuspect{
+				&encoding.MessageSuspect{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 3,
@@ -687,12 +687,12 @@ var _ = Describe("Queue", func() {
 				true,
 			),
 			Entry("Faulty with lower incarnation number should NOT overwrite faulty",
-				&gossip.MessageFaulty{
+				&encoding.MessageFaulty{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 2,
 				},
-				&gossip.MessageFaulty{
+				&encoding.MessageFaulty{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 1,
@@ -700,12 +700,12 @@ var _ = Describe("Queue", func() {
 				false,
 			),
 			Entry("Faulty with same incarnation number should NOT overwrite faulty",
-				&gossip.MessageFaulty{
+				&encoding.MessageFaulty{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 2,
 				},
-				&gossip.MessageFaulty{
+				&encoding.MessageFaulty{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 1,
@@ -713,12 +713,12 @@ var _ = Describe("Queue", func() {
 				false,
 			),
 			Entry("Faulty with bigger incarnation number should overwrite faulty",
-				&gossip.MessageFaulty{
+				&encoding.MessageFaulty{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 2,
 				},
-				&gossip.MessageFaulty{
+				&encoding.MessageFaulty{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 3,
@@ -731,11 +731,11 @@ var _ = Describe("Queue", func() {
 	Context("Prioritize", func() {
 		It("should not prioritize when address does not exist", func() {
 			queue := gossip.NewQueue()
-			message1 := &gossip.MessageAlive{
+			message1 := &encoding.MessageAlive{
 				Destination:       TestAddress,
 				IncarnationNumber: 0,
 			}
-			message2 := &gossip.MessageAlive{
+			message2 := &encoding.MessageAlive{
 				Destination:       TestAddress2,
 				IncarnationNumber: 0,
 			}
@@ -752,20 +752,20 @@ var _ = Describe("Queue", func() {
 		It("should prioritize suspect message", func() {
 			queue := gossip.NewQueue()
 
-			alive1 := &gossip.MessageAlive{
+			alive1 := &encoding.MessageAlive{
 				Destination:       TestAddress2,
 				IncarnationNumber: 0,
 			}
 			queue.Add(alive1)
 
-			suspect := &gossip.MessageSuspect{
+			suspect := &encoding.MessageSuspect{
 				Source:            TestAddress2,
 				Destination:       TestAddress,
 				IncarnationNumber: 0,
 			}
 			queue.Add(suspect)
 
-			alive2 := &gossip.MessageAlive{
+			alive2 := &encoding.MessageAlive{
 				Destination:       TestAddress3,
 				IncarnationNumber: 0,
 			}
@@ -786,20 +786,20 @@ var _ = Describe("Queue", func() {
 		It("should prioritize faulty message", func() {
 			queue := gossip.NewQueue()
 
-			alive1 := &gossip.MessageAlive{
+			alive1 := &encoding.MessageAlive{
 				Destination:       TestAddress2,
 				IncarnationNumber: 0,
 			}
 			queue.Add(alive1)
 
-			faulty := &gossip.MessageFaulty{
+			faulty := &encoding.MessageFaulty{
 				Source:            TestAddress2,
 				Destination:       TestAddress,
 				IncarnationNumber: 0,
 			}
 			queue.Add(faulty)
 
-			alive2 := &gossip.MessageAlive{
+			alive2 := &encoding.MessageAlive{
 				Destination:       TestAddress3,
 				IncarnationNumber: 0,
 			}
@@ -820,19 +820,19 @@ var _ = Describe("Queue", func() {
 		It("should not prioritize alive message", func() {
 			queue := gossip.NewQueue()
 
-			alive1 := &gossip.MessageAlive{
+			alive1 := &encoding.MessageAlive{
 				Destination:       TestAddress2,
 				IncarnationNumber: 0,
 			}
 			queue.Add(alive1)
 
-			alive2 := &gossip.MessageAlive{
+			alive2 := &encoding.MessageAlive{
 				Destination:       TestAddress,
 				IncarnationNumber: 0,
 			}
 			queue.Add(alive2)
 
-			alive3 := &gossip.MessageAlive{
+			alive3 := &encoding.MessageAlive{
 				Destination:       TestAddress3,
 				IncarnationNumber: 0,
 			}
@@ -853,7 +853,7 @@ var _ = Describe("Queue", func() {
 		It("should clear priority when prioritized message is removed", func() {
 			queue := gossip.NewQueue(gossip.WithMaxTransmissionCount(3))
 
-			suspect := &gossip.MessageSuspect{
+			suspect := &encoding.MessageSuspect{
 				Source:            TestAddress2,
 				Destination:       TestAddress,
 				IncarnationNumber: 0,
@@ -861,7 +861,7 @@ var _ = Describe("Queue", func() {
 			queue.Add(suspect)
 			queue.MarkTransmitted(1)
 
-			alive := &gossip.MessageAlive{
+			alive := &encoding.MessageAlive{
 				Destination:       TestAddress2,
 				IncarnationNumber: 0,
 			}
@@ -885,7 +885,7 @@ var _ = Describe("Queue", func() {
 		It("should preserve priority index when ring buffer grows", func() {
 			queue := gossip.NewQueue(gossip.WithPreAllocationCount(4))
 
-			suspect := &gossip.MessageSuspect{
+			suspect := &encoding.MessageSuspect{
 				Source:            TestAddress2,
 				Destination:       TestAddress,
 				IncarnationNumber: 0,
@@ -893,11 +893,11 @@ var _ = Describe("Queue", func() {
 			queue.Add(suspect)
 			queue.MarkTransmitted(1)
 
-			queue.Add(&gossip.MessageAlive{
+			queue.Add(&encoding.MessageAlive{
 				Destination:       TestAddress2,
 				IncarnationNumber: 0,
 			})
-			queue.Add(&gossip.MessageAlive{
+			queue.Add(&encoding.MessageAlive{
 				Destination:       TestAddress3,
 				IncarnationNumber: 0,
 			})
@@ -907,7 +907,7 @@ var _ = Describe("Queue", func() {
 
 			Expect(queue.Cap()).To(Equal(4))
 			Expect(queue.Len()).To(Equal(3))
-			alive := &gossip.MessageAlive{
+			alive := &encoding.MessageAlive{
 				Destination:       encoding.NewAddress(net.IPv4(5, 6, 7, 8), 9999),
 				IncarnationNumber: 0,
 			}
@@ -923,7 +923,7 @@ var _ = Describe("Queue", func() {
 		It("should update priority index when prioritized message is swapped", func() {
 			queue := gossip.NewQueue(gossip.WithPreAllocationCount(4))
 
-			suspect := &gossip.MessageSuspect{
+			suspect := &encoding.MessageSuspect{
 				Source:            TestAddress2,
 				Destination:       TestAddress,
 				IncarnationNumber: 0,
@@ -931,7 +931,7 @@ var _ = Describe("Queue", func() {
 			queue.Add(suspect)
 			queue.MarkTransmitted(1)
 
-			alive := &gossip.MessageAlive{
+			alive := &encoding.MessageAlive{
 				Destination:       TestAddress2,
 				IncarnationNumber: 0,
 			}
@@ -942,7 +942,7 @@ var _ = Describe("Queue", func() {
 			Expect(queue.Get(0)).To(Equal(suspect))
 			Expect(queue.Get(1)).To(Equal(alive))
 
-			suspectUpdated := &gossip.MessageSuspect{
+			suspectUpdated := &encoding.MessageSuspect{
 				Source:            TestAddress2,
 				Destination:       TestAddress,
 				IncarnationNumber: 1, // higher incarnation number
@@ -957,14 +957,14 @@ var _ = Describe("Queue", func() {
 		It("should update priority index when message is swapped with prioritized", func() {
 			queue := gossip.NewQueue(gossip.WithPreAllocationCount(4))
 
-			alive := &gossip.MessageAlive{
+			alive := &encoding.MessageAlive{
 				Destination:       TestAddress2,
 				IncarnationNumber: 0,
 			}
 			queue.Add(alive)
 			queue.MarkTransmitted(1)
 
-			suspect := &gossip.MessageSuspect{
+			suspect := &encoding.MessageSuspect{
 				Source:            TestAddress2,
 				Destination:       TestAddress,
 				IncarnationNumber: 0,
@@ -976,7 +976,7 @@ var _ = Describe("Queue", func() {
 			Expect(queue.Get(0)).To(Equal(suspect))
 			Expect(queue.Get(1)).To(Equal(alive))
 
-			aliveUpdated := &gossip.MessageAlive{
+			aliveUpdated := &encoding.MessageAlive{
 				Destination:       TestAddress2,
 				IncarnationNumber: 1, // higher incarnation number
 			}
@@ -991,15 +991,15 @@ var _ = Describe("Queue", func() {
 	Context("MarkTransmitted", func() {
 		It("should move requested number of messages", func() {
 			queue := gossip.NewQueue()
-			message1 := &gossip.MessageAlive{
+			message1 := &encoding.MessageAlive{
 				Destination:       TestAddress,
 				IncarnationNumber: 0,
 			}
-			message2 := &gossip.MessageAlive{
+			message2 := &encoding.MessageAlive{
 				Destination:       TestAddress2,
 				IncarnationNumber: 0,
 			}
-			message3 := &gossip.MessageAlive{
+			message3 := &encoding.MessageAlive{
 				Destination:       TestAddress3,
 				IncarnationNumber: 0,
 			}
@@ -1024,7 +1024,7 @@ var _ = Describe("Queue", func() {
 		It("should remove messages that exceed max transmission count", func() {
 			queue := gossip.NewQueue(gossip.WithMaxTransmissionCount(3))
 
-			message := &gossip.MessageAlive{
+			message := &encoding.MessageAlive{
 				Destination:       TestAddress,
 				IncarnationNumber: 0,
 			}
@@ -1045,7 +1045,7 @@ var _ = Describe("Queue", func() {
 
 		It("should handle marking more messages than exist", func() {
 			queue := gossip.NewQueue()
-			message := &gossip.MessageAlive{
+			message := &encoding.MessageAlive{
 				Destination:       TestAddress,
 				IncarnationNumber: 0,
 			}
@@ -1060,7 +1060,7 @@ var _ = Describe("Queue", func() {
 
 		It("should handle marking zero messages", func() {
 			queue := gossip.NewQueue()
-			message := &gossip.MessageAlive{
+			message := &encoding.MessageAlive{
 				Destination:       TestAddress,
 				IncarnationNumber: 0,
 			}
@@ -1105,7 +1105,7 @@ var _ = Describe("Queue", func() {
 		for range 100_000 {
 			switch selection := rand.Intn(100); {
 			case selection < 25: // 25% of the time we add a message
-				queue.Add(&gossip.MessageAlive{
+				queue.Add(&encoding.MessageAlive{
 					Destination:       addresses[rand.Intn(len(addresses))],
 					IncarnationNumber: uint16(rand.Intn(5)),
 				})
@@ -1130,7 +1130,7 @@ func BenchmarkQueue_Add(b *testing.B) {
 			// We fill a new gossip queue with gossip messages until gossip count is reached.
 			queue := gossip.NewQueue(gossip.WithMaxTransmissionCount(bucketCount))
 			for i := range gossipCount {
-				queue.Add(&gossip.MessageAlive{
+				queue.Add(&encoding.MessageAlive{
 					// We differentiate every source by a different port number.
 					Destination:       encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
 					IncarnationNumber: 0,
@@ -1152,7 +1152,7 @@ func BenchmarkQueue_Add(b *testing.B) {
 				}
 				b.ResetTimer()
 				for i := range b.N {
-					queue.Add(&gossip.MessageAlive{
+					queue.Add(&encoding.MessageAlive{
 						Destination:       addresses[i],
 						IncarnationNumber: 0,
 					})
@@ -1166,7 +1166,7 @@ func BenchmarkQueue_Prioritize(b *testing.B) {
 	for gossipCount := 1024; gossipCount <= 16*1024; gossipCount *= 2 {
 		queue := gossip.NewQueue()
 		for i := range gossipCount {
-			queue.Add(&gossip.MessageAlive{
+			queue.Add(&encoding.MessageAlive{
 				Destination:       encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
 				IncarnationNumber: 0,
 			})
@@ -1186,7 +1186,7 @@ func BenchmarkQueue_All(b *testing.B) {
 	for gossipCount := 1024; gossipCount <= 16*1024; gossipCount *= 2 {
 		queue := gossip.NewQueue()
 		for i := range gossipCount {
-			queue.Add(&gossip.MessageAlive{
+			queue.Add(&encoding.MessageAlive{
 				Destination:       encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
 				IncarnationNumber: 0,
 			})
@@ -1211,7 +1211,7 @@ func BenchmarkQueue_MarkTransmitted(b *testing.B) {
 		for messagesTransmitted := 1; messagesTransmitted <= 128; messagesTransmitted *= 2 {
 			queue := gossip.NewQueue()
 			for i := range gossipCount {
-				queue.Add(&gossip.MessageAlive{
+				queue.Add(&encoding.MessageAlive{
 					Destination:       encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
 					IncarnationNumber: 0,
 				})

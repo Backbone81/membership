@@ -1,17 +1,15 @@
-package gossip_test
+package encoding_test
 
 import (
 	"net"
 	"testing"
 
+	"github.com/backbone81/membership/internal/encoding"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-
-	"github.com/backbone81/membership/internal/encoding"
-	"github.com/backbone81/membership/internal/gossip"
 )
 
-var testMessageAlive = gossip.MessageAlive{
+var testMessageAlive = encoding.MessageAlive{
 	Destination:       encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024),
 	IncarnationNumber: 7,
 }
@@ -35,7 +33,7 @@ var _ = Describe("MessageAlive", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(buffer).ToNot(BeNil())
 
-		var readMessage gossip.MessageAlive
+		var readMessage encoding.MessageAlive
 		readN, err := readMessage.FromBuffer(buffer)
 		Expect(err).ToNot(HaveOccurred())
 
@@ -44,7 +42,7 @@ var _ = Describe("MessageAlive", func() {
 	})
 
 	It("should fail to read from nil buffer", func() {
-		var readMessage gossip.MessageAlive
+		var readMessage encoding.MessageAlive
 		Expect(readMessage.FromBuffer(nil)).Error().To(HaveOccurred())
 	})
 

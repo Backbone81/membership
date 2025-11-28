@@ -13,7 +13,6 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/backbone81/membership/internal/encoding"
-	"github.com/backbone81/membership/internal/gossip"
 	"github.com/backbone81/membership/internal/membership"
 	"github.com/backbone81/membership/internal/transport"
 )
@@ -251,10 +250,9 @@ var _ = Describe("List", func() {
 			Expect(gossipQueue.Len()).To(Equal(1))
 
 			msg := debugList.GetGossip().Get(0)
-			aliveMsg, ok := msg.(*encoding.MessageAlive)
-			Expect(ok).To(BeTrue())
-			Expect(aliveMsg.Destination).To(Equal(TestAddress))
-			Expect(aliveMsg.IncarnationNumber).To(Equal(uint16(0)))
+			Expect(msg.Type).To(Equal(encoding.MessageTypeAlive))
+			Expect(msg.Destination).To(Equal(TestAddress))
+			Expect(msg.IncarnationNumber).To(Equal(uint16(0)))
 		})
 	})
 
@@ -349,11 +347,11 @@ var _ = Describe("List", func() {
 			Expect(list.Len()).To(Equal(2))
 
 			// Mark as faulty
-			Expect(DispatchDatagram(list, &encoding.MessageFaulty{
+			Expect(DispatchDatagram(list, encoding.MessageFaulty{
 				Source:            TestAddress,
 				Destination:       faultyAddr,
 				IncarnationNumber: 0,
-			})).To(Succeed())
+			}.ToMessage())).To(Succeed())
 			Expect(list.Len()).To(Equal(1))
 
 			// Should only iterate over alive member
@@ -372,11 +370,11 @@ var _ = Describe("List", func() {
 			)
 
 			// Mark one as suspect
-			Expect(DispatchDatagram(list, &encoding.MessageSuspect{
+			Expect(DispatchDatagram(list, encoding.MessageSuspect{
 				Source:            TestAddress,
 				Destination:       suspectAddr,
 				IncarnationNumber: 0,
-			})).To(Succeed())
+			}.ToMessage())).To(Succeed())
 			Expect(list.Len()).To(Equal(2))
 
 			// Should iterate over both alive and suspect
@@ -593,11 +591,11 @@ var _ = Describe("List", func() {
 			)
 
 			By("Marking one member as suspect")
-			Expect(DispatchDatagram(list, &encoding.MessageSuspect{
+			Expect(DispatchDatagram(list, encoding.MessageSuspect{
 				Source:            TestAddress,
 				Destination:       bootstrapMembers[1],
 				IncarnationNumber: 0,
-			})).To(Succeed())
+			}.ToMessage())).To(Succeed())
 
 			By("Executing 1 direct ping")
 			store.Clear()
@@ -888,8 +886,8 @@ var _ = Describe("List", func() {
 			gossipQueue := debugList.GetGossip()
 			Expect(gossipQueue.Len()).To(Equal(1))
 
-			msg, ok := gossipQueue.Get(0).(*encoding.MessageSuspect)
-			Expect(ok).To(BeTrue())
+			msg := gossipQueue.Get(0)
+			Expect(msg.Type).To(Equal(encoding.MessageTypeSuspect))
 			Expect(msg.Destination).To(Equal(bootstrapMembers[0]))
 		})
 
@@ -944,8 +942,8 @@ var _ = Describe("List", func() {
 
 			By("Verifying faulty gossip message added")
 			gossipQueue := debugList.GetGossip()
-			msg, ok := gossipQueue.Get(0).(*encoding.MessageFaulty)
-			Expect(ok).To(BeTrue())
+			msg := gossipQueue.Get(0)
+			Expect(msg.Type).To(Equal(encoding.MessageTypeFaulty))
 			Expect(msg.Destination).To(Equal(bootstrapMembers[0]))
 		})
 
@@ -1135,10 +1133,10 @@ var _ = Describe("List", func() {
 
 			By("Sending direct ping")
 			sourceAddr := encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1)
-			Expect(DispatchDatagram(list, &encoding.MessageDirectPing{
+			Expect(DispatchDatagram(list, encoding.MessageDirectPing{
 				Source:         sourceAddr,
 				SequenceNumber: 42,
-			})).To(Succeed())
+			}.ToMessage())).To(Succeed())
 
 			By("Verifying direct ack sent back to source")
 			Expect(store.Addresses).To(HaveLen(1))
@@ -1158,10 +1156,10 @@ var _ = Describe("List", func() {
 
 			By("Sending direct ping")
 			sourceAddr := encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1)
-			Expect(DispatchDatagram(list, &encoding.MessageDirectPing{
+			Expect(DispatchDatagram(list, encoding.MessageDirectPing{
 				Source:         sourceAddr,
 				SequenceNumber: 42,
-			})).ToNot(Succeed())
+			}.ToMessage())).ToNot(Succeed())
 		})
 	})
 
@@ -1186,10 +1184,10 @@ var _ = Describe("List", func() {
 			seqNum := pendingPings[0].MessageDirectPing.SequenceNumber
 
 			By("Sending direct ack")
-			Expect(DispatchDatagram(list, &encoding.MessageDirectAck{
+			Expect(DispatchDatagram(list, encoding.MessageDirectAck{
 				Source:         targetAddr,
 				SequenceNumber: seqNum,
-			})).To(Succeed())
+			}.ToMessage())).To(Succeed())
 
 			By("Verifying pending ping removed")
 			Expect(debugList.GetPendingDirectPings()).To(BeEmpty())
@@ -1212,10 +1210,10 @@ var _ = Describe("List", func() {
 			Expect(pendingPings).To(HaveLen(1))
 
 			By("Sending ack with wrong sequence number")
-			Expect(DispatchDatagram(list, &encoding.MessageDirectAck{
+			Expect(DispatchDatagram(list, encoding.MessageDirectAck{
 				Source:         pendingPings[0].Destination,
 				SequenceNumber: 9999,
-			})).To(Succeed())
+			}.ToMessage())).To(Succeed())
 
 			By("Verifying pending ping still present")
 			Expect(debugList.GetPendingDirectPings()).To(HaveLen(1))
@@ -1225,10 +1223,10 @@ var _ = Describe("List", func() {
 			list := newTestList()
 
 			By("Sending ack without any pending pings")
-			Expect(DispatchDatagram(list, &encoding.MessageDirectAck{
+			Expect(DispatchDatagram(list, encoding.MessageDirectAck{
 				Source:         encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
 				SequenceNumber: 42,
-			})).To(Succeed())
+			}.ToMessage())).To(Succeed())
 		})
 	})
 
@@ -1242,11 +1240,11 @@ var _ = Describe("List", func() {
 			By("Sending indirect ping request")
 			sourceAddr := encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1)
 			targetAddr := encoding.NewAddress(net.IPv4(255, 255, 255, 255), 2)
-			Expect(DispatchDatagram(list, &encoding.MessageIndirectPing{
+			Expect(DispatchDatagram(list, encoding.MessageIndirectPing{
 				Source:         sourceAddr,
 				Destination:    targetAddr,
 				SequenceNumber: 42,
-			})).To(Succeed())
+			}.ToMessage())).To(Succeed())
 
 			By("Verifying direct ping sent to target")
 			Expect(store.Addresses).To(HaveLen(1))
@@ -1266,11 +1264,11 @@ var _ = Describe("List", func() {
 			By("Sending indirect ping request")
 			sourceAddr := encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1)
 			targetAddr := encoding.NewAddress(net.IPv4(255, 255, 255, 255), 2)
-			Expect(DispatchDatagram(list, &encoding.MessageIndirectPing{
+			Expect(DispatchDatagram(list, encoding.MessageIndirectPing{
 				Source:         sourceAddr,
 				Destination:    targetAddr,
 				SequenceNumber: 42,
-			})).ToNot(Succeed())
+			}.ToMessage())).ToNot(Succeed())
 		})
 	})
 
@@ -1301,10 +1299,10 @@ var _ = Describe("List", func() {
 			seqNum := pendingDirectPings[0].MessageDirectPing.SequenceNumber
 
 			By("Sending indirect ack")
-			Expect(DispatchDatagram(list, &encoding.MessageIndirectAck{
+			Expect(DispatchDatagram(list, encoding.MessageIndirectAck{
 				Source:         targetAddr,
 				SequenceNumber: seqNum,
-			})).To(Succeed())
+			}.ToMessage())).To(Succeed())
 
 			By("Verifying both pending pings removed")
 			Expect(debugList.GetPendingDirectPings()).To(BeEmpty())
@@ -1334,10 +1332,10 @@ var _ = Describe("List", func() {
 			Expect(pendingIndirectPings).To(HaveLen(1))
 
 			By("Sending ack with wrong sequence number")
-			Expect(DispatchDatagram(list, &encoding.MessageIndirectAck{
+			Expect(DispatchDatagram(list, encoding.MessageIndirectAck{
 				Source:         pendingDirectPings[0].Destination,
 				SequenceNumber: 9999,
-			})).To(Succeed())
+			}.ToMessage())).To(Succeed())
 
 			By("Verifying pending pings still present")
 			Expect(debugList.GetPendingDirectPings()).To(HaveLen(1))
@@ -1348,10 +1346,10 @@ var _ = Describe("List", func() {
 			list := newTestList()
 
 			By("Sending ack without any pending pings")
-			Expect(DispatchDatagram(list, &encoding.MessageIndirectAck{
+			Expect(DispatchDatagram(list, encoding.MessageIndirectAck{
 				Source:         encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
 				SequenceNumber: 42,
-			})).To(Succeed())
+			}.ToMessage())).To(Succeed())
 		})
 	})
 
@@ -1361,18 +1359,18 @@ var _ = Describe("List", func() {
 			debugList := membership.DebugList(list)
 			debugList.GetGossip().Clear()
 
-			Expect(DispatchDatagram(list, &encoding.MessageAlive{
+			Expect(DispatchDatagram(list, encoding.MessageAlive{
 				Destination:       TestAddress,
 				IncarnationNumber: 55,
-			})).To(Succeed())
+			}.ToMessage())).To(Succeed())
 
 			Expect(debugList.GetMembers()).To(BeEmpty())
 			Expect(debugList.GetFaultyMembers()).To(BeEmpty())
 			Expect(debugList.GetGossip().Len()).To(Equal(1))
-			Expect(debugList.GetGossip().Get(0)).To(Equal(&encoding.MessageAlive{
+			Expect(debugList.GetGossip().Get(0)).To(Equal(encoding.MessageAlive{
 				Destination:       TestAddress,
 				IncarnationNumber: 56,
-			}))
+			}.ToMessage()))
 		})
 
 		It("should invoke member added callback when adding new member", func() {
@@ -1384,17 +1382,17 @@ var _ = Describe("List", func() {
 			)
 
 			By("Sending alive message for new member")
-			Expect(DispatchDatagram(list, &encoding.MessageAlive{
+			Expect(DispatchDatagram(list, encoding.MessageAlive{
 				Destination:       TestAddress2,
 				IncarnationNumber: 5,
-			})).To(Succeed())
+			}.ToMessage())).To(Succeed())
 
 			By("Verifying callback invoked")
 			Expect(addedCount).To(Equal(1))
 		})
 
 		DescribeTable("Gossip should update the memberlist correctly",
-			func(beforeMembers []encoding.Member, beforeFaultyMembers []encoding.Member, message gossip.Message, afterMembers []encoding.Member, afterFaultyMembers []encoding.Member) {
+			func(beforeMembers []encoding.Member, beforeFaultyMembers []encoding.Member, message encoding.Message, afterMembers []encoding.Member, afterFaultyMembers []encoding.Member) {
 				list := membership.NewList(
 					membership.WithUDPClient(&transport.Discard{}),
 					membership.WithTCPClient(&transport.Discard{}),
@@ -1421,10 +1419,10 @@ var _ = Describe("List", func() {
 			Entry("Alive should add a member",
 				nil,
 				nil,
-				&encoding.MessageAlive{
+				encoding.MessageAlive{
 					Destination:       TestAddress,
 					IncarnationNumber: 2,
-				},
+				}.ToMessage(),
 				[]encoding.Member{
 					{
 						Address:           TestAddress,
@@ -1443,10 +1441,10 @@ var _ = Describe("List", func() {
 					},
 				},
 				nil,
-				&encoding.MessageAlive{
+				encoding.MessageAlive{
 					Destination:       TestAddress,
 					IncarnationNumber: 1,
-				},
+				}.ToMessage(),
 				[]encoding.Member{
 					{
 						Address:           TestAddress,
@@ -1465,10 +1463,10 @@ var _ = Describe("List", func() {
 					},
 				},
 				nil,
-				&encoding.MessageAlive{
+				encoding.MessageAlive{
 					Destination:       TestAddress,
 					IncarnationNumber: 2,
-				},
+				}.ToMessage(),
 				[]encoding.Member{
 					{
 						Address:           TestAddress,
@@ -1487,10 +1485,10 @@ var _ = Describe("List", func() {
 					},
 				},
 				nil,
-				&encoding.MessageAlive{
+				encoding.MessageAlive{
 					Destination:       TestAddress,
 					IncarnationNumber: 3,
-				},
+				}.ToMessage(),
 				[]encoding.Member{
 					{
 						Address:           TestAddress,
@@ -1510,10 +1508,10 @@ var _ = Describe("List", func() {
 					},
 				},
 				nil,
-				&encoding.MessageAlive{
+				encoding.MessageAlive{
 					Destination:       TestAddress,
 					IncarnationNumber: 1,
-				},
+				}.ToMessage(),
 				[]encoding.Member{
 					{
 						Address:           TestAddress,
@@ -1532,10 +1530,10 @@ var _ = Describe("List", func() {
 					},
 				},
 				nil,
-				&encoding.MessageAlive{
+				encoding.MessageAlive{
 					Destination:       TestAddress,
 					IncarnationNumber: 2,
-				},
+				}.ToMessage(),
 				[]encoding.Member{
 					{
 						Address:           TestAddress,
@@ -1554,10 +1552,10 @@ var _ = Describe("List", func() {
 					},
 				},
 				nil,
-				&encoding.MessageAlive{
+				encoding.MessageAlive{
 					Destination:       TestAddress,
 					IncarnationNumber: 3,
-				},
+				}.ToMessage(),
 				[]encoding.Member{
 					{
 						Address:           TestAddress,
@@ -1577,10 +1575,10 @@ var _ = Describe("List", func() {
 						IncarnationNumber: 2,
 					},
 				},
-				&encoding.MessageAlive{
+				encoding.MessageAlive{
 					Destination:       TestAddress,
 					IncarnationNumber: 1,
-				},
+				}.ToMessage(),
 				nil,
 				[]encoding.Member{
 					{
@@ -1599,10 +1597,10 @@ var _ = Describe("List", func() {
 						IncarnationNumber: 2,
 					},
 				},
-				&encoding.MessageAlive{
+				encoding.MessageAlive{
 					Destination:       TestAddress,
 					IncarnationNumber: 2,
-				},
+				}.ToMessage(),
 				nil,
 				[]encoding.Member{
 					{
@@ -1621,10 +1619,10 @@ var _ = Describe("List", func() {
 						IncarnationNumber: 2,
 					},
 				},
-				&encoding.MessageAlive{
+				encoding.MessageAlive{
 					Destination:       TestAddress,
 					IncarnationNumber: 3,
-				},
+				}.ToMessage(),
 				[]encoding.Member{
 					{
 						Address:           TestAddress,
@@ -1644,19 +1642,19 @@ var _ = Describe("List", func() {
 			debugList.GetGossip().Clear()
 
 			By("Receiving a suspect message")
-			Expect(DispatchDatagram(list, &encoding.MessageSuspect{
+			Expect(DispatchDatagram(list, encoding.MessageSuspect{
 				Source:            TestAddress2,
 				Destination:       TestAddress,
 				IncarnationNumber: 55,
-			})).To(Succeed())
+			}.ToMessage())).To(Succeed())
 
 			Expect(debugList.GetMembers()).To(BeEmpty())
 			Expect(debugList.GetFaultyMembers()).To(BeEmpty())
 			Expect(debugList.GetGossip().Len()).To(Equal(1))
-			Expect(debugList.GetGossip().Get(0)).To(Equal(&encoding.MessageAlive{
+			Expect(debugList.GetGossip().Get(0)).To(Equal(encoding.MessageAlive{
 				Destination:       TestAddress,
 				IncarnationNumber: 56,
-			}))
+			}.ToMessage()))
 		})
 
 		It("should invoke member added callback when suspect", func() {
@@ -1668,17 +1666,17 @@ var _ = Describe("List", func() {
 			)
 
 			By("Sending suspect message")
-			Expect(DispatchDatagram(list, &encoding.MessageSuspect{
+			Expect(DispatchDatagram(list, encoding.MessageSuspect{
 				Destination:       TestAddress2,
 				IncarnationNumber: 5,
-			})).To(Succeed())
+			}.ToMessage())).To(Succeed())
 
 			By("Verifying callback invoked")
 			Expect(addedCount).To(Equal(1))
 		})
 
 		DescribeTable("Gossip should update the memberlist correctly",
-			func(beforeMembers []encoding.Member, beforeFaultyMembers []encoding.Member, message gossip.Message, afterMembers []encoding.Member, afterFaultyMembers []encoding.Member) {
+			func(beforeMembers []encoding.Member, beforeFaultyMembers []encoding.Member, message encoding.Message, afterMembers []encoding.Member, afterFaultyMembers []encoding.Member) {
 				list := membership.NewList(
 					membership.WithUDPClient(&transport.Discard{}),
 					membership.WithTCPClient(&transport.Discard{}),
@@ -1705,11 +1703,11 @@ var _ = Describe("List", func() {
 			Entry("Suspect should add member",
 				nil,
 				nil,
-				&encoding.MessageSuspect{
+				encoding.MessageSuspect{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 2,
-				},
+				}.ToMessage(),
 				[]encoding.Member{
 					{
 						Address:           TestAddress,
@@ -1728,11 +1726,11 @@ var _ = Describe("List", func() {
 					},
 				},
 				nil,
-				&encoding.MessageSuspect{
+				encoding.MessageSuspect{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 1,
-				},
+				}.ToMessage(),
 				[]encoding.Member{
 					{
 						Address:           TestAddress,
@@ -1751,11 +1749,11 @@ var _ = Describe("List", func() {
 					},
 				},
 				nil,
-				&encoding.MessageSuspect{
+				encoding.MessageSuspect{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 2,
-				},
+				}.ToMessage(),
 				[]encoding.Member{
 					{
 						Address:           TestAddress,
@@ -1774,11 +1772,11 @@ var _ = Describe("List", func() {
 					},
 				},
 				nil,
-				&encoding.MessageSuspect{
+				encoding.MessageSuspect{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 3,
-				},
+				}.ToMessage(),
 				[]encoding.Member{
 					{
 						Address:           TestAddress,
@@ -1798,11 +1796,11 @@ var _ = Describe("List", func() {
 					},
 				},
 				nil,
-				&encoding.MessageSuspect{
+				encoding.MessageSuspect{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 1,
-				},
+				}.ToMessage(),
 				[]encoding.Member{
 					{
 						Address:           TestAddress,
@@ -1821,11 +1819,11 @@ var _ = Describe("List", func() {
 					},
 				},
 				nil,
-				&encoding.MessageSuspect{
+				encoding.MessageSuspect{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 2,
-				},
+				}.ToMessage(),
 				[]encoding.Member{
 					{
 						Address:           TestAddress,
@@ -1844,11 +1842,11 @@ var _ = Describe("List", func() {
 					},
 				},
 				nil,
-				&encoding.MessageSuspect{
+				encoding.MessageSuspect{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 3,
-				},
+				}.ToMessage(),
 				[]encoding.Member{
 					{
 						Address:           TestAddress,
@@ -1868,11 +1866,11 @@ var _ = Describe("List", func() {
 						IncarnationNumber: 2,
 					},
 				},
-				&encoding.MessageSuspect{
+				encoding.MessageSuspect{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 1,
-				},
+				}.ToMessage(),
 				nil,
 				[]encoding.Member{
 					{
@@ -1891,11 +1889,11 @@ var _ = Describe("List", func() {
 						IncarnationNumber: 2,
 					},
 				},
-				&encoding.MessageSuspect{
+				encoding.MessageSuspect{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 2,
-				},
+				}.ToMessage(),
 				nil,
 				[]encoding.Member{
 					{
@@ -1914,11 +1912,11 @@ var _ = Describe("List", func() {
 						IncarnationNumber: 2,
 					},
 				},
-				&encoding.MessageSuspect{
+				encoding.MessageSuspect{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 3,
-				},
+				}.ToMessage(),
 				[]encoding.Member{
 					{
 						Address:           TestAddress,
@@ -1937,19 +1935,19 @@ var _ = Describe("List", func() {
 			debugList := membership.DebugList(list)
 			debugList.GetGossip().Clear()
 
-			Expect(DispatchDatagram(list, &encoding.MessageFaulty{
+			Expect(DispatchDatagram(list, encoding.MessageFaulty{
 				Source:            TestAddress2,
 				Destination:       TestAddress,
 				IncarnationNumber: 55,
-			})).To(Succeed())
+			}.ToMessage())).To(Succeed())
 
 			Expect(debugList.GetMembers()).To(BeEmpty())
 			Expect(debugList.GetFaultyMembers()).To(BeEmpty())
 			Expect(debugList.GetGossip().Len()).To(Equal(1))
-			Expect(debugList.GetGossip().Get(0)).To(Equal(&encoding.MessageAlive{
+			Expect(debugList.GetGossip().Get(0)).To(Equal(encoding.MessageAlive{
 				Destination:       TestAddress,
 				IncarnationNumber: 56,
-			}))
+			}.ToMessage()))
 		})
 
 		It("should invoke member removed callback when faulty", func() {
@@ -1965,17 +1963,17 @@ var _ = Describe("List", func() {
 			)
 
 			By("Sending faulty message for existing")
-			Expect(DispatchDatagram(list, &encoding.MessageFaulty{
+			Expect(DispatchDatagram(list, encoding.MessageFaulty{
 				Destination:       bootstrapMembers[0],
 				IncarnationNumber: 5,
-			})).To(Succeed())
+			}.ToMessage())).To(Succeed())
 
 			By("Verifying callback invoked")
 			Expect(removedCount).To(Equal(1))
 		})
 
 		DescribeTable("Gossip should update the memberlist correctly",
-			func(beforeMembers []encoding.Member, beforeFaultyMembers []encoding.Member, message gossip.Message, afterMembers []encoding.Member, afterFaultyMembers []encoding.Member) {
+			func(beforeMembers []encoding.Member, beforeFaultyMembers []encoding.Member, message encoding.Message, afterMembers []encoding.Member, afterFaultyMembers []encoding.Member) {
 				list := membership.NewList(
 					membership.WithUDPClient(&transport.Discard{}),
 					membership.WithTCPClient(&transport.Discard{}),
@@ -2002,11 +2000,11 @@ var _ = Describe("List", func() {
 			Entry("Faulty should add faulty member",
 				nil,
 				nil,
-				&encoding.MessageFaulty{
+				encoding.MessageFaulty{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 2,
-				},
+				}.ToMessage(),
 				nil,
 				[]encoding.Member{
 					{
@@ -2025,11 +2023,11 @@ var _ = Describe("List", func() {
 					},
 				},
 				nil,
-				&encoding.MessageFaulty{
+				encoding.MessageFaulty{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 1,
-				},
+				}.ToMessage(),
 				[]encoding.Member{
 					{
 						Address:           TestAddress,
@@ -2048,11 +2046,11 @@ var _ = Describe("List", func() {
 					},
 				},
 				nil,
-				&encoding.MessageFaulty{
+				encoding.MessageFaulty{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 2,
-				},
+				}.ToMessage(),
 				nil,
 				[]encoding.Member{
 					{
@@ -2071,11 +2069,11 @@ var _ = Describe("List", func() {
 					},
 				},
 				nil,
-				&encoding.MessageFaulty{
+				encoding.MessageFaulty{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 3,
-				},
+				}.ToMessage(),
 				nil,
 				[]encoding.Member{
 					{
@@ -2095,11 +2093,11 @@ var _ = Describe("List", func() {
 					},
 				},
 				nil,
-				&encoding.MessageFaulty{
+				encoding.MessageFaulty{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 1,
-				},
+				}.ToMessage(),
 				[]encoding.Member{
 					{
 						Address:           TestAddress,
@@ -2118,11 +2116,11 @@ var _ = Describe("List", func() {
 					},
 				},
 				nil,
-				&encoding.MessageFaulty{
+				encoding.MessageFaulty{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 2,
-				},
+				}.ToMessage(),
 				nil,
 				[]encoding.Member{
 					{
@@ -2141,11 +2139,11 @@ var _ = Describe("List", func() {
 					},
 				},
 				nil,
-				&encoding.MessageFaulty{
+				encoding.MessageFaulty{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 3,
-				},
+				}.ToMessage(),
 				nil,
 				[]encoding.Member{
 					{
@@ -2165,11 +2163,11 @@ var _ = Describe("List", func() {
 						IncarnationNumber: 2,
 					},
 				},
-				&encoding.MessageFaulty{
+				encoding.MessageFaulty{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 1,
-				},
+				}.ToMessage(),
 				nil,
 				[]encoding.Member{
 					{
@@ -2188,11 +2186,11 @@ var _ = Describe("List", func() {
 						IncarnationNumber: 2,
 					},
 				},
-				&encoding.MessageFaulty{
+				encoding.MessageFaulty{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 2,
-				},
+				}.ToMessage(),
 				nil,
 				[]encoding.Member{
 					{
@@ -2211,11 +2209,11 @@ var _ = Describe("List", func() {
 						IncarnationNumber: 2,
 					},
 				},
-				&encoding.MessageFaulty{
+				encoding.MessageFaulty{
 					Source:            TestAddress2,
 					Destination:       TestAddress,
 					IncarnationNumber: 3,
-				},
+				}.ToMessage(),
 				nil,
 				[]encoding.Member{
 					{
@@ -2237,9 +2235,9 @@ var _ = Describe("List", func() {
 
 			By("Sending list request")
 			sourceAddr := encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1)
-			Expect(DispatchDatagram(list, &encoding.MessageListRequest{
+			Expect(DispatchDatagram(list, encoding.MessageListRequest{
 				Source: sourceAddr,
-			})).To(Succeed())
+			}.ToMessage())).To(Succeed())
 
 			By("Verifying list response sent back to source")
 			Expect(store.Addresses).To(HaveLen(1))
@@ -2266,9 +2264,9 @@ var _ = Describe("List", func() {
 
 			By("Sending list request")
 			sourceAddr := encoding.NewAddress(net.IPv4(255, 255, 255, 255), 4)
-			Expect(DispatchDatagram(list, &encoding.MessageListRequest{
+			Expect(DispatchDatagram(list, encoding.MessageListRequest{
 				Source: sourceAddr,
-			})).To(Succeed())
+			}.ToMessage())).To(Succeed())
 
 			By("Verifying list response sent")
 			Expect(store.Addresses).To(HaveLen(1))
@@ -2303,9 +2301,9 @@ var _ = Describe("List", func() {
 			By("Sending list request")
 			store.Clear()
 			sourceAddr := encoding.NewAddress(net.IPv4(255, 255, 255, 255), 4)
-			Expect(DispatchDatagram(list, &encoding.MessageListRequest{
+			Expect(DispatchDatagram(list, encoding.MessageListRequest{
 				Source: sourceAddr,
-			})).To(Succeed())
+			}.ToMessage())).To(Succeed())
 
 			By("Verifying response contains both alive and suspect members")
 			var responseMsg encoding.MessageListResponse
@@ -2337,9 +2335,9 @@ var _ = Describe("List", func() {
 
 			By("Sending list request")
 			store.Clear()
-			Expect(DispatchDatagram(list, &encoding.MessageListRequest{
+			Expect(DispatchDatagram(list, encoding.MessageListRequest{
 				Source: encoding.NewAddress(net.IPv4(255, 255, 255, 255), 4),
-			})).To(Succeed())
+			}.ToMessage())).To(Succeed())
 
 			By("Verifying response contains falty member")
 			var responseMsg encoding.MessageListResponse
@@ -2353,9 +2351,9 @@ var _ = Describe("List", func() {
 			)
 
 			By("Sending list request")
-			Expect(DispatchDatagram(list, &encoding.MessageListRequest{
+			Expect(DispatchDatagram(list, encoding.MessageListRequest{
 				Source: encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
-			})).ToNot(Succeed())
+			}.ToMessage())).ToNot(Succeed())
 		})
 	})
 
@@ -2382,10 +2380,10 @@ var _ = Describe("List", func() {
 					IncarnationNumber: 0,
 				},
 			}
-			Expect(DispatchDatagram(list, &encoding.MessageListResponse{
+			Expect(DispatchDatagram(list, encoding.MessageListResponse{
 				Source:  encoding.NewAddress(net.IPv4(255, 255, 255, 255), 4),
 				Members: responseMembers,
-			})).To(Succeed())
+			}.ToMessage())).To(Succeed())
 
 			By("Verifying members added with correct state and incarnation")
 			Expect(list.Len()).To(Equal(3))
@@ -2400,10 +2398,10 @@ var _ = Describe("List", func() {
 			list := newTestList()
 
 			By("Receiving list response with no members")
-			Expect(DispatchDatagram(list, &encoding.MessageListResponse{
+			Expect(DispatchDatagram(list, encoding.MessageListResponse{
 				Source:  encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
 				Members: []encoding.Member{},
-			})).To(Succeed())
+			}.ToMessage())).To(Succeed())
 
 			By("Verifying no members added")
 			Expect(list.Len()).To(Equal(0))
@@ -2431,10 +2429,10 @@ var _ = Describe("List", func() {
 					IncarnationNumber: 0,
 				},
 			}
-			Expect(DispatchDatagram(list, &encoding.MessageListResponse{
+			Expect(DispatchDatagram(list, encoding.MessageListResponse{
 				Source:  encoding.NewAddress(net.IPv4(255, 255, 255, 255), 4),
 				Members: responseMembers,
-			})).To(Succeed())
+			}.ToMessage())).To(Succeed())
 
 			By("Verifying self excluded")
 			Expect(list.Len()).To(Equal(2))
@@ -2467,10 +2465,10 @@ var _ = Describe("List", func() {
 					IncarnationNumber: 0,
 				},
 			}
-			Expect(DispatchDatagram(list, &encoding.MessageListResponse{
+			Expect(DispatchDatagram(list, encoding.MessageListResponse{
 				Source:  encoding.NewAddress(net.IPv4(255, 255, 255, 255), 4),
 				Members: responseMembers,
-			})).To(Succeed())
+			}.ToMessage())).To(Succeed())
 
 			By("Verifying total member count")
 			Expect(list.Len()).To(Equal(3))
@@ -2618,16 +2616,16 @@ func BenchmarkList_handleDirectPing(b *testing.B) {
 	message := encoding.MessageDirectPing{
 		Source:         BenchmarkAddress,
 		SequenceNumber: 0,
-	}
-	dispatchDatagramWithMembers(b, &message)
+	}.ToMessage()
+	dispatchDatagramWithMembers(b, message)
 }
 
 func BenchmarkList_handleDirectAck(b *testing.B) {
 	message := encoding.MessageDirectAck{
 		Source:         BenchmarkAddress,
 		SequenceNumber: 0,
-	}
-	dispatchDatagramWithMembers(b, &message)
+	}.ToMessage()
+	dispatchDatagramWithMembers(b, message)
 }
 
 func BenchmarkList_handleIndirectPing(b *testing.B) {
@@ -2635,16 +2633,16 @@ func BenchmarkList_handleIndirectPing(b *testing.B) {
 		Source:         TestAddress,
 		Destination:    TestAddress2,
 		SequenceNumber: 0,
-	}
-	dispatchDatagramWithMembers(b, &message)
+	}.ToMessage()
+	dispatchDatagramWithMembers(b, message)
 }
 
 func BenchmarkList_handleIndirectAck(b *testing.B) {
 	message := encoding.MessageIndirectAck{
 		Source:         BenchmarkAddress,
 		SequenceNumber: 0,
-	}
-	dispatchDatagramWithMembers(b, &message)
+	}.ToMessage()
+	dispatchDatagramWithMembers(b, message)
 }
 
 func BenchmarkList_handleSuspect(b *testing.B) {
@@ -2652,16 +2650,16 @@ func BenchmarkList_handleSuspect(b *testing.B) {
 		Source:            TestAddress,
 		Destination:       TestAddress2,
 		IncarnationNumber: 0,
-	}
-	dispatchDatagramWithMembers(b, &message)
+	}.ToMessage()
+	dispatchDatagramWithMembers(b, message)
 }
 
 func BenchmarkList_handleAlive(b *testing.B) {
 	message := encoding.MessageAlive{
 		Destination:       encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+32000),
 		IncarnationNumber: 0,
-	}
-	dispatchDatagramWithMembers(b, &message)
+	}.ToMessage()
+	dispatchDatagramWithMembers(b, message)
 }
 
 func BenchmarkList_handleFaulty(b *testing.B) {
@@ -2669,15 +2667,15 @@ func BenchmarkList_handleFaulty(b *testing.B) {
 		Source:            BenchmarkAddress,
 		Destination:       TestAddress,
 		IncarnationNumber: 0,
-	}
-	dispatchDatagramWithMembers(b, &message)
+	}.ToMessage()
+	dispatchDatagramWithMembers(b, message)
 }
 
 func BenchmarkList_handleListRequest(b *testing.B) {
 	message := encoding.MessageListRequest{
 		Source: TestAddress,
-	}
-	dispatchDatagramWithMembers(b, &message)
+	}.ToMessage()
+	dispatchDatagramWithMembers(b, message)
 }
 
 func BenchmarkList_handleListResponse(b *testing.B) {
@@ -2711,7 +2709,7 @@ func BenchmarkList_handleListResponse(b *testing.B) {
 	}
 }
 
-func dispatchDatagramWithMembers(b *testing.B, message membership.Message) {
+func dispatchDatagramWithMembers(b *testing.B, message encoding.Message) {
 	buffer, _, err := message.AppendToBuffer(nil)
 	if err != nil {
 		b.Fatal(err)

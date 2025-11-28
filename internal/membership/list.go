@@ -130,10 +130,10 @@ func NewList(options ...Option) *List {
 	}
 
 	// We need to gossip our own alive. Otherwise, nobody will pick us up into their own member list.
-	newList.gossipQueue.Add(&encoding.MessageAlive{
+	newList.gossipQueue.Add(encoding.MessageAlive{
 		Destination:       config.AdvertisedAddress,
 		IncarnationNumber: 0,
-	})
+	}.ToMessage())
 	for _, initialMember := range config.BootstrapMembers {
 		newList.addMember(encoding.Member{
 			Address:           initialMember,
@@ -210,7 +210,7 @@ func (l *List) DirectPing() error {
 			Destination:       destination,
 			MessageDirectPing: directPing,
 		})
-		if err := l.sendWithGossip(destination, &directPing); err != nil {
+		if err := l.sendWithGossip(destination, directPing.ToMessage()); err != nil {
 			return err
 		}
 	}
@@ -238,7 +238,7 @@ func (l *List) getNextMember() *encoding.Member {
 
 // sendWithGossip sends the given network message to the given address, It fills up the remaining space in the datagram
 // with gossip from the gossip queue.
-func (l *List) sendWithGossip(address encoding.Address, message Message) error {
+func (l *List) sendWithGossip(address encoding.Address, message encoding.Message) error {
 	l.datagramBuffer = l.datagramBuffer[:0]
 
 	var err error
@@ -322,7 +322,7 @@ func (l *List) IndirectPing() error {
 				"sequence-number", indirectPing.SequenceNumber,
 				"through", member.Address,
 			)
-			if err := l.sendWithGossip(member.Address, &indirectPing); err != nil {
+			if err := l.sendWithGossip(member.Address, indirectPing.ToMessage()); err != nil {
 				joinedErr = errors.Join(joinedErr, err)
 			}
 		}
@@ -463,11 +463,11 @@ func (l *List) processFailedPings() {
 		// We need to mark the member as suspect and gossip about it.
 		member.State = encoding.MemberStateSuspect
 		member.SuspicionPeriodCounter = 0
-		l.gossipQueue.Add(&encoding.MessageSuspect{
+		l.gossipQueue.Add(encoding.MessageSuspect{
 			Source:            l.self,
 			Destination:       member.Address,
 			IncarnationNumber: member.IncarnationNumber,
-		})
+		}.ToMessage())
 	}
 
 	// We swap the pending direct pings of the current protocol period with the pending direct pings of the next
@@ -522,11 +522,11 @@ func (l *List) markSuspectsAsFaulty() {
 		} else {
 			l.faultyMembers = slices.Insert(l.faultyMembers, faultyMemberIndex, *member)
 		}
-		l.gossipQueue.Add(&encoding.MessageFaulty{
+		l.gossipQueue.Add(encoding.MessageFaulty{
 			Source:            l.self,
 			Destination:       member.Address,
 			IncarnationNumber: member.IncarnationNumber,
-		})
+		}.ToMessage())
 		l.removeMemberByIndex(i) // must always happen last to keep the member alive during this method
 	}
 }
@@ -555,7 +555,7 @@ func (l *List) RequestList() error {
 		"Requesting member list",
 		"destination", members[0].Address,
 	)
-	if err := l.sendWithGossip(members[0].Address, &listRequest); err != nil {
+	if err := l.sendWithGossip(members[0].Address, listRequest.ToMessage()); err != nil {
 		return err
 	}
 	return nil
@@ -581,7 +581,7 @@ func (l *List) BroadcastShutdown() error {
 			"address", member.Address,
 		)
 		// We send our broadcast with the gossip we have, to help disseminate that information before we are gone.
-		if err := l.sendWithGossip(member.Address, &faultyMessage); err != nil {
+		if err := l.sendWithGossip(member.Address, faultyMessage.ToMessage()); err != nil {
 			return err
 		}
 	}
@@ -810,7 +810,7 @@ func (l *List) handleDirectPing(directPing encoding.MessageDirectPing) error {
 		Source:         l.self,
 		SequenceNumber: directPing.SequenceNumber,
 	}
-	if err := l.sendWithGossip(directPing.Source, &directAck); err != nil {
+	if err := l.sendWithGossip(directPing.Source, directAck.ToMessage()); err != nil {
 		return err
 	}
 	return nil
@@ -860,7 +860,7 @@ func (l *List) handleDirectAckForPendingDirectPings(pendingDirectPings []Pending
 		Source:         directAck.Source,
 		SequenceNumber: pendingDirectPing.MessageIndirectPing.SequenceNumber,
 	}
-	if err := l.sendWithGossip(pendingDirectPing.MessageIndirectPing.Source, &indirectAck); err != nil {
+	if err := l.sendWithGossip(pendingDirectPing.MessageIndirectPing.Source, indirectAck.ToMessage()); err != nil {
 		return pendingDirectPings, err
 	}
 	return pendingDirectPings, nil
@@ -898,7 +898,7 @@ func (l *List) handleIndirectPing(indirectPing encoding.MessageIndirectPing) err
 		MessageIndirectPing: indirectPing,
 	})
 
-	if err := l.sendWithGossip(indirectPing.Destination, &directPing); err != nil {
+	if err := l.sendWithGossip(indirectPing.Destination, directPing.ToMessage()); err != nil {
 		return err
 	}
 	return nil
@@ -978,10 +978,10 @@ func (l *List) handleSuspectForSelf(suspect encoding.MessageSuspect) bool {
 	// We need to refute the suspect about ourselves. Add a new alive message to gossip.
 	// Also make sure that our incarnation number is bigger than before.
 	l.incarnationNumber = utility.IncarnationMax(l.incarnationNumber+1, suspect.IncarnationNumber+1)
-	l.gossipQueue.Add(&encoding.MessageAlive{
+	l.gossipQueue.Add(encoding.MessageAlive{
 		Destination:       l.self,
 		IncarnationNumber: l.incarnationNumber,
-	})
+	}.ToMessage())
 
 	l.logger.Info(
 		"Refuted gossip about being suspect",
@@ -1016,7 +1016,7 @@ func (l *List) handleSuspectForFaultyMembers(suspect encoding.MessageSuspect) bo
 		SuspicionPeriodCounter: 0,
 		IncarnationNumber:      suspect.IncarnationNumber,
 	})
-	l.gossipQueue.Add(&suspect)
+	l.gossipQueue.Add(suspect.ToMessage())
 	return true
 }
 
@@ -1046,7 +1046,7 @@ func (l *List) handleSuspectForMembers(suspect encoding.MessageSuspect) bool {
 	// This information is new to us, we need to make sure to gossip about it.
 	member.State = encoding.MemberStateSuspect
 	member.SuspicionPeriodCounter = 0
-	l.gossipQueue.Add(&suspect)
+	l.gossipQueue.Add(suspect.ToMessage())
 	return true
 }
 
@@ -1058,7 +1058,7 @@ func (l *List) handleSuspectForUnknown(suspect encoding.MessageSuspect) {
 		SuspicionPeriodCounter: 0,
 		IncarnationNumber:      suspect.IncarnationNumber,
 	})
-	l.gossipQueue.Add(&suspect)
+	l.gossipQueue.Add(suspect.ToMessage())
 }
 
 func (l *List) handleAlive(alive encoding.MessageAlive) {
@@ -1092,10 +1092,10 @@ func (l *List) handleAliveForSelf(alive encoding.MessageAlive) bool {
 	// We need to update the incarnation number about ourselves. Add a new alive message to gossip.
 	// Also make sure that our incarnation number is bigger than before.
 	l.incarnationNumber = utility.IncarnationMax(l.incarnationNumber+1, alive.IncarnationNumber+1)
-	l.gossipQueue.Add(&encoding.MessageAlive{
+	l.gossipQueue.Add(encoding.MessageAlive{
 		Destination:       l.self,
 		IncarnationNumber: l.incarnationNumber,
-	})
+	}.ToMessage())
 
 	l.logger.Info(
 		"Refuted gossip about being alive",
@@ -1129,7 +1129,7 @@ func (l *List) handleAliveForFaultyMembers(alive encoding.MessageAlive) bool {
 		State:             encoding.MemberStateAlive,
 		IncarnationNumber: alive.IncarnationNumber,
 	})
-	l.gossipQueue.Add(&alive)
+	l.gossipQueue.Add(alive.ToMessage())
 	return true
 }
 
@@ -1158,7 +1158,7 @@ func (l *List) handleAliveForMembers(alive encoding.MessageAlive) bool {
 
 	// This information is new to us, we need to make sure to gossip about it.
 	member.State = encoding.MemberStateAlive
-	l.gossipQueue.Add(&alive)
+	l.gossipQueue.Add(alive.ToMessage())
 	return true
 }
 
@@ -1169,7 +1169,7 @@ func (l *List) handleAliveForUnknown(alive encoding.MessageAlive) {
 		State:             encoding.MemberStateAlive,
 		IncarnationNumber: alive.IncarnationNumber,
 	})
-	l.gossipQueue.Add(&alive)
+	l.gossipQueue.Add(alive.ToMessage())
 }
 
 func (l *List) handleFaulty(faulty encoding.MessageFaulty) {
@@ -1204,10 +1204,10 @@ func (l *List) handleFaultyForSelf(faulty encoding.MessageFaulty) bool {
 	// We need to re-join. Add a new alive message to gossip.
 	// Also make sure that our incarnation number is bigger than before.
 	l.incarnationNumber = utility.IncarnationMax(l.incarnationNumber+1, faulty.IncarnationNumber+1)
-	l.gossipQueue.Add(&encoding.MessageAlive{
+	l.gossipQueue.Add(encoding.MessageAlive{
 		Destination:       l.self,
 		IncarnationNumber: l.incarnationNumber,
-	})
+	}.ToMessage())
 
 	l.logger.Info(
 		"Refuted gossip about being faulty",
@@ -1270,7 +1270,7 @@ func (l *List) handleFaultyForMembers(faulty encoding.MessageFaulty) bool {
 	} else {
 		l.faultyMembers = slices.Insert(l.faultyMembers, faultyMemberIndex, *member)
 	}
-	l.gossipQueue.Add(&faulty)
+	l.gossipQueue.Add(faulty.ToMessage())
 	l.removeMemberByAddress(faulty.Destination) // must always happen last to keep the member alive during this method
 	return true
 }
@@ -1293,7 +1293,7 @@ func (l *List) handleFaultyForUnknown(faulty encoding.MessageFaulty) {
 	} else {
 		l.faultyMembers = slices.Insert(l.faultyMembers, faultyMemberIndex, faultyMember)
 	}
-	l.gossipQueue.Add(&faulty)
+	l.gossipQueue.Add(faulty.ToMessage())
 }
 
 func (l *List) handleListRequest(listRequest encoding.MessageListRequest) error {

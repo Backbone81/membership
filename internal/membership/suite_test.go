@@ -27,7 +27,7 @@ func TestSuite(t *testing.T) {
 	RunSpecs(t, "Membership Suite")
 }
 
-func DispatchDatagram(list *membership.List, message membership.Message) error {
+func DispatchDatagram(list *membership.List, message encoding.Message) error {
 	buffer, _, err := message.AppendToBuffer(nil)
 	Expect(err).ToNot(HaveOccurred())
 	return list.DispatchDatagram(buffer)

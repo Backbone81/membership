@@ -20,7 +20,7 @@ type MessageFaulty struct {
 }
 
 // ToMessage converts the specific message into the general purpose message.
-func (m *MessageFaulty) ToMessage() Message {
+func (m MessageFaulty) ToMessage() Message {
 	return Message{
 		Type:              MessageTypeFaulty,
 		Source:            m.Source,
@@ -29,13 +29,13 @@ func (m *MessageFaulty) ToMessage() Message {
 	}
 }
 
-func (m *MessageFaulty) String() string {
+func (m MessageFaulty) String() string {
 	return fmt.Sprintf("Faulty %s (by %s, incarnation %d)", m.Destination, m.Source, m.IncarnationNumber)
 }
 
 // AppendToBuffer appends the message to the provided buffer encoded for network transfer.
 // Returns the buffer with the data appended, the number of bytes appended and any error which occurred.
-func (m *MessageFaulty) AppendToBuffer(buffer []byte) ([]byte, int, error) {
+func (m MessageFaulty) AppendToBuffer(buffer []byte) ([]byte, int, error) {
 	messageTypeBuffer, messageTypeN, err := AppendMessageTypeToBuffer(buffer, MessageTypeFaulty)
 	if err != nil {
 		return buffer, 0, err

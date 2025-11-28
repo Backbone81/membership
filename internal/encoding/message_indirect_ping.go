@@ -2,6 +2,7 @@ package encoding
 
 import (
 	"errors"
+	"fmt"
 )
 
 // MessageIndirectPing is a request of the recipient to send a MessageDirectPing to the destination.
@@ -18,8 +19,12 @@ type MessageIndirectPing struct {
 	SequenceNumber uint16
 }
 
+func (m MessageIndirectPing) String() string {
+	return fmt.Sprintf("IndirectPing (by %s, sequence %d)", m.Source, m.SequenceNumber)
+}
+
 // ToMessage converts the specific message into the general purpose message.
-func (m *MessageIndirectPing) ToMessage() Message {
+func (m MessageIndirectPing) ToMessage() Message {
 	return Message{
 		Type:           MessageTypeIndirectPing,
 		Source:         m.Source,
@@ -35,7 +40,7 @@ func (m *MessageIndirectPing) IsZero() bool {
 
 // AppendToBuffer appends the message to the provided buffer encoded for network transfer.
 // Returns the buffer with the data appended, the number of bytes appended and any error which occurred.
-func (m *MessageIndirectPing) AppendToBuffer(buffer []byte) ([]byte, int, error) {
+func (m MessageIndirectPing) AppendToBuffer(buffer []byte) ([]byte, int, error) {
 	messageTypeBuffer, messageTypeN, err := AppendMessageTypeToBuffer(buffer, MessageTypeIndirectPing)
 	if err != nil {
 		return buffer, 0, err

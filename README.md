@@ -55,9 +55,6 @@ is picked and the full membership list is requested.
 
 ### More Advanced Topics
 
-- Can we drop the interface for Message and collapse all message types into a single message which has all fields any
-  message could have? That way we could be able to drop the interface and prevent memory allocations due to interface
-  conversion.
 - Add encryption and support multiple encryption keys for key rollover. The first key is always used for encryption, all
   keys are used for decryption.
 - Investigate how we can increase the suspicion timeout when we are under high CPU load. High CPU load can be detected

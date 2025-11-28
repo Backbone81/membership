@@ -20,7 +20,7 @@ type MessageSuspect struct {
 }
 
 // ToMessage converts the specific message into the general purpose message.
-func (m *MessageSuspect) ToMessage() Message {
+func (m MessageSuspect) ToMessage() Message {
 	return Message{
 		Type:              MessageTypeSuspect,
 		Source:            m.Source,
@@ -29,13 +29,13 @@ func (m *MessageSuspect) ToMessage() Message {
 	}
 }
 
-func (m *MessageSuspect) String() string {
+func (m MessageSuspect) String() string {
 	return fmt.Sprintf("Suspect %s (by %s, incarnation %d)", m.Destination, m.Source, m.IncarnationNumber)
 }
 
 // AppendToBuffer appends the message to the provided buffer encoded for network transfer.
 // Returns the buffer with the data appended, the number of bytes appended and any error which occurred.
-func (m *MessageSuspect) AppendToBuffer(buffer []byte) ([]byte, int, error) {
+func (m MessageSuspect) AppendToBuffer(buffer []byte) ([]byte, int, error) {
 	messageTypeBuffer, messageTypeN, err := AppendMessageTypeToBuffer(buffer, MessageTypeSuspect)
 	if err != nil {
 		return buffer, 0, err

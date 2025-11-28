@@ -2,6 +2,7 @@ package encoding
 
 import (
 	"errors"
+	"fmt"
 )
 
 // MessageListRequest asks the recipient to send its current full member list to the source. This helps in making sure
@@ -11,8 +12,12 @@ type MessageListRequest struct {
 	Source Address
 }
 
+func (m MessageListRequest) String() string {
+	return fmt.Sprintf("ListRequest (by %s)", m.Source)
+}
+
 // ToMessage converts the specific message into the general purpose message.
-func (m *MessageListRequest) ToMessage() Message {
+func (m MessageListRequest) ToMessage() Message {
 	return Message{
 		Type:   MessageTypeListRequest,
 		Source: m.Source,
@@ -21,7 +26,7 @@ func (m *MessageListRequest) ToMessage() Message {
 
 // AppendToBuffer appends the message to the provided buffer encoded for network transfer.
 // Returns the buffer with the data appended, the number of bytes appended and any error which occurred.
-func (m *MessageListRequest) AppendToBuffer(buffer []byte) ([]byte, int, error) {
+func (m MessageListRequest) AppendToBuffer(buffer []byte) ([]byte, int, error) {
 	messageTypeBuffer, messageTypeN, err := AppendMessageTypeToBuffer(buffer, MessageTypeListRequest)
 	if err != nil {
 		return buffer, 0, err

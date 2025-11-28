@@ -16,7 +16,7 @@ type MessageAlive struct {
 }
 
 // ToMessage converts the specific message into the general purpose message.
-func (m *MessageAlive) ToMessage() Message {
+func (m MessageAlive) ToMessage() Message {
 	return Message{
 		Type:              MessageTypeAlive,
 		Destination:       m.Destination,
@@ -24,13 +24,13 @@ func (m *MessageAlive) ToMessage() Message {
 	}
 }
 
-func (m *MessageAlive) String() string {
+func (m MessageAlive) String() string {
 	return fmt.Sprintf("Alive %s (incarnation %d)", m.Destination, m.IncarnationNumber)
 }
 
 // AppendToBuffer appends the message to the provided buffer encoded for network transfer.
 // Returns the buffer with the data appended, the number of bytes appended and any error which occurred.
-func (m *MessageAlive) AppendToBuffer(buffer []byte) ([]byte, int, error) {
+func (m MessageAlive) AppendToBuffer(buffer []byte) ([]byte, int, error) {
 	messageTypeBuffer, messageTypeN, err := AppendMessageTypeToBuffer(buffer, MessageTypeAlive)
 	if err != nil {
 		return buffer, 0, err

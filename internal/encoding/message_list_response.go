@@ -2,6 +2,7 @@ package encoding
 
 import (
 	"errors"
+	"fmt"
 )
 
 // MessageListResponse provides a list of all known members. This message can become quite big and should always be
@@ -11,8 +12,12 @@ type MessageListResponse struct {
 	Members []Member
 }
 
+func (m MessageListResponse) String() string {
+	return fmt.Sprintf("ListResponse (by %s)", m.Source)
+}
+
 // ToMessage converts the specific message into the general purpose message.
-func (m *MessageListResponse) ToMessage() Message {
+func (m MessageListResponse) ToMessage() Message {
 	return Message{
 		Type:    MessageTypeListResponse,
 		Source:  m.Source,
@@ -22,7 +27,7 @@ func (m *MessageListResponse) ToMessage() Message {
 
 // AppendToBuffer appends the message to the provided buffer encoded for network transfer.
 // Returns the buffer with the data appended, the number of bytes appended and any error which occurred.
-func (m *MessageListResponse) AppendToBuffer(buffer []byte) ([]byte, int, error) {
+func (m MessageListResponse) AppendToBuffer(buffer []byte) ([]byte, int, error) {
 	messageTypeBuffer, messageTypeN, err := AppendMessageTypeToBuffer(buffer, MessageTypeListResponse)
 	if err != nil {
 		return buffer, 0, err

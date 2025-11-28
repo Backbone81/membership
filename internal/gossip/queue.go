@@ -155,8 +155,8 @@ func (q *Queue) SetMaxTransmissionCount(count int) {
 // Add puts the given message at the end of the queue into bucket 0. If the queue already contains a message about the
 // given address, the existing message is overwritten with the correct message precedence and moved to the first bucket
 // again. Note that overwriting an existing message is O(buckets/2) on average, whereas adding a new message is O(1).
-func (q *Queue) Add(message Message) {
-	index, found := q.indexByAddress[message.GetAddress()]
+func (q *Queue) Add(message encoding.Message) {
+	index, found := q.indexByAddress[message.Destination]
 	if found {
 		// The queue already contains a message for that address. Let's see if we need to overwrite it.
 		entry := &q.ring[index]
@@ -169,7 +169,7 @@ func (q *Queue) Add(message Message) {
 			index = q.moveToFirstBucket(index)
 		}
 		MessagesOverwrittenTotal.Inc()
-		MessagesByTypeTotal.WithLabelValues(message.GetType().String()).Inc()
+		MessagesByTypeTotal.WithLabelValues(message.Type.String()).Inc()
 		return
 	}
 
@@ -183,10 +183,10 @@ func (q *Queue) Add(message Message) {
 		Message:           message,
 		TransmissionCount: 0,
 	}
-	q.indexByAddress[message.GetAddress()] = q.head
+	q.indexByAddress[message.Destination] = q.head
 	q.head = (q.head + 1) % len(q.ring)
 	MessagesAddedTotal.Inc()
-	MessagesByTypeTotal.WithLabelValues(message.GetType().String()).Inc()
+	MessagesByTypeTotal.WithLabelValues(message.Type.String()).Inc()
 }
 
 // Prioritize marks a message for the given address as priority. If such a message exists, it will always be
@@ -194,7 +194,7 @@ func (q *Queue) Add(message Message) {
 func (q *Queue) Prioritize(address encoding.Address) {
 	index, found := q.indexByAddress[address]
 	if found {
-		messageType := q.ring[index].Message.GetType()
+		messageType := q.ring[index].Message.Type
 		if messageType == encoding.MessageTypeSuspect ||
 			messageType == encoding.MessageTypeFaulty {
 			// We are only prioritizing suspect or faulty messages. We do not have to tell the member that we know that
@@ -208,7 +208,7 @@ func (q *Queue) Prioritize(address encoding.Address) {
 
 // Get returns the element with the given logical index. This is a quality of life function which is implemented as a
 // wrapper around All. Prefer using All for better performance when ranging over multiple elements.
-func (q *Queue) Get(logicalIndex int) Message {
+func (q *Queue) Get(logicalIndex int) encoding.Message {
 	for index, message := range q.All() {
 		if index == logicalIndex {
 			return message
@@ -219,13 +219,13 @@ func (q *Queue) Get(logicalIndex int) Message {
 
 // All returns a range over function which iterates over all elements stored in the queue. The messages transmitted
 // the least amount of time are returned first, the most transmitted messages last.
-func (q *Queue) All() iter.Seq2[int, Message] {
+func (q *Queue) All() iter.Seq2[int, encoding.Message] {
 	return q.all
 }
 
 // all is a helper function which is the range over function returned by All. This avoids a memory allocation
 // which an anonymous function with a closure would cause.
-func (q *Queue) all(yield func(int, Message) bool) {
+func (q *Queue) all(yield func(int, encoding.Message) bool) {
 	logicalIndex := 0
 
 	// We need to handle the priority element if set.
@@ -293,7 +293,7 @@ func (q *Queue) MarkTransmitted(count int) {
 func (q *Queue) cleanupTail() {
 	lastBucketStart := q.bucketStarts[len(q.bucketStarts)-1]
 	for q.tail != lastBucketStart {
-		delete(q.indexByAddress, q.ring[q.tail].Message.GetAddress())
+		delete(q.indexByAddress, q.ring[q.tail].Message.Destination)
 		if q.priorityIndex == q.tail {
 			q.priorityIndex = -1
 		}
@@ -417,8 +417,8 @@ func (q *Queue) swapElements(index1 int, index2 int) {
 	q.ring[index1], q.ring[index2] = q.ring[index2], q.ring[index1]
 
 	// Update the index by address bookkeeping
-	q.indexByAddress[q.ring[index1].Message.GetAddress()] = index1
-	q.indexByAddress[q.ring[index2].Message.GetAddress()] = index2
+	q.indexByAddress[q.ring[index1].Message.Destination] = index1
+	q.indexByAddress[q.ring[index2].Message.Destination] = index2
 
 	// Fix priority queue index
 	if q.priorityIndex == index1 {
@@ -444,7 +444,7 @@ func (q *Queue) ValidateInternalState() error {
 			}
 
 			// Make sure that all entries are correctly stored in the index by address
-			index2, found := q.indexByAddress[q.ring[index].Message.GetAddress()]
+			index2, found := q.indexByAddress[q.ring[index].Message.Destination]
 			if !found {
 				return fmt.Errorf("message %d could not be found in index map", index)
 			}
@@ -460,7 +460,7 @@ func (q *Queue) ValidateInternalState() error {
 		if index >= len(q.ring) {
 			return fmt.Errorf("index map for address %s points out of bounds", address)
 		}
-		if !q.ring[index].Message.GetAddress().Equal(address) {
+		if !q.ring[index].Message.Destination.Equal(address) {
 			return fmt.Errorf("index map index mismatch for queue element %d", index)
 		}
 	}

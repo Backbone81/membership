@@ -5,32 +5,18 @@ import (
 	"github.com/backbone81/membership/internal/utility"
 )
 
-// Message is the interface all gossip network messages need to implement.
-type Message interface {
-	AppendToBuffer(buffer []byte) ([]byte, int, error)
-	FromBuffer(buffer []byte) (int, error)
-	GetAddress() encoding.Address
-	GetType() encoding.MessageType
-	GetIncarnationNumber() uint16
-	String() string
-}
-
 // ShouldReplaceExistingWithNew reports if the new message has higher precedence as the existing message. A new message
 // with higher precedence should replace the existing one, while same or lower precedence should be dropped.
-func ShouldReplaceExistingWithNew(existing Message, new Message) bool {
-	newIncarnationNumber := new.GetIncarnationNumber()
-	existingIncarnationNumber := existing.GetIncarnationNumber()
-	if utility.IncarnationLessThan(newIncarnationNumber, existingIncarnationNumber) {
+func ShouldReplaceExistingWithNew(existing encoding.Message, new encoding.Message) bool {
+	if utility.IncarnationLessThan(new.IncarnationNumber, existing.IncarnationNumber) {
 		// No need to overwrite when the incarnation number is lower.
 		return false
 	}
 
-	newMessageType := new.GetType()
-	existingMessageType := existing.GetType()
-	if newIncarnationNumber == existingIncarnationNumber &&
-		(newMessageType == encoding.MessageTypeAlive ||
-			newMessageType == encoding.MessageTypeSuspect && existingMessageType != encoding.MessageTypeAlive ||
-			newMessageType == encoding.MessageTypeFaulty && existingMessageType != encoding.MessageTypeAlive && existingMessageType != encoding.MessageTypeSuspect) {
+	if new.IncarnationNumber == existing.IncarnationNumber &&
+		(new.Type == encoding.MessageTypeAlive ||
+			new.Type == encoding.MessageTypeSuspect && existing.Type != encoding.MessageTypeAlive ||
+			new.Type == encoding.MessageTypeFaulty && existing.Type != encoding.MessageTypeAlive && existing.Type != encoding.MessageTypeSuspect) {
 		// No need to overwrite with the same incarnation number and the wrong priorities.
 		return false
 	}

@@ -2,6 +2,7 @@ package encoding
 
 import (
 	"errors"
+	"fmt"
 )
 
 // MessageDirectAck is a response message sent back in answer to receiving a MessageDirectPing.
@@ -15,8 +16,12 @@ type MessageDirectAck struct {
 	SequenceNumber uint16
 }
 
+func (m MessageDirectAck) String() string {
+	return fmt.Sprintf("DirectAck (by %s, sequence %d)", m.Source, m.SequenceNumber)
+}
+
 // ToMessage converts the specific message into the general purpose message.
-func (m *MessageDirectAck) ToMessage() Message {
+func (m MessageDirectAck) ToMessage() Message {
 	return Message{
 		Type:           MessageTypeDirectAck,
 		Source:         m.Source,
@@ -26,7 +31,7 @@ func (m *MessageDirectAck) ToMessage() Message {
 
 // AppendToBuffer appends the message to the provided buffer encoded for network transfer.
 // Returns the buffer with the data appended, the number of bytes appended and any error which occurred.
-func (m *MessageDirectAck) AppendToBuffer(buffer []byte) ([]byte, int, error) {
+func (m MessageDirectAck) AppendToBuffer(buffer []byte) ([]byte, int, error) {
 	messageTypeBuffer, messageTypeN, err := AppendMessageTypeToBuffer(buffer, MessageTypeDirectAck)
 	if err != nil {
 		return buffer, 0, err

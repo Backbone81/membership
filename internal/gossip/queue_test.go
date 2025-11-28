@@ -1190,9 +1190,15 @@ func BenchmarkQueue_All(b *testing.B) {
 			var count int
 			for {
 				queue.ForEach(func(message encoding.Message) bool {
+					if count == b.N {
+						return false
+					}
 					count++
-					return count != b.N
+					return true
 				})
+				if count == b.N {
+					return
+				}
 			}
 		})
 	}

@@ -25,6 +25,7 @@ with improvements from
   to gossip next.
 - Gossip about a member is always gossipped to that member with priority to allow quicker corrections of false suspects.
 - A graceful shutdown will propagate the failure of the node shutting down, reducing the detection time.
+- Zero memory allocations during normal operation.
 
 ## Mechanic
 
@@ -46,6 +47,17 @@ gossip is dropped.
 Situations can arise where some member might not receive a specific change and the change is not gossiped any more by
 other members. To tackle this issue, there is a full exchange of membership list at a low frequency. A random member
 is picked and the full membership list is requested.
+
+## Logging
+
+This library is using log levels to provide different details about its operation. The higher log levels always include
+all logs of the lower log levels. Log level 0 is intended for production use while the other log levels are intended
+for debugging purposes.
+
+- Log level 0: General status information like members added and removed
+- Log level 1: Network messages sent
+- Log level 2: Network messages received
+- Log level 3: Gossip messages received
 
 ## TODOs
 

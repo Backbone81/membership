@@ -71,6 +71,9 @@ type Config struct {
 	// option is primarily used for benchmarks to avoid memory allocations. There should be no real need to ever
 	// set this for real use cases.
 	PendingPingPreAllocation int
+
+	// MemberPreAllocation is the number of members which are pre-allocated to reduce allocations later.
+	MemberPreAllocation int
 }
 
 // DefaultConfig provides a default configuration which should work for most use-cases.
@@ -81,4 +84,5 @@ var DefaultConfig = Config{
 	DirectPingMemberCount:    1,
 	IndirectPingMemberCount:  3,
 	PendingPingPreAllocation: 16,
+	MemberPreAllocation:      128,
 }

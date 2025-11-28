@@ -2702,9 +2702,15 @@ func BenchmarkList_handleListResponse(b *testing.B) {
 			b.Fatal(err)
 		}
 
+		// We fill the member list once with all members from the response, so that our benchmark can then work on
+		// members which are already there.
+		list := createListWithMembers(0)
+		if err := list.DispatchDatagram(buffer); err != nil {
+			b.Fatal(err)
+		}
+
 		b.Run(fmt.Sprintf("%d response members", memberCount), func(b *testing.B) {
-			for range b.N {
-				list := createListWithMembers(0)
+			for b.Loop() {
 				if err := list.DispatchDatagram(buffer); err != nil {
 					b.Fatal(err)
 				}
@@ -2741,6 +2747,9 @@ func createListWithMembers(memberCount int) *membership.List {
 		membership.WithUDPClient(&transport.Discard{}),
 		membership.WithTCPClient(&transport.Discard{}),
 		membership.WithRoundTripTimeTracker(roundtriptime.NewTracker()),
+		// We increase the max datagram length send in benchmarks to avoid memory allocations on list request
+		// responses for bigger clusters.
+		membership.WithMaxDatagramLengthSend(10*1024),
 		// We set the pending ping pre-allocation high enough to exceed the iteration count in benchmarks to avoid
 		// memory allocations.
 		membership.WithPendingPingPreAllocation(20_000_000),

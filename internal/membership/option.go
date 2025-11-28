@@ -101,3 +101,9 @@ func WithPendingPingPreAllocation(count int) Option {
 		config.PendingPingPreAllocation = count
 	}
 }
+
+func WithMemberPreAllocation(count int) Option {
+	return func(config *Config) {
+		config.MemberPreAllocation = count
+	}
+}

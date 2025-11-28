@@ -94,8 +94,9 @@ type List struct {
 	// not require special ordering.
 	pendingIndirectPings []PendingIndirectPing
 
-	pickRandomMembersResult []*encoding.Member
-	pickRandomMembersSwap   map[int]int
+	pickRandomMembersResult  []*encoding.Member
+	pickRandomMembersSwap    map[int]int
+	listResponseScratchSpace []encoding.Member
 }
 
 // NewList creates a new membership list.
@@ -116,16 +117,19 @@ func NewList(options ...Option) *List {
 	}
 
 	newList := List{
-		config:                  config,
-		logger:                  config.Logger,
-		self:                    config.AdvertisedAddress,
-		gossipQueue:             gossip.NewQueue(),
-		datagramBuffer:          make([]byte, 0, config.MaxDatagramLengthSend),
-		pendingDirectPings:      make([]PendingDirectPing, 0, config.PendingPingPreAllocation),
-		pendingDirectPingsNext:  make([]PendingDirectPing, 0, config.PendingPingPreAllocation),
-		pendingIndirectPings:    make([]PendingIndirectPing, 0, config.PendingPingPreAllocation),
-		pickRandomMembersResult: make([]*encoding.Member, 0, 16),
-		pickRandomMembersSwap:   make(map[int]int, 16),
+		config:                   config,
+		logger:                   config.Logger,
+		self:                     config.AdvertisedAddress,
+		gossipQueue:              gossip.NewQueue(),
+		datagramBuffer:           make([]byte, 0, config.MaxDatagramLengthSend),
+		members:                  make([]encoding.Member, 0, config.MemberPreAllocation),
+		faultyMembers:            make([]encoding.Member, 0, config.MemberPreAllocation),
+		listResponseScratchSpace: make([]encoding.Member, 0, config.MemberPreAllocation),
+		pendingDirectPings:       make([]PendingDirectPing, 0, config.PendingPingPreAllocation),
+		pendingDirectPingsNext:   make([]PendingDirectPing, 0, config.PendingPingPreAllocation),
+		pendingIndirectPings:     make([]PendingIndirectPing, 0, config.PendingPingPreAllocation),
+		pickRandomMembersResult:  make([]*encoding.Member, 0, 16),
+		pickRandomMembersSwap:    make(map[int]int, 16),
 	}
 
 	// We need to gossip our own alive. Otherwise, nobody will pick us up into their own member list.
@@ -198,7 +202,7 @@ func (l *List) DirectPing() error {
 		destination := l.getNextMember().Address
 		logger := l.logger.V(1)
 		if logger.Enabled() {
-			// We only spend the memory allocation for interface boxing of the key value pair when the log level would
+			// We only spend the memory allocation for interface boxing of the key value pairs when the log level would
 			// actually produce this log entry.
 			logger.Info(
 				"Direct ping",
@@ -321,13 +325,18 @@ func (l *List) IndirectPing() error {
 			MessageIndirectPing: indirectPing,
 		})
 		for _, member := range members {
-			l.logger.V(1).Info(
-				"Indirect ping",
-				"source", l.self,
-				"destination", indirectPing.Destination,
-				"sequence-number", indirectPing.SequenceNumber,
-				"through", member.Address,
-			)
+			logger := l.logger.V(1)
+			if logger.Enabled() {
+				// We only spend the memory allocation for interface boxing of the key value pairs when the log level
+				// would actually produce this log entry.
+				logger.Info(
+					"Indirect ping",
+					"source", l.self,
+					"destination", indirectPing.Destination,
+					"sequence-number", indirectPing.SequenceNumber,
+					"through", member.Address,
+				)
+			}
 			if err := l.sendWithGossip(member.Address, indirectPing.ToMessage()); err != nil {
 				joinedErr = errors.Join(joinedErr, err)
 			}
@@ -557,10 +566,15 @@ func (l *List) RequestList() error {
 		Source: l.self,
 	}
 
-	l.logger.V(1).Info(
-		"Requesting member list",
-		"destination", members[0].Address,
-	)
+	logger := l.logger.V(1)
+	if logger.Enabled() {
+		// We only spend the memory allocation for interface boxing of the key value pairs when the log level would
+		// actually produce this log entry.
+		logger.Info(
+			"Requesting member list",
+			"destination", members[0].Address,
+		)
+	}
 	if err := l.sendWithGossip(members[0].Address, listRequest.ToMessage()); err != nil {
 		return err
 	}
@@ -582,10 +596,15 @@ func (l *List) BroadcastShutdown() error {
 
 	members := l.pickRandomMembers(l.config.ShutdownMemberCount)
 	for _, member := range members {
-		l.logger.Info(
-			"Broadcasting shutdown",
-			"address", member.Address,
-		)
+		logger := l.logger.V(1)
+		if logger.Enabled() {
+			// We only spend the memory allocation for interface boxing of the key value pairs when the log level would
+			// actually produce this log entry.
+			logger.Info(
+				"Broadcasting shutdown",
+				"address", member.Address,
+			)
+		}
 		// We send our broadcast with the gossip we have, to help disseminate that information before we are gone.
 		if err := l.sendWithGossip(member.Address, faultyMessage.ToMessage()); err != nil {
 			return err
@@ -788,7 +807,9 @@ func (l *List) DispatchDatagram(buffer []byte) error {
 		case encoding.MessageTypeListResponse:
 			MessagesReceivedTotal.WithLabelValues("list_response").Inc()
 			var message encoding.MessageListResponse
+			message.Members = l.listResponseScratchSpace
 			n, err := message.FromBuffer(buffer)
+			l.listResponseScratchSpace = message.Members
 			if err != nil {
 				return err
 			}
@@ -807,11 +828,16 @@ func (l *List) DispatchDatagram(buffer []byte) error {
 }
 
 func (l *List) handleDirectPing(directPing encoding.MessageDirectPing) error {
-	l.logger.V(2).Info(
-		"Received direct ping",
-		"source", directPing.Source,
-		"sequence-number", directPing.SequenceNumber,
-	)
+	logger := l.logger.V(2)
+	if logger.Enabled() {
+		// We only spend the memory allocation for interface boxing of the key value pairs when the log level would
+		// actually produce this log entry.
+		logger.Info(
+			"Received direct ping",
+			"source", directPing.Source,
+			"sequence-number", directPing.SequenceNumber,
+		)
+	}
 	directAck := encoding.MessageDirectAck{
 		Source:         l.self,
 		SequenceNumber: directPing.SequenceNumber,
@@ -823,11 +849,16 @@ func (l *List) handleDirectPing(directPing encoding.MessageDirectPing) error {
 }
 
 func (l *List) handleDirectAck(directAck encoding.MessageDirectAck) error {
-	l.logger.V(2).Info(
-		"Received direct ack",
-		"source", directAck.Source,
-		"sequence-number", directAck.SequenceNumber,
-	)
+	logger := l.logger.V(2)
+	if logger.Enabled() {
+		// We only spend the memory allocation for interface boxing of the key value pairs when the log level would
+		// actually produce this log entry.
+		logger.Info(
+			"Received direct ack",
+			"source", directAck.Source,
+			"sequence-number", directAck.SequenceNumber,
+		)
+	}
 	l.handleDirectAckForPendingIndirectPings(directAck)
 	var err error
 	l.pendingDirectPings, err = l.handleDirectAckForPendingDirectPings(l.pendingDirectPings, directAck)
@@ -885,12 +916,17 @@ func (l *List) handleDirectAckForPendingIndirectPings(directAck encoding.Message
 }
 
 func (l *List) handleIndirectPing(indirectPing encoding.MessageIndirectPing) error {
-	l.logger.V(2).Info(
-		"Received indirect ping",
-		"source", indirectPing.Source,
-		"destination", indirectPing.Destination,
-		"sequence-number", indirectPing.SequenceNumber,
-	)
+	logger := l.logger.V(2)
+	if logger.Enabled() {
+		// We only spend the memory allocation for interface boxing of the key value pairs when the log level would
+		// actually produce this log entry.
+		logger.Info(
+			"Received indirect ping",
+			"source", indirectPing.Source,
+			"destination", indirectPing.Destination,
+			"sequence-number", indirectPing.SequenceNumber,
+		)
+	}
 	directPing := encoding.MessageDirectPing{
 		Source:         l.self,
 		SequenceNumber: l.nextSequenceNumber,
@@ -911,11 +947,16 @@ func (l *List) handleIndirectPing(indirectPing encoding.MessageIndirectPing) err
 }
 
 func (l *List) handleIndirectAck(indirectAck encoding.MessageIndirectAck) {
-	l.logger.V(2).Info(
-		"Received indirect ack",
-		"source", indirectAck.Source,
-		"sequence-number", indirectAck.SequenceNumber,
-	)
+	logger := l.logger.V(2)
+	if logger.Enabled() {
+		// We only spend the memory allocation for interface boxing of the key value pairs when the log level would
+		// actually produce this log entry.
+		logger.Info(
+			"Received indirect ack",
+			"source", indirectAck.Source,
+			"sequence-number", indirectAck.SequenceNumber,
+		)
+	}
 	l.handleIndirectAckForPendingDirectPings(indirectAck)
 	l.handleIndirectAckForPendingIndirectPings(indirectAck)
 }
@@ -953,12 +994,17 @@ func (l *List) handleIndirectAckForPendingIndirectPings(indirectAck encoding.Mes
 }
 
 func (l *List) handleSuspect(suspect encoding.MessageSuspect) {
-	l.logger.V(3).Info(
-		"Received gossip about suspect",
-		"source", suspect.Source,
-		"destination", suspect.Destination,
-		"incarnation-number", suspect.IncarnationNumber,
-	)
+	logger := l.logger.V(3)
+	if logger.Enabled() {
+		// We only spend the memory allocation for interface boxing of the key value pairs when the log level would
+		// actually produce this log entry.
+		logger.Info(
+			"Received gossip about suspect",
+			"source", suspect.Source,
+			"destination", suspect.Destination,
+			"incarnation-number", suspect.IncarnationNumber,
+		)
+	}
 	if l.handleSuspectForSelf(suspect) {
 		return
 	}
@@ -1068,11 +1114,16 @@ func (l *List) handleSuspectForUnknown(suspect encoding.MessageSuspect) {
 }
 
 func (l *List) handleAlive(alive encoding.MessageAlive) {
-	l.logger.V(3).Info(
-		"Received gossip about alive",
-		"source", alive.Destination,
-		"incarnation-number", alive.IncarnationNumber,
-	)
+	logger := l.logger.V(3)
+	if logger.Enabled() {
+		// We only spend the memory allocation for interface boxing of the key value pairs when the log level would
+		// actually produce this log entry.
+		logger.Info(
+			"Received gossip about alive",
+			"source", alive.Destination,
+			"incarnation-number", alive.IncarnationNumber,
+		)
+	}
 	if l.handleAliveForSelf(alive) {
 		return
 	}
@@ -1179,12 +1230,17 @@ func (l *List) handleAliveForUnknown(alive encoding.MessageAlive) {
 }
 
 func (l *List) handleFaulty(faulty encoding.MessageFaulty) {
-	l.logger.V(3).Info(
-		"Received gossip about faulty",
-		"source", faulty.Source,
-		"destination", faulty.Destination,
-		"incarnation-number", faulty.IncarnationNumber,
-	)
+	logger := l.logger.V(3)
+	if logger.Enabled() {
+		// We only spend the memory allocation for interface boxing of the key value pairs when the log level would
+		// actually produce this log entry.
+		logger.Info(
+			"Received gossip about faulty",
+			"source", faulty.Source,
+			"destination", faulty.Destination,
+			"incarnation-number", faulty.IncarnationNumber,
+		)
+	}
 	if l.handleFaultyForSelf(faulty) {
 		return
 	}
@@ -1303,10 +1359,15 @@ func (l *List) handleFaultyForUnknown(faulty encoding.MessageFaulty) {
 }
 
 func (l *List) handleListRequest(listRequest encoding.MessageListRequest) error {
-	l.logger.V(2).Info(
-		"Received list request",
-		"source", listRequest.Source,
-	)
+	logger := l.logger.V(2)
+	if logger.Enabled() {
+		// We only spend the memory allocation for interface boxing of the key value pairs when the log level would
+		// actually produce this log entry.
+		logger.Info(
+			"Received list request",
+			"source", listRequest.Source,
+		)
+	}
 
 	listResponse := encoding.MessageListResponse{
 		Source:  l.self,
@@ -1324,10 +1385,15 @@ func (l *List) handleListRequest(listRequest encoding.MessageListRequest) error 
 }
 
 func (l *List) handleListResponse(listResponse encoding.MessageListResponse) error {
-	l.logger.V(2).Info(
-		"Received list response",
-		"source", listResponse.Source,
-	)
+	logger := l.logger.V(2)
+	if logger.Enabled() {
+		// We only spend the memory allocation for interface boxing of the key value pairs when the log level would
+		// actually produce this log entry.
+		logger.Info(
+			"Received list response",
+			"source", listResponse.Source,
+		)
+	}
 	for _, member := range listResponse.Members {
 		switch member.State {
 		case encoding.MemberStateAlive:

@@ -52,11 +52,12 @@ func (l *DebugListWrapper) WriteInternalDebugState(writer io.Writer) error {
 	}
 	// Make sure we are not prioritizing for the state dump
 	l.gossipQueue.Prioritize(encoding.Address{})
-	for _, msg := range l.gossipQueue.All() {
-		if _, err := fmt.Fprintf(writer, "  - %s\n", msg); err != nil {
-			return err
+	l.gossipQueue.ForEach(func(message encoding.Message) bool {
+		if _, err := fmt.Fprintf(writer, "  - %s\n", message); err != nil {
+			return false
 		}
-	}
+		return true
+	})
 	return nil
 }
 

@@ -243,7 +243,7 @@ var _ = Describe("Queue", func() {
 
 			Expect(queue.Len()).To(Equal(1))
 			Expect(queue.IsEmpty()).To(BeFalse())
-			Expect(queue.Get(0)).To(Equal(message))
+			Expect(GetFromQueueByIndex(queue, 0)).To(Equal(message))
 			Expect(queue.ValidateInternalState()).To(Succeed())
 		})
 
@@ -262,8 +262,8 @@ var _ = Describe("Queue", func() {
 
 			Expect(queue.Len()).To(Equal(2))
 			Expect(queue.IsEmpty()).To(BeFalse())
-			Expect(queue.Get(0)).To(Equal(message1))
-			Expect(queue.Get(1)).To(Equal(message2))
+			Expect(GetFromQueueByIndex(queue, 0)).To(Equal(message1))
+			Expect(GetFromQueueByIndex(queue, 1)).To(Equal(message2))
 			Expect(queue.ValidateInternalState()).To(Succeed())
 		})
 
@@ -282,7 +282,7 @@ var _ = Describe("Queue", func() {
 
 			Expect(queue.Len()).To(Equal(1))
 			Expect(queue.IsEmpty()).To(BeFalse())
-			Expect(queue.Get(0)).To(Equal(message1))
+			Expect(GetFromQueueByIndex(queue, 0)).To(Equal(message1))
 			Expect(queue.ValidateInternalState()).To(Succeed())
 		})
 
@@ -305,7 +305,7 @@ var _ = Describe("Queue", func() {
 			Expect(queue.Len()).To(Equal(4))
 
 			for i := 0; i < 4; i++ {
-				Expect(queue.Get(i).Destination.Port()).To(Equal(1024 + i))
+				Expect(GetFromQueueByIndex(queue, i).Destination.Port()).To(Equal(1024 + i))
 			}
 			Expect(queue.ValidateInternalState()).To(Succeed())
 		})
@@ -341,7 +341,7 @@ var _ = Describe("Queue", func() {
 
 			// Verify all messages accessible
 			for i := 0; i < 4; i++ {
-				Expect(queue.Get(i).Destination.Port()).To(Equal(1024 + 3 + i))
+				Expect(GetFromQueueByIndex(queue, i).Destination.Port()).To(Equal(1024 + 3 + i))
 			}
 			Expect(queue.ValidateInternalState()).To(Succeed())
 		})
@@ -363,8 +363,8 @@ var _ = Describe("Queue", func() {
 			queue.Add(message2)
 			queue.MarkTransmitted(1)
 
-			Expect(queue.Get(0)).To(Equal(message2))
-			Expect(queue.Get(1)).To(Equal(message1))
+			Expect(GetFromQueueByIndex(queue, 0)).To(Equal(message2))
+			Expect(GetFromQueueByIndex(queue, 1)).To(Equal(message1))
 
 			message1Updated := encoding.MessageAlive{
 				Destination:       TestAddress,
@@ -373,8 +373,8 @@ var _ = Describe("Queue", func() {
 			queue.Add(message1Updated)
 
 			Expect(queue.Len()).To(Equal(2))
-			Expect(queue.Get(0)).To(Equal(message1Updated))
-			Expect(queue.Get(1)).To(Equal(message2))
+			Expect(GetFromQueueByIndex(queue, 0)).To(Equal(message1Updated))
+			Expect(GetFromQueueByIndex(queue, 1)).To(Equal(message2))
 			Expect(queue.ValidateInternalState()).To(Succeed())
 		})
 
@@ -384,9 +384,9 @@ var _ = Describe("Queue", func() {
 				queue.Add(message1)
 				queue.Add(message2)
 				if overwrite {
-					Expect(queue.Get(0)).To(Equal(message2))
+					Expect(GetFromQueueByIndex(queue, 0)).To(Equal(message2))
 				} else {
-					Expect(queue.Get(0)).To(Equal(message1))
+					Expect(GetFromQueueByIndex(queue, 0)).To(Equal(message1))
 				}
 				Expect(queue.ValidateInternalState()).To(Succeed())
 			},
@@ -744,8 +744,8 @@ var _ = Describe("Queue", func() {
 
 			queue.Prioritize(TestAddress3)
 
-			Expect(queue.Get(0)).To(Equal(message1))
-			Expect(queue.Get(1)).To(Equal(message2))
+			Expect(GetFromQueueByIndex(queue, 0)).To(Equal(message1))
+			Expect(GetFromQueueByIndex(queue, 1)).To(Equal(message2))
 			Expect(queue.ValidateInternalState()).To(Succeed())
 		})
 
@@ -772,14 +772,14 @@ var _ = Describe("Queue", func() {
 			queue.Add(alive2)
 
 			queue.Prioritize(encoding.Address{})
-			Expect(queue.Get(0)).To(Equal(alive1))
-			Expect(queue.Get(1)).To(Equal(suspect))
-			Expect(queue.Get(2)).To(Equal(alive2))
+			Expect(GetFromQueueByIndex(queue, 0)).To(Equal(alive1))
+			Expect(GetFromQueueByIndex(queue, 1)).To(Equal(suspect))
+			Expect(GetFromQueueByIndex(queue, 2)).To(Equal(alive2))
 
 			queue.Prioritize(TestAddress)
-			Expect(queue.Get(0)).To(Equal(suspect))
-			Expect(queue.Get(1)).To(Equal(alive1))
-			Expect(queue.Get(2)).To(Equal(alive2))
+			Expect(GetFromQueueByIndex(queue, 0)).To(Equal(suspect))
+			Expect(GetFromQueueByIndex(queue, 1)).To(Equal(alive1))
+			Expect(GetFromQueueByIndex(queue, 2)).To(Equal(alive2))
 			Expect(queue.ValidateInternalState()).To(Succeed())
 		})
 
@@ -806,14 +806,14 @@ var _ = Describe("Queue", func() {
 			queue.Add(alive2)
 
 			queue.Prioritize(encoding.Address{})
-			Expect(queue.Get(0)).To(Equal(alive1))
-			Expect(queue.Get(1)).To(Equal(faulty))
-			Expect(queue.Get(2)).To(Equal(alive2))
+			Expect(GetFromQueueByIndex(queue, 0)).To(Equal(alive1))
+			Expect(GetFromQueueByIndex(queue, 1)).To(Equal(faulty))
+			Expect(GetFromQueueByIndex(queue, 2)).To(Equal(alive2))
 
 			queue.Prioritize(TestAddress)
-			Expect(queue.Get(0)).To(Equal(faulty))
-			Expect(queue.Get(1)).To(Equal(alive1))
-			Expect(queue.Get(2)).To(Equal(alive2))
+			Expect(GetFromQueueByIndex(queue, 0)).To(Equal(faulty))
+			Expect(GetFromQueueByIndex(queue, 1)).To(Equal(alive1))
+			Expect(GetFromQueueByIndex(queue, 2)).To(Equal(alive2))
 			Expect(queue.ValidateInternalState()).To(Succeed())
 		})
 
@@ -839,14 +839,14 @@ var _ = Describe("Queue", func() {
 			queue.Add(alive3)
 
 			queue.Prioritize(encoding.Address{})
-			Expect(queue.Get(0)).To(Equal(alive1))
-			Expect(queue.Get(1)).To(Equal(alive2))
-			Expect(queue.Get(2)).To(Equal(alive3))
+			Expect(GetFromQueueByIndex(queue, 0)).To(Equal(alive1))
+			Expect(GetFromQueueByIndex(queue, 1)).To(Equal(alive2))
+			Expect(GetFromQueueByIndex(queue, 2)).To(Equal(alive3))
 
 			queue.Prioritize(TestAddress)
-			Expect(queue.Get(0)).To(Equal(alive1))
-			Expect(queue.Get(1)).To(Equal(alive2))
-			Expect(queue.Get(2)).To(Equal(alive3))
+			Expect(GetFromQueueByIndex(queue, 0)).To(Equal(alive1))
+			Expect(GetFromQueueByIndex(queue, 1)).To(Equal(alive2))
+			Expect(GetFromQueueByIndex(queue, 2)).To(Equal(alive3))
 			Expect(queue.ValidateInternalState()).To(Succeed())
 		})
 
@@ -867,18 +867,18 @@ var _ = Describe("Queue", func() {
 			}.ToMessage()
 			queue.Add(alive)
 
-			Expect(queue.Get(0)).To(Equal(alive))
-			Expect(queue.Get(1)).To(Equal(suspect))
+			Expect(GetFromQueueByIndex(queue, 0)).To(Equal(alive))
+			Expect(GetFromQueueByIndex(queue, 1)).To(Equal(suspect))
 
 			// Prioritize the suspect message
 			queue.Prioritize(TestAddress)
-			Expect(queue.Get(0)).To(Equal(suspect))
-			Expect(queue.Get(1)).To(Equal(alive))
+			Expect(GetFromQueueByIndex(queue, 0)).To(Equal(suspect))
+			Expect(GetFromQueueByIndex(queue, 1)).To(Equal(alive))
 
 			queue.SetMaxTransmissionCount(1)
 
 			Expect(queue.Len()).To(Equal(1))
-			Expect(queue.Get(0)).To(Equal(alive))
+			Expect(GetFromQueueByIndex(queue, 0)).To(Equal(alive))
 			Expect(queue.ValidateInternalState()).To(Succeed())
 		})
 
@@ -903,7 +903,7 @@ var _ = Describe("Queue", func() {
 			}.ToMessage())
 
 			queue.Prioritize(TestAddress)
-			Expect(queue.Get(0)).To(Equal(suspect))
+			Expect(GetFromQueueByIndex(queue, 0)).To(Equal(suspect))
 
 			Expect(queue.Cap()).To(Equal(4))
 			Expect(queue.Len()).To(Equal(3))
@@ -916,7 +916,7 @@ var _ = Describe("Queue", func() {
 			Expect(queue.Cap()).To(Equal(8))
 			Expect(queue.Len()).To(Equal(4))
 
-			Expect(queue.Get(0)).To(Equal(suspect))
+			Expect(GetFromQueueByIndex(queue, 0)).To(Equal(suspect))
 			Expect(queue.ValidateInternalState()).To(Succeed())
 		})
 
@@ -939,8 +939,8 @@ var _ = Describe("Queue", func() {
 			queue.MarkTransmitted(2)
 
 			queue.Prioritize(TestAddress)
-			Expect(queue.Get(0)).To(Equal(suspect))
-			Expect(queue.Get(1)).To(Equal(alive))
+			Expect(GetFromQueueByIndex(queue, 0)).To(Equal(suspect))
+			Expect(GetFromQueueByIndex(queue, 1)).To(Equal(alive))
 
 			suspectUpdated := encoding.MessageSuspect{
 				Source:            TestAddress2,
@@ -949,7 +949,7 @@ var _ = Describe("Queue", func() {
 			}.ToMessage()
 			queue.Add(suspectUpdated)
 
-			Expect(queue.Get(0)).To(Equal(suspectUpdated))
+			Expect(GetFromQueueByIndex(queue, 0)).To(Equal(suspectUpdated))
 			Expect(queue.Len()).To(Equal(2))
 			Expect(queue.ValidateInternalState()).To(Succeed())
 		})
@@ -973,8 +973,8 @@ var _ = Describe("Queue", func() {
 			queue.MarkTransmitted(2)
 
 			queue.Prioritize(TestAddress)
-			Expect(queue.Get(0)).To(Equal(suspect))
-			Expect(queue.Get(1)).To(Equal(alive))
+			Expect(GetFromQueueByIndex(queue, 0)).To(Equal(suspect))
+			Expect(GetFromQueueByIndex(queue, 1)).To(Equal(alive))
 
 			aliveUpdated := encoding.MessageAlive{
 				Destination:       TestAddress2,
@@ -982,7 +982,7 @@ var _ = Describe("Queue", func() {
 			}.ToMessage()
 			queue.Add(aliveUpdated)
 
-			Expect(queue.Get(0)).To(Equal(suspect))
+			Expect(GetFromQueueByIndex(queue, 0)).To(Equal(suspect))
 			Expect(queue.Len()).To(Equal(2))
 			Expect(queue.ValidateInternalState()).To(Succeed())
 		})
@@ -1007,16 +1007,16 @@ var _ = Describe("Queue", func() {
 			queue.Add(message2)
 			queue.Add(message3)
 
-			Expect(queue.Get(0)).To(Equal(message1))
-			Expect(queue.Get(1)).To(Equal(message2))
-			Expect(queue.Get(2)).To(Equal(message3))
+			Expect(GetFromQueueByIndex(queue, 0)).To(Equal(message1))
+			Expect(GetFromQueueByIndex(queue, 1)).To(Equal(message2))
+			Expect(GetFromQueueByIndex(queue, 2)).To(Equal(message3))
 			Expect(queue.Len()).To(Equal(3))
 
 			queue.MarkTransmitted(2)
 
-			Expect(queue.Get(0)).To(Equal(message3))
-			Expect(queue.Get(1)).To(Equal(message1))
-			Expect(queue.Get(2)).To(Equal(message2))
+			Expect(GetFromQueueByIndex(queue, 0)).To(Equal(message3))
+			Expect(GetFromQueueByIndex(queue, 1)).To(Equal(message1))
+			Expect(GetFromQueueByIndex(queue, 2)).To(Equal(message2))
 			Expect(queue.Len()).To(Equal(3))
 			Expect(queue.ValidateInternalState()).To(Succeed())
 		})
@@ -1070,7 +1070,7 @@ var _ = Describe("Queue", func() {
 
 			Expect(queue.Len()).To(Equal(1))
 			Expect(queue.IsEmpty()).To(BeFalse())
-			Expect(queue.Get(0)).To(Equal(message))
+			Expect(GetFromQueueByIndex(queue, 0)).To(Equal(message))
 			Expect(queue.ValidateInternalState()).To(Succeed())
 		})
 
@@ -1082,15 +1082,6 @@ var _ = Describe("Queue", func() {
 			Expect(queue.Len()).To(Equal(0))
 			Expect(queue.IsEmpty()).To(BeTrue())
 			Expect(queue.ValidateInternalState()).To(Succeed())
-		})
-	})
-
-	Context("Get", func() {
-		It("should panic when accessed out of range", func() {
-			queue := gossip.NewQueue()
-			Expect(func() {
-				queue.Get(1024)
-			}).To(Panic())
 		})
 	})
 
@@ -1198,12 +1189,10 @@ func BenchmarkQueue_All(b *testing.B) {
 		b.Run(fmt.Sprintf("%d gossip", gossipCount), func(b *testing.B) {
 			var count int
 			for {
-				for range queue.All() {
+				queue.ForEach(func(message encoding.Message) bool {
 					count++
-					if count == b.N {
-						return
-					}
-				}
+					return count != b.N
+				})
 			}
 		})
 	}

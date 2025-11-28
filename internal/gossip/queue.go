@@ -2,7 +2,6 @@ package gossip
 
 import (
 	"fmt"
-	"iter"
 
 	"github.com/backbone81/membership/internal/encoding"
 )
@@ -206,34 +205,18 @@ func (q *Queue) Prioritize(address encoding.Address) {
 	q.priorityIndex = -1
 }
 
-// Get returns the element with the given logical index. This is a quality of life function which is implemented as a
-// wrapper around All. Prefer using All for better performance when ranging over multiple elements.
-func (q *Queue) Get(logicalIndex int) encoding.Message {
-	for index, message := range q.All() {
-		if index == logicalIndex {
-			return message
-		}
-	}
-	panic("queue index out of bounds")
-}
-
-// All returns a range over function which iterates over all elements stored in the queue. The messages transmitted
-// the least amount of time are returned first, the most transmitted messages last.
-func (q *Queue) All() iter.Seq2[int, encoding.Message] {
-	return q.all
-}
-
-// all is a helper function which is the range over function returned by All. This avoids a memory allocation
-// which an anonymous function with a closure would cause.
-func (q *Queue) all(yield func(int, encoding.Message) bool) {
-	logicalIndex := 0
-
+// ForEach executes the given function for all elements stored in the queue. The messages transmitted the least amount
+// of time are returned first, the most transmitted messages last. Return false to abort the iteration.
+//
+// Note that we are explicitly not providing a range over function type for iterating over all messages, because
+// that would cause memory allocations for the range over for loop, as it needs to introduce state which is allocated
+// on the heap. The solution with ForEach is less nice, but it allows for zero allocations.
+func (q *Queue) ForEach(fn func(encoding.Message) bool) {
 	// We need to handle the priority element if set.
 	if q.priorityIndex >= 0 {
-		if !yield(logicalIndex, q.ring[q.priorityIndex].Message) {
+		if !fn(q.ring[q.priorityIndex].Message) {
 			return
 		}
-		logicalIndex++
 	}
 
 	bucketEnd := q.head
@@ -244,10 +227,9 @@ func (q *Queue) all(yield func(int, encoding.Message) bool) {
 				// Skip the element if this is the priority index. We already returned that one as the first element.
 				continue
 			}
-			if !yield(logicalIndex, q.ring[ringIndex].Message) {
+			if !fn(q.ring[ringIndex].Message) {
 				return
 			}
-			logicalIndex++
 		}
 		bucketEnd = bucketStart
 	}

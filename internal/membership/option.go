@@ -95,3 +95,9 @@ func WithRoundTripTimeTracker(rttTracker *roundtriptime.Tracker) Option {
 		config.RoundTripTimeTracker = rttTracker
 	}
 }
+
+func WithPendingPingPreAllocation(count int) Option {
+	return func(config *Config) {
+		config.PendingPingPreAllocation = count
+	}
+}

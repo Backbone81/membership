@@ -66,13 +66,19 @@ type Config struct {
 
 	// RoundTripTimeTracker is the roundtrip time tracker which the membership list records the measured network round trips to.
 	RoundTripTimeTracker *roundtriptime.Tracker
+
+	// PendingPingPreAllocation is the number of pending pings are pre-allocated to reduce allocations later. This
+	// option is primarily used for benchmarks to avoid memory allocations. There should be no real need to ever
+	// set this for real use cases.
+	PendingPingPreAllocation int
 }
 
 // DefaultConfig provides a default configuration which should work for most use-cases.
 var DefaultConfig = Config{
-	MaxDatagramLengthSend:   512,
-	SafetyFactor:            3,
-	ShutdownMemberCount:     3,
-	DirectPingMemberCount:   1,
-	IndirectPingMemberCount: 3,
+	MaxDatagramLengthSend:    512,
+	SafetyFactor:             3,
+	ShutdownMemberCount:      3,
+	DirectPingMemberCount:    1,
+	IndirectPingMemberCount:  3,
+	PendingPingPreAllocation: 16,
 }

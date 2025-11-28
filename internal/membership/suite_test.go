@@ -5,6 +5,7 @@ import (
 	"net"
 	"testing"
 
+	"github.com/backbone81/membership/internal/gossip"
 	"github.com/backbone81/membership/internal/membership"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -37,6 +38,20 @@ func Collect(list *membership.List) []encoding.Address {
 	var result []encoding.Address
 	list.ForEach(func(address encoding.Address) bool {
 		result = append(result, address)
+		return true
+	})
+	return result
+}
+
+func GetFromQueueByIndex(queue *gossip.Queue, index int) encoding.Message {
+	var counter int
+	var result encoding.Message
+	queue.ForEach(func(message encoding.Message) bool {
+		if counter == index {
+			result = message
+			return false
+		}
+		counter++
 		return true
 	})
 	return result

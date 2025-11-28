@@ -4,6 +4,7 @@ import (
 	"net"
 	"testing"
 
+	"github.com/backbone81/membership/internal/gossip"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -19,4 +20,18 @@ var (
 func TestSuite(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Gossip Suite")
+}
+
+func GetFromQueueByIndex(queue *gossip.Queue, index int) encoding.Message {
+	var counter int
+	var result encoding.Message
+	queue.ForEach(func(message encoding.Message) bool {
+		if counter == index {
+			result = message
+			return false
+		}
+		counter++
+		return true
+	})
+	return result
 }

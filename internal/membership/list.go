@@ -121,9 +121,9 @@ func NewList(options ...Option) *List {
 		self:                    config.AdvertisedAddress,
 		gossipQueue:             gossip.NewQueue(),
 		datagramBuffer:          make([]byte, 0, config.MaxDatagramLengthSend),
-		pendingDirectPings:      make([]PendingDirectPing, 0, 16),
-		pendingDirectPingsNext:  make([]PendingDirectPing, 0, 16),
-		pendingIndirectPings:    make([]PendingIndirectPing, 0, 16),
+		pendingDirectPings:      make([]PendingDirectPing, 0, config.PendingPingPreAllocation),
+		pendingDirectPingsNext:  make([]PendingDirectPing, 0, config.PendingPingPreAllocation),
+		pendingIndirectPings:    make([]PendingIndirectPing, 0, config.PendingPingPreAllocation),
 		pickRandomMembersResult: make([]*encoding.Member, 0, 16),
 		pickRandomMembersSwap:   make(map[int]int, 16),
 	}
@@ -160,7 +160,8 @@ func (l *List) Len() int {
 }
 
 // ForEach executes the given function for all address of all members stored in the list. The members are sorted by
-// address ascending.
+// address ascending. Return false to abort the iteration.
+//
 // While iterating over all members, the internal mutex is locked. Do not execute lengthy operations while iterating
 // over all members, as that will block processing of network messages. In addition, do not call any other method
 // of List during iteration, as that will cause a deadlock. Create your own copy of the member list and work on that
@@ -195,12 +196,17 @@ func (l *List) DirectPing() error {
 		l.nextSequenceNumber++
 
 		destination := l.getNextMember().Address
-		l.logger.V(1).Info(
-			"Direct ping",
-			"source", l.self,
-			"destination", destination,
-			"sequence-number", directPing.SequenceNumber,
-		)
+		logger := l.logger.V(1)
+		if logger.Enabled() {
+			// We only spend the memory allocation for interface boxing of the key value pair when the log level would
+			// actually produce this log entry.
+			logger.Info(
+				"Direct ping",
+				"source", l.self,
+				"destination", destination,
+				"sequence-number", directPing.SequenceNumber,
+			)
+		}
 		l.pendingDirectPings = append(l.pendingDirectPings, PendingDirectPing{
 			Timestamp:         time.Now(),
 			Destination:       destination,
@@ -248,22 +254,26 @@ func (l *List) sendWithGossip(address encoding.Address, message encoding.Message
 	l.gossipQueue.Prioritize(address)
 
 	var gossipAdded int
-	for _, msg := range l.gossipQueue.All() {
+	l.gossipQueue.ForEach(func(message encoding.Message) bool {
 		var gossipN int
-		l.datagramBuffer, gossipN, err = msg.AppendToBuffer(l.datagramBuffer)
+		l.datagramBuffer, gossipN, err = message.AppendToBuffer(l.datagramBuffer)
 		if err != nil {
-			return err
+			return false
 		}
 
 		if len(l.datagramBuffer) > l.config.MaxDatagramLengthSend {
 			// Appending the last gossip exceeded the maximum size we want to have for our network message. Reset the
 			// buffer back to its size before we added the last gossip.
 			l.datagramBuffer = l.datagramBuffer[:datagramN]
-			break
+			return false
 		}
 
 		datagramN += gossipN
 		gossipAdded++
+		return true
+	})
+	if err != nil {
+		return err
 	}
 	l.gossipQueue.MarkTransmitted(gossipAdded)
 

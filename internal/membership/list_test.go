@@ -248,7 +248,7 @@ var _ = Describe("List", func() {
 			gossipQueue := debugList.GetGossip()
 			Expect(gossipQueue.Len()).To(Equal(1))
 
-			msg := debugList.GetGossip().Get(0)
+			msg := GetFromQueueByIndex(debugList.GetGossip(), 0)
 			Expect(msg.Type).To(Equal(encoding.MessageTypeAlive))
 			Expect(msg.Destination).To(Equal(TestAddress))
 			Expect(msg.IncarnationNumber).To(Equal(uint16(0)))
@@ -889,7 +889,7 @@ var _ = Describe("List", func() {
 			gossipQueue := debugList.GetGossip()
 			Expect(gossipQueue.Len()).To(Equal(1))
 
-			msg := gossipQueue.Get(0)
+			msg := GetFromQueueByIndex(gossipQueue, 0)
 			Expect(msg.Type).To(Equal(encoding.MessageTypeSuspect))
 			Expect(msg.Destination).To(Equal(bootstrapMembers[0]))
 		})
@@ -945,7 +945,7 @@ var _ = Describe("List", func() {
 
 			By("Verifying faulty gossip message added")
 			gossipQueue := debugList.GetGossip()
-			msg := gossipQueue.Get(0)
+			msg := GetFromQueueByIndex(gossipQueue, 0)
 			Expect(msg.Type).To(Equal(encoding.MessageTypeFaulty))
 			Expect(msg.Destination).To(Equal(bootstrapMembers[0]))
 		})
@@ -1370,7 +1370,7 @@ var _ = Describe("List", func() {
 			Expect(debugList.GetMembers()).To(BeEmpty())
 			Expect(debugList.GetFaultyMembers()).To(BeEmpty())
 			Expect(debugList.GetGossip().Len()).To(Equal(1))
-			Expect(debugList.GetGossip().Get(0)).To(Equal(encoding.MessageAlive{
+			Expect(GetFromQueueByIndex(debugList.GetGossip(), 0)).To(Equal(encoding.MessageAlive{
 				Destination:       TestAddress,
 				IncarnationNumber: 56,
 			}.ToMessage()))
@@ -1654,7 +1654,7 @@ var _ = Describe("List", func() {
 			Expect(debugList.GetMembers()).To(BeEmpty())
 			Expect(debugList.GetFaultyMembers()).To(BeEmpty())
 			Expect(debugList.GetGossip().Len()).To(Equal(1))
-			Expect(debugList.GetGossip().Get(0)).To(Equal(encoding.MessageAlive{
+			Expect(GetFromQueueByIndex(debugList.GetGossip(), 0)).To(Equal(encoding.MessageAlive{
 				Destination:       TestAddress,
 				IncarnationNumber: 56,
 			}.ToMessage()))
@@ -1947,7 +1947,7 @@ var _ = Describe("List", func() {
 			Expect(debugList.GetMembers()).To(BeEmpty())
 			Expect(debugList.GetFaultyMembers()).To(BeEmpty())
 			Expect(debugList.GetGossip().Len()).To(Equal(1))
-			Expect(debugList.GetGossip().Get(0)).To(Equal(encoding.MessageAlive{
+			Expect(GetFromQueueByIndex(debugList.GetGossip(), 0)).To(Equal(encoding.MessageAlive{
 				Destination:       TestAddress,
 				IncarnationNumber: 56,
 			}.ToMessage()))
@@ -2741,6 +2741,9 @@ func createListWithMembers(memberCount int) *membership.List {
 		membership.WithUDPClient(&transport.Discard{}),
 		membership.WithTCPClient(&transport.Discard{}),
 		membership.WithRoundTripTimeTracker(roundtriptime.NewTracker()),
+		// We set the pending ping pre-allocation high enough to exceed the iteration count in benchmarks to avoid
+		// memory allocations.
+		membership.WithPendingPingPreAllocation(20_000_000),
 	)
 	debugList := membership.DebugList(list)
 

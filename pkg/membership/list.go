@@ -1,8 +1,6 @@
 package membership
 
 import (
-	"iter"
-
 	"github.com/backbone81/membership/internal/encoding"
 	intmembership "github.com/backbone81/membership/internal/membership"
 	"github.com/backbone81/membership/internal/roundtriptime"
@@ -99,6 +97,6 @@ func (l *List) Len() int {
 	return l.list.Len()
 }
 
-func (l *List) All() iter.Seq[encoding.Address] {
-	return l.list.All()
+func (l *List) ForEach(fn func(encoding.Address) bool) {
+	l.list.ForEach(fn)
 }

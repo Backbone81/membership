@@ -32,3 +32,12 @@ func DispatchDatagram(list *membership.List, message encoding.Message) error {
 	Expect(err).ToNot(HaveOccurred())
 	return list.DispatchDatagram(buffer)
 }
+
+func Collect(list *membership.List) []encoding.Address {
+	var result []encoding.Address
+	list.ForEach(func(address encoding.Address) bool {
+		result = append(result, address)
+		return true
+	})
+	return result
+}

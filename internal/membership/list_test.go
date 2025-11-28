@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"math"
 	"net"
-	"slices"
 	"testing"
 
 	"github.com/backbone81/membership/internal/roundtriptime"
@@ -25,7 +24,7 @@ var _ = Describe("List", func() {
 
 			Expect(list).NotTo(BeNil())
 			Expect(list.Len()).To(Equal(0))
-			Expect(slices.Collect(list.All())).To(BeEmpty())
+			Expect(Collect(list)).To(BeEmpty())
 			Expect(debugList.GetMembers()).To(BeEmpty())
 			Expect(debugList.GetFaultyMembers()).To(BeEmpty())
 		})
@@ -232,7 +231,7 @@ var _ = Describe("List", func() {
 				membership.WithBootstrapMembers(bootstrap),
 			)
 
-			addresses := slices.Collect(list.All())
+			addresses := Collect(list)
 			Expect(addresses).To(HaveLen(3))
 
 			// Verify sorted ascending
@@ -261,9 +260,10 @@ var _ = Describe("List", func() {
 			list := newTestList()
 
 			var count int
-			for range list.All() {
+			list.ForEach(func(address encoding.Address) bool {
 				count++
-			}
+				return true
+			})
 
 			Expect(count).To(Equal(0))
 		})
@@ -279,9 +279,10 @@ var _ = Describe("List", func() {
 			)
 
 			var addresses []encoding.Address
-			for addr := range list.All() {
-				addresses = append(addresses, addr)
-			}
+			list.ForEach(func(address encoding.Address) bool {
+				addresses = append(addresses, address)
+				return true
+			})
 
 			Expect(addresses).To(HaveLen(3))
 			Expect(addresses).To(ConsistOf(bootstrap))
@@ -298,9 +299,10 @@ var _ = Describe("List", func() {
 			)
 
 			var addresses []encoding.Address
-			for addr := range list.All() {
-				addresses = append(addresses, addr)
-			}
+			list.ForEach(func(address encoding.Address) bool {
+				addresses = append(addresses, address)
+				return true
+			})
 
 			for i := 0; i < len(addresses)-1; i++ {
 				Expect(encoding.CompareAddress(addresses[i], addresses[i+1])).To(Equal(-1),
@@ -325,13 +327,14 @@ var _ = Describe("List", func() {
 			target := encoding.NewAddress(net.IPv4(255, 255, 255, 255), 3)
 			var found encoding.Address
 
-			for addr := range list.All() {
+			list.ForEach(func(address encoding.Address) bool {
 				count++
-				if addr == target {
-					found = addr
-					break
+				if address == target {
+					found = address
+					return false
 				}
-			}
+				return true
+			})
 
 			Expect(found).To(Equal(target))
 			Expect(count).To(Equal(3))
@@ -355,7 +358,7 @@ var _ = Describe("List", func() {
 			Expect(list.Len()).To(Equal(1))
 
 			// Should only iterate over alive member
-			addresses := slices.Collect(list.All())
+			addresses := Collect(list)
 			Expect(addresses).To(HaveLen(1))
 			Expect(addresses[0]).To(Equal(aliveAddr))
 			Expect(addresses).NotTo(ContainElement(faultyAddr))
@@ -378,7 +381,7 @@ var _ = Describe("List", func() {
 			Expect(list.Len()).To(Equal(2))
 
 			// Should iterate over both alive and suspect
-			addresses := slices.Collect(list.All())
+			addresses := Collect(list)
 			Expect(addresses).To(HaveLen(2))
 			Expect(addresses).To(ContainElement(aliveAddr))
 			Expect(addresses).To(ContainElement(suspectAddr))
@@ -2567,8 +2570,9 @@ var _ = Describe("List", func() {
 
 func BenchmarkList_All(b *testing.B) {
 	executeFunctionWithMembers(b, func(list *membership.List) {
-		for range list.All() {
-		}
+		list.ForEach(func(address encoding.Address) bool {
+			return true
+		})
 	})
 }
 
@@ -2725,7 +2729,7 @@ func executeFunctionWithMembers(b *testing.B, f func(list *membership.List)) {
 	for memberCount := range utility.ClusterSize(2, 8, 128) {
 		list := createListWithMembers(memberCount)
 		b.Run(fmt.Sprintf("%d members", memberCount), func(b *testing.B) {
-			for b.Loop() {
+			for range b.N {
 				f(list)
 			}
 		})

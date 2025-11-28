@@ -3,7 +3,6 @@ package membership
 import (
 	"errors"
 	"fmt"
-	"iter"
 	"math"
 	"math/rand"
 	"slices"
@@ -160,25 +159,22 @@ func (l *List) Len() int {
 	return len(l.members)
 }
 
-// All returns a range over function which iterates over the addresses of all members stored in the list. The members
-// are sorted by address ascending.
+// ForEach executes the given function for all address of all members stored in the list. The members are sorted by
+// address ascending.
 // While iterating over all members, the internal mutex is locked. Do not execute lengthy operations while iterating
 // over all members, as that will block processing of network messages. In addition, do not call any other method
-// of List during iteration, as that will cause a deadlock. Create your own copy of the member list with
-// slices.Collect(List.All()) and work on that list if you need to execute long-running operations or need to call
-// methods on List.
-func (l *List) All() iter.Seq[encoding.Address] {
-	return l.all
-}
-
-// all is a helper function which is the range over function returned by All. This avoids a memory allocation
-// which an anonymous function with a closure would cause.
-func (l *List) all(yield func(encoding.Address) bool) {
+// of List during iteration, as that will cause a deadlock. Create your own copy of the member list and work on that
+// list if you need to execute long-running operations or need to call methods on List.
+//
+// Note that we are explicitly not providing a range over function type for iterating over all member addresses, because
+// that would cause memory allocations for the range over for loop, as it needs to introduce state which is allocated
+// on the heap. The solution with ForEach is less nice, but it allows for zero allocations.
+func (l *List) ForEach(fn func(encoding.Address) bool) {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
 
 	for _, member := range l.members {
-		if !yield(member.Address) {
+		if !fn(member.Address) {
 			return
 		}
 	}

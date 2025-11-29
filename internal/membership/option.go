@@ -84,6 +84,18 @@ func WithDirectPingMemberCount(memberCount int) Option {
 	}
 }
 
+func WithMinDirectPingMemberCount(memberCount int) Option {
+	return func(config *Config) {
+		config.MinDirectPingMemberCount = max(1, memberCount)
+	}
+}
+
+func WithMaxDirectPingMemberCount(memberCount int) Option {
+	return func(config *Config) {
+		config.MaxDirectPingMemberCount = max(1, memberCount)
+	}
+}
+
 func WithIndirectPingMemberCount(memberCount int) Option {
 	return func(config *Config) {
 		config.IndirectPingMemberCount = max(1, memberCount)

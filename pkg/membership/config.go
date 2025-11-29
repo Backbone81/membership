@@ -66,8 +66,15 @@ type Config struct {
 	// pings failing against this member.
 	ShutdownMemberCount int
 
-	// DirectPingMemberCount is the number of members to ping directly.
+	// DirectPingMemberCount is the number of members to ping directly. This value is automatically adjusted within the
+	// range of MinDirectPingMemberCount and MaxDirectPingMemberCount.
 	DirectPingMemberCount int
+
+	// MinDirectPingMemberCount is the minimum number of members to ping directly.
+	MinDirectPingMemberCount int
+
+	// MaxDirectPingMemberCount is the maximum number of members to ping directly.
+	MaxDirectPingMemberCount int
 
 	// IndirectPingMemberCount is the number of members to request a ping of some other member which did not respond
 	// in time.
@@ -84,5 +91,7 @@ var DefaultConfig = Config{
 	SafetyFactor:             intmembership.DefaultConfig.SafetyFactor,
 	ShutdownMemberCount:      intmembership.DefaultConfig.ShutdownMemberCount,
 	DirectPingMemberCount:    intmembership.DefaultConfig.DirectPingMemberCount,
+	MinDirectPingMemberCount: intmembership.DefaultConfig.MinDirectPingMemberCount,
+	MaxDirectPingMemberCount: intmembership.DefaultConfig.MaxDirectPingMemberCount,
 	IndirectPingMemberCount:  intmembership.DefaultConfig.IndirectPingMemberCount,
 }

@@ -97,6 +97,9 @@ type List struct {
 	pickRandomMembersResult  []*encoding.Member
 	pickRandomMembersSwap    map[int]int
 	listResponseScratchSpace []encoding.Member
+
+	directPingCount       int
+	directPingGossipCount int
 }
 
 // NewList creates a new membership list.
@@ -114,6 +117,19 @@ func NewList(options ...Option) *List {
 	}
 	if config.RoundTripTimeTracker == nil {
 		panic("you must provide a round trip time tracker")
+	}
+
+	if config.MaxDirectPingMemberCount < config.MinDirectPingMemberCount {
+		// The maximum is smaller than the minimum. Adjust the minimum to match the maximum.
+		config.MinDirectPingMemberCount = config.MaxDirectPingMemberCount
+	}
+	if config.DirectPingMemberCount < config.MinDirectPingMemberCount {
+		// The default is smaller than the minimum. Adjust the default to match the minimum.
+		config.DirectPingMemberCount = config.MinDirectPingMemberCount
+	}
+	if config.MaxDirectPingMemberCount < config.DirectPingMemberCount {
+		// The default is bigger than the maximum. Adjust the default to match the maximum.
+		config.DirectPingMemberCount = config.MaxDirectPingMemberCount
 	}
 
 	newList := List{
@@ -281,6 +297,11 @@ func (l *List) sendWithGossip(address encoding.Address, message encoding.Message
 	}
 	l.gossipQueue.MarkTransmitted(gossipAdded)
 
+	if message.Type == encoding.MessageTypeDirectPing {
+		l.directPingGossipCount += gossipAdded
+		l.directPingCount++
+	}
+
 	if err := l.config.UDPClient.Send(address, l.datagramBuffer); err != nil {
 		return err
 	}
@@ -430,6 +451,7 @@ func (l *List) EndOfProtocolPeriod() error {
 	// benchmarks where we can only observe the list state through the public interface.
 	l.processFailedPings()
 	l.markSuspectsAsFaulty()
+	l.adjustDirectPingMemberCount()
 
 	// TODO: We do not account for suspect members right now, because that would require scanning the whole member
 	// list. We extend the suspect metric as soon as we have dedicated suspect member tracking (we have some other todo)
@@ -544,6 +566,32 @@ func (l *List) markSuspectsAsFaulty() {
 		}.ToMessage())
 		l.removeMemberByIndex(i) // must always happen last to keep the member alive during this method
 	}
+}
+
+func (l *List) adjustDirectPingMemberCount() {
+	desiredDirectPingMemberCount := l.config.MinDirectPingMemberCount
+
+	// We start out with the minimum configured member count value and only overwrite it with an estimate when we have
+	// actual direct pings and piggybacked gossip available. That way we don't create garbage values for 0.
+	if l.directPingCount > 0 && l.directPingGossipCount > 0 {
+		averageDirectPingGossipCount := l.directPingGossipCount / l.directPingCount
+		// We need to do a ceiling division here to avoid situations where a queue size of 25 with average gossip of 10
+		// would result in 2 direct pings while we want to have 3.
+		desiredDirectPingMemberCount = (l.gossipQueue.Len() + averageDirectPingGossipCount - 1) / averageDirectPingGossipCount
+		desiredDirectPingMemberCount = max(l.config.MinDirectPingMemberCount, min(desiredDirectPingMemberCount, l.config.MaxDirectPingMemberCount))
+	}
+
+	if desiredDirectPingMemberCount != l.config.DirectPingMemberCount {
+		l.logger.Info(
+			"Direct ping member count adjusted",
+			"was", l.config.DirectPingMemberCount,
+			"is", desiredDirectPingMemberCount,
+		)
+		l.config.DirectPingMemberCount = desiredDirectPingMemberCount
+	}
+
+	l.directPingCount = 0
+	l.directPingGossipCount = 0
 }
 
 // RequestList is a protocol step which is not part of the core SWIM protocol, but it is required for letting new

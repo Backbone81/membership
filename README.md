@@ -26,6 +26,9 @@ with improvements from
 - Gossip about a member is always gossipped to that member with priority to allow quicker corrections of false suspects.
 - A graceful shutdown will propagate the failure of the node shutting down, reducing the detection time.
 - Zero memory allocations during normal operation.
+- The number of members targeted by a direct ping during each protocol period is dynamically adjusted according to the
+  gossip messages waiting to be disseminated. With more messages in the queue a higher direct ping member count can
+  help with disseminating those messages faster.
 
 ## Mechanic
 
@@ -67,14 +70,13 @@ for debugging purposes.
 
 ### More Advanced Topics
 
+- Extract random member selector from memberlist to have more focus on the implementation and to provide a dedicated
+  test suite.
 - Add encryption and support multiple encryption keys for key rollover. The first key is always used for encryption, all
   keys are used for decryption.
 - Investigate how we can increase the suspicion timeout when we are under high CPU load. High CPU load can be detected
   by the scheduler as the times between direct pings, indirect pings and end of protocol are either significant shorter
   than expected or even overshot immediately.
-- What should we do when a large amount of gossip is piling up in the gossip queue? We should have a way to speed up
-  dissemination to quicker reach a stable state again. We could increase the number of direct pings dynamically when the
-  number of gossip in the gossip queue is larger than what can usually be piggybacked in one ping.
 - How can a member re-join when it was disconnected through a network partition from everybody else for a long time?
   We probably need to deal with the bootstrap members in a way where we try to contact them periodically when they
   dropped out of our member list. Depending on a configuration, bootstrap members could be re-added regularly again

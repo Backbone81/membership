@@ -1020,6 +1020,84 @@ var _ = Describe("List", func() {
 			Expect(list.EndOfProtocolPeriod()).To(Succeed())
 			Expect(debugList.GetPendingIndirectPings()).To(BeEmpty())
 		})
+
+		It("should use minimum direct ping member count when no pings were sent", func() {
+			list := newTestList(
+				membership.WithMinDirectPingMemberCount(1),
+				membership.WithMaxDirectPingMemberCount(5),
+				membership.WithDirectPingMemberCount(3), // Start at 3
+			)
+			debugList := membership.DebugList(list)
+
+			// Add gossip to queue
+			for i := 0; i < 30; i++ {
+				debugList.GetGossip().Add(encoding.MessageAlive{
+					Destination:       encoding.NewAddress(net.IPv4(255, 255, 255, 255), i),
+					IncarnationNumber: 0,
+				}.ToMessage())
+			}
+
+			By("Executing end of protocol period without any pings sent")
+			Expect(list.EndOfProtocolPeriod()).To(Succeed())
+
+			By("Verifying reset to minimum")
+			config := list.Config()
+			Expect(config.DirectPingMemberCount).To(Equal(1))
+		})
+
+		It("should use minimum direct ping member count when no gossip was sent", func() {
+			bootstrapMembers := []encoding.Address{
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 2),
+			}
+			list := newTestList(
+				membership.WithBootstrapMembers(bootstrapMembers),
+				membership.WithMinDirectPingMemberCount(1),
+				membership.WithMaxDirectPingMemberCount(5),
+				membership.WithDirectPingMemberCount(3),
+			)
+			debugList := membership.DebugList(list)
+
+			By("Sending pings without any gossip in queue")
+			debugList.GetGossip().Clear()
+			Expect(list.DirectPing()).To(Succeed())
+
+			By("Executing end of protocol period")
+			Expect(list.EndOfProtocolPeriod()).To(Succeed())
+
+			By("Verifying reset to minimum")
+			config := list.Config()
+			Expect(config.DirectPingMemberCount).To(Equal(1))
+		})
+
+		It("should increase direct ping member count when queue has many messages", func() {
+			bootstrapMembers := []encoding.Address{
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
+			}
+			list := newTestList(
+				membership.WithBootstrapMembers(bootstrapMembers),
+				membership.WithMinDirectPingMemberCount(1),
+				membership.WithMaxDirectPingMemberCount(10),
+				membership.WithDirectPingMemberCount(1),
+			)
+			debugList := membership.DebugList(list)
+
+			By("Adding a lot of gossip")
+			for i := range 200 {
+				debugList.GetGossip().Add(encoding.MessageAlive{
+					Destination:       encoding.NewAddress(net.IPv4(255, 255, 255, 255), i),
+					IncarnationNumber: 0,
+				}.ToMessage())
+			}
+			Expect(list.DirectPing()).To(Succeed())
+
+			By("Executing end of protocol period")
+			Expect(list.EndOfProtocolPeriod()).To(Succeed())
+
+			By("Verifying increased ping count")
+			config := list.Config()
+			Expect(config.DirectPingMemberCount).To(Equal(4))
+		})
 	})
 
 	Context("RequestList", func() {

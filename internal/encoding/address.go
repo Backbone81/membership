@@ -21,8 +21,6 @@ var ZeroAddress Address
 // Panics if the ip or port are out of range.
 func NewAddress(ip net.IP, port int) Address {
 	if ip.IsUnspecified() || port < 0 || port > math.MaxUint16 {
-		// TODO: Do we really want to panic here?
-
 		panic("invalid address")
 	}
 	var result Address

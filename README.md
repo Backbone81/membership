@@ -70,8 +70,6 @@ for debugging purposes.
 
 ### More Advanced Topics
 
-- Extract random member selector from memberlist to have more focus on the implementation and to provide a dedicated
-  test suite.
 - Add encryption and support multiple encryption keys for key rollover. The first key is always used for encryption, all
   keys are used for decryption.
 - Investigate how we can increase the suspicion timeout when we are under high CPU load. High CPU load can be detected

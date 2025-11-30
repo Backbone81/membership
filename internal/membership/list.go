@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/backbone81/membership/internal/randmember"
 	"github.com/go-logr/logr"
 
 	"github.com/backbone81/membership/internal/encoding"
@@ -94,8 +95,8 @@ type List struct {
 	// not require special ordering.
 	pendingIndirectPings []PendingIndirectPing
 
-	pickRandomMembersResult  []*encoding.Member
-	pickRandomMembersSwap    map[int]int
+	randomMemberPicker *randmember.Picker
+
 	listResponseScratchSpace []encoding.Member
 
 	directPingCount       int
@@ -144,8 +145,7 @@ func NewList(options ...Option) *List {
 		pendingDirectPings:       make([]PendingDirectPing, 0, config.PendingPingPreAllocation),
 		pendingDirectPingsNext:   make([]PendingDirectPing, 0, config.PendingPingPreAllocation),
 		pendingIndirectPings:     make([]PendingIndirectPing, 0, config.PendingPingPreAllocation),
-		pickRandomMembersResult:  make([]*encoding.Member, 0, 16),
-		pickRandomMembersSwap:    make(map[int]int, 16),
+		randomMemberPicker:       randmember.NewPicker(),
 	}
 
 	// We need to gossip our own alive. Otherwise, nobody will pick us up into their own member list.
@@ -340,13 +340,8 @@ func (l *List) IndirectPing() error {
 		}
 
 		// Send the indirect pings to the indirect ping members and join up all errors which might occur.
-		members := l.pickRandomMembersWithout(l.config.IndirectPingMemberCount, directPing.Destination)
-		l.pendingIndirectPings = append(l.pendingIndirectPings, PendingIndirectPing{
-			Timestamp:           time.Now(),
-			MessageIndirectPing: indirectPing,
-		})
-		for _, member := range members {
-			logger := l.logger.V(1)
+		logger := l.logger.V(1)
+		l.randomMemberPicker.PickWithout(l.config.IndirectPingMemberCount, l.members, directPing.Destination, func(member encoding.Member) {
 			if logger.Enabled() {
 				// We only spend the memory allocation for interface boxing of the key value pairs when the log level
 				// would actually produce this log entry.
@@ -361,79 +356,13 @@ func (l *List) IndirectPing() error {
 			if err := l.sendWithGossip(member.Address, indirectPing.ToMessage()); err != nil {
 				joinedErr = errors.Join(joinedErr, err)
 			}
-		}
+		})
+		l.pendingIndirectPings = append(l.pendingIndirectPings, PendingIndirectPing{
+			Timestamp:           time.Now(),
+			MessageIndirectPing: indirectPing,
+		})
 	}
 	return joinedErr
-}
-
-// pickRandomMembers returns count random members using a partial Fisher-Yates shuffle
-// (https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle). This avoids copying and shuffling the entire members
-// slice and is basically the same what rand.Shuffle is using for shuffling full slices.
-// As we try to avoid copying the full slice, we use a map to remember those swaps we already did. This allows us to
-// have minimal memory consumption even for large member lists.
-// WARNING: The member slice returned by this method is only valid until the next call to pickRandomMembers or
-// pickRandomMembersWithout. Create a copy if you need to retain the result longer.
-// TODO: We might think about replacing the returned slice with a range over function. This could free us from keeping
-// the return slice around to avoid memory allocations. pickRandomMembersWithout can the also be implemented as a filter
-// over that range over function. The swap map still needs to remain, but everything else would be simpler.
-func (l *List) pickRandomMembers(count int) []*encoding.Member {
-	count = min(count, len(l.members))
-	if count == 0 {
-		return nil
-	}
-
-	// Reset the result slice and reset the map.
-	l.pickRandomMembersResult = l.pickRandomMembersResult[:0]
-	clear(l.pickRandomMembersSwap)
-
-	// We iterate over the number of elements we want to retrieve.
-	for i := 0; i < count; i++ {
-		// For every element, we pick a random other element which is identical to the current element or bigger.
-		j := i + rand.Intn(len(l.members)-i)
-
-		// We look up the real indexes according to what swaps we already did in the past.
-		iReal := l.pickRandomMemberIndex(i)
-		jReal := l.pickRandomMemberIndex(j)
-
-		// Let's remember that the j element is now replaced by the real i element. Note that we do not remember the
-		// i element, because we will never look at it again, we are only swapping with elements to the right of i, not
-		// left of i.
-		l.pickRandomMembersSwap[j] = iReal
-
-		// Append the swapped member to the result.
-		l.pickRandomMembersResult = append(l.pickRandomMembersResult, &l.members[jReal])
-	}
-	return l.pickRandomMembersResult
-}
-
-// pickRandomMemberIndex is a helper method which resolves a given index through the swap map to get the real index.
-func (l *List) pickRandomMemberIndex(index int) int {
-	if value, found := l.pickRandomMembersSwap[index]; found {
-		return value
-	}
-	return index
-}
-
-// pickRandomMembersWithout returns count random members, excluding the member with the given address.
-// If the excluded address is selected, it's replaced with an additional random member.
-// WARNING: The member slice returned by this method is only valid until the next call to pickRandomMembers or
-// pickRandomMembersWithout. Create a copy if you need to retain the result longer.
-func (l *List) pickRandomMembersWithout(count int, exclude encoding.Address) []*encoding.Member {
-	// We retrieve one member more that requested to allow for an additional member if we find the excluded address.
-	result := l.pickRandomMembers(count + 1)
-
-	// Find and remove the excluded address if present
-	for i, member := range result {
-		if member.Address.Equal(exclude) {
-			return utility.SwapDelete(result, i)
-		}
-	}
-
-	// Ensure we don't return more than requested.
-	if len(result) > count {
-		result = result[:count]
-	}
-	return result
 }
 
 // EndOfProtocolPeriod is the last step in the SWIM protocol where we check which pings went unanswered, and we declare
@@ -604,29 +533,27 @@ func (l *List) RequestList() error {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
 
-	members := l.pickRandomMembers(1)
-	if len(members) < 1 {
-		// We could not pick a member to request the member list from. There probably is no other member at all.
-		return nil
-	}
-
 	listRequest := encoding.MessageListRequest{
 		Source: l.self,
-	}
+	}.ToMessage()
 
 	logger := l.logger.V(1)
-	if logger.Enabled() {
-		// We only spend the memory allocation for interface boxing of the key value pairs when the log level would
-		// actually produce this log entry.
-		logger.Info(
-			"Requesting member list",
-			"destination", members[0].Address,
-		)
-	}
-	if err := l.sendWithGossip(members[0].Address, listRequest.ToMessage()); err != nil {
-		return err
-	}
-	return nil
+
+	var joinedErr error
+	l.randomMemberPicker.Pick(1, l.members, func(member encoding.Member) {
+		if logger.Enabled() {
+			// We only spend the memory allocation for interface boxing of the key value pairs when the log level would
+			// actually produce this log entry.
+			logger.Info(
+				"Requesting member list",
+				"destination", member.Address,
+			)
+		}
+		if err := l.sendWithGossip(member.Address, listRequest); err != nil {
+			joinedErr = errors.Join(joinedErr, err)
+		}
+	})
+	return joinedErr
 }
 
 // BroadcastShutdown is picking some members at random and sends those a faulty message about itself. This helps in
@@ -640,11 +567,11 @@ func (l *List) BroadcastShutdown() error {
 		Source:            l.self,
 		Destination:       l.self,
 		IncarnationNumber: l.incarnationNumber,
-	}
+	}.ToMessage()
+	logger := l.logger.V(1)
 
-	members := l.pickRandomMembers(l.config.ShutdownMemberCount)
-	for _, member := range members {
-		logger := l.logger.V(1)
+	var joinedErr error
+	l.randomMemberPicker.Pick(l.config.ShutdownMemberCount, l.members, func(member encoding.Member) {
 		if logger.Enabled() {
 			// We only spend the memory allocation for interface boxing of the key value pairs when the log level would
 			// actually produce this log entry.
@@ -654,11 +581,11 @@ func (l *List) BroadcastShutdown() error {
 			)
 		}
 		// We send our broadcast with the gossip we have, to help disseminate that information before we are gone.
-		if err := l.sendWithGossip(member.Address, faultyMessage.ToMessage()); err != nil {
-			return err
+		if err := l.sendWithGossip(member.Address, faultyMessage); err != nil {
+			joinedErr = errors.Join(joinedErr, err)
 		}
-	}
-	return nil
+	})
+	return joinedErr
 }
 
 // addMember adds the given member as a new member. It updates all bookkeeping which might be affected by this change.

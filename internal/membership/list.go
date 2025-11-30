@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/backbone81/membership/internal/faultymember"
 	"github.com/backbone81/membership/internal/randmember"
 	"github.com/go-logr/logr"
 
@@ -52,9 +53,8 @@ type List struct {
 	members []encoding.Member
 
 	// faultyMembers holds the list of members which were declared faulty. This is important for a full memberlist
-	// sync to allow information about faulty members to be transported. This list always needs to be sorted by address
-	// to allow for binary searches in this list. It can contain thousands of elements in big clusters.
-	faultyMembers []encoding.Member
+	// sync to allow information about faulty members to be transported.
+	faultyMembers *faultymember.List
 
 	// randomIndexes holds alist of random indexes into members. randomIndexes always has the same length as members and
 	// every index only occurs once. This helps in having an upper bound on picking random members for direct pings.
@@ -140,7 +140,7 @@ func NewList(options ...Option) *List {
 		gossipQueue:              gossip.NewQueue(),
 		datagramBuffer:           make([]byte, 0, config.MaxDatagramLengthSend),
 		members:                  make([]encoding.Member, 0, config.MemberPreAllocation),
-		faultyMembers:            make([]encoding.Member, 0, config.MemberPreAllocation),
+		faultyMembers:            faultymember.NewList(faultymember.WithPreAllocationCount(config.MemberPreAllocation)),
 		listResponseScratchSpace: make([]encoding.Member, 0, config.MemberPreAllocation),
 		pendingDirectPings:       make([]PendingDirectPing, 0, config.PendingPingPreAllocation),
 		pendingDirectPingsNext:   make([]PendingDirectPing, 0, config.PendingPingPreAllocation),
@@ -386,7 +386,7 @@ func (l *List) EndOfProtocolPeriod() error {
 	// list. We extend the suspect metric as soon as we have dedicated suspect member tracking (we have some other todo)
 	// for that already.
 	MembersByState.WithLabelValues("alive").Set(float64(len(l.members)))
-	MembersByState.WithLabelValues("faulty").Set(float64(len(l.faultyMembers)))
+	MembersByState.WithLabelValues("faulty").Set(float64(l.faultyMembers.Len()))
 	return nil
 }
 
@@ -477,17 +477,7 @@ func (l *List) markSuspectsAsFaulty() {
 		MemberStateTransitionsTotal.WithLabelValues("declared_faulty").Inc()
 
 		member.State = encoding.MemberStateFaulty
-		faultyMemberIndex, found := slices.BinarySearchFunc(
-			l.faultyMembers,
-			*member,
-			encoding.CompareMember,
-		)
-		if found {
-			// Overwrite existing faulty member
-			l.faultyMembers[faultyMemberIndex] = *member
-		} else {
-			l.faultyMembers = slices.Insert(l.faultyMembers, faultyMemberIndex, *member)
-		}
+		l.faultyMembers.Add(*member)
 		l.gossipQueue.Add(encoding.MessageFaulty{
 			Source:            l.self,
 			Destination:       member.Address,
@@ -1019,16 +1009,11 @@ func (l *List) handleSuspectForSelf(suspect encoding.MessageSuspect) bool {
 }
 
 func (l *List) handleSuspectForFaultyMembers(suspect encoding.MessageSuspect) bool {
-	faultyMemberIndex, found := slices.BinarySearchFunc(
-		l.faultyMembers,
-		encoding.Member{Address: suspect.Destination},
-		encoding.CompareMember,
-	)
+	faultyMember, found := l.faultyMembers.Get(suspect.Destination)
 	if !found {
 		// The member is not part of our faulty members list. Nothing to do.
 		return false
 	}
-	faultyMember := &l.faultyMembers[faultyMemberIndex]
 
 	if !utility.IncarnationLessThan(faultyMember.IncarnationNumber, suspect.IncarnationNumber) {
 		// We have more up-to-date information about this member.
@@ -1036,7 +1021,7 @@ func (l *List) handleSuspectForFaultyMembers(suspect encoding.MessageSuspect) bo
 	}
 
 	// Move the faulty member over to the member list
-	l.faultyMembers = slices.Delete(l.faultyMembers, faultyMemberIndex, faultyMemberIndex+1)
+	l.faultyMembers.Remove(suspect.Destination)
 	l.addMember(encoding.Member{
 		Address:                suspect.Destination,
 		State:                  encoding.MemberStateSuspect,
@@ -1138,16 +1123,11 @@ func (l *List) handleAliveForSelf(alive encoding.MessageAlive) bool {
 }
 
 func (l *List) handleAliveForFaultyMembers(alive encoding.MessageAlive) bool {
-	faultyMemberIndex, found := slices.BinarySearchFunc(
-		l.faultyMembers,
-		encoding.Member{Address: alive.Destination},
-		encoding.CompareMember,
-	)
+	faultyMember, found := l.faultyMembers.Get(alive.Destination)
 	if !found {
 		// The member is not part of our faulty members list. Nothing to do.
 		return false
 	}
-	faultyMember := &l.faultyMembers[faultyMemberIndex]
 
 	if !utility.IncarnationLessThan(faultyMember.IncarnationNumber, alive.IncarnationNumber) {
 		// We have more up-to-date information about this member.
@@ -1155,7 +1135,7 @@ func (l *List) handleAliveForFaultyMembers(alive encoding.MessageAlive) bool {
 	}
 
 	// Move the faulty member over to the member list
-	l.faultyMembers = slices.Delete(l.faultyMembers, faultyMemberIndex, faultyMemberIndex+1)
+	l.faultyMembers.Remove(alive.Destination)
 	l.addMember(encoding.Member{
 		Address:           alive.Destination,
 		State:             encoding.MemberStateAlive,
@@ -1255,16 +1235,11 @@ func (l *List) handleFaultyForSelf(faulty encoding.MessageFaulty) bool {
 }
 
 func (l *List) handleFaultyForFaultyMembers(faulty encoding.MessageFaulty) bool {
-	faultyMemberIndex, found := slices.BinarySearchFunc(
-		l.faultyMembers,
-		encoding.Member{Address: faulty.Destination},
-		encoding.CompareMember,
-	)
+	faultyMember, found := l.faultyMembers.Get(faulty.Destination)
 	if !found {
 		// The member is not part of our faulty members list. Nothing to do.
 		return false
 	}
-	faultyMember := &l.faultyMembers[faultyMemberIndex]
 
 	if utility.IncarnationLessThan(faulty.IncarnationNumber, faultyMember.IncarnationNumber) {
 		// We have more up-to-date information about this member.
@@ -1273,6 +1248,7 @@ func (l *List) handleFaultyForFaultyMembers(faulty encoding.MessageFaulty) bool 
 
 	// Update the incarnation number to make sure we have the most current incarnation.
 	faultyMember.IncarnationNumber = faulty.IncarnationNumber
+	l.faultyMembers.Add(faultyMember)
 	return true
 }
 
@@ -1296,17 +1272,7 @@ func (l *List) handleFaultyForMembers(faulty encoding.MessageFaulty) bool {
 	// Remove member from member list and put it on the faulty member list.
 	member.State = encoding.MemberStateFaulty
 	member.IncarnationNumber = faulty.IncarnationNumber
-	faultyMemberIndex, found := slices.BinarySearchFunc(
-		l.faultyMembers,
-		*member,
-		encoding.CompareMember,
-	)
-	if found {
-		// Overwrite existing faulty member
-		l.faultyMembers[faultyMemberIndex] = *member
-	} else {
-		l.faultyMembers = slices.Insert(l.faultyMembers, faultyMemberIndex, *member)
-	}
+	l.faultyMembers.Add(*member)
 	l.gossipQueue.Add(faulty.ToMessage())
 	l.removeMemberByAddress(faulty.Destination) // must always happen last to keep the member alive during this method
 	return true
@@ -1319,17 +1285,7 @@ func (l *List) handleFaultyForUnknown(faulty encoding.MessageFaulty) {
 		State:             encoding.MemberStateFaulty,
 		IncarnationNumber: faulty.IncarnationNumber,
 	}
-	faultyMemberIndex, found := slices.BinarySearchFunc(
-		l.faultyMembers,
-		faultyMember,
-		encoding.CompareMember,
-	)
-	if found {
-		// Overwrite existing faulty member
-		l.faultyMembers[faultyMemberIndex] = faultyMember
-	} else {
-		l.faultyMembers = slices.Insert(l.faultyMembers, faultyMemberIndex, faultyMember)
-	}
+	l.faultyMembers.Add(faultyMember)
 	l.gossipQueue.Add(faulty.ToMessage())
 }
 
@@ -1344,9 +1300,16 @@ func (l *List) handleListRequest(listRequest encoding.MessageListRequest) error 
 		)
 	}
 
+	members := l.members
+	l.faultyMembers.ForEach(func(member encoding.Member) bool {
+		members = append(members, member)
+		return true
+	})
+	l.faultyMembers.ListRequestObserved()
+
 	listResponse := encoding.MessageListResponse{
 		Source:  l.self,
-		Members: append(l.members, l.faultyMembers...),
+		Members: members,
 	}
 	buffer, _, err := listResponse.AppendToBuffer(l.datagramBuffer[:0])
 	if err != nil {

@@ -72,7 +72,12 @@ func (l *DebugListWrapper) GetFaultyMembers() []encoding.Member {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
 
-	return l.faultyMembers
+	var result []encoding.Member
+	l.faultyMembers.ForEach(func(member encoding.Member) bool {
+		result = append(result, member)
+		return true
+	})
+	return result
 }
 
 func (l *DebugListWrapper) SetMembers(members []encoding.Member) {
@@ -92,7 +97,11 @@ func (l *DebugListWrapper) SetFaultyMembers(members []encoding.Member) {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
 
-	l.faultyMembers = append(l.faultyMembers[:0], members...)
+	l.faultyMembers.Clear()
+
+	for _, member := range members {
+		l.faultyMembers.Add(member)
+	}
 }
 
 func (l *DebugListWrapper) GetGossip() *gossip.Queue {

@@ -29,6 +29,7 @@ with improvements from
 - The number of members targeted by a direct ping during each protocol period is dynamically adjusted according to the
   gossip messages waiting to be disseminated. With more messages in the queue a higher direct ping member count can
   help with disseminating those messages faster.
+- Faulty members are dropped after they have been propagated often enough through the full memberlist sync.
 
 ## Mechanic
 
@@ -63,10 +64,6 @@ for debugging purposes.
 - Log level 3: Gossip messages received
 
 ## TODOs
-
-### Basic Requirements
-
-- Cleanup the faulty member list after some time to avoid endless growth in situations where members are very dynamic.
 
 ### More Advanced Topics
 

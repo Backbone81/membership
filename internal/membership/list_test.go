@@ -845,7 +845,7 @@ var _ = Describe("List", func() {
 		})
 	})
 
-	Context("EndOfProtocolPeriod", func() {
+	Context("ListRequestObserved", func() {
 		It("should do nothing when no pending pings", func() {
 			bootstrapMembers := []encoding.Address{
 				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),

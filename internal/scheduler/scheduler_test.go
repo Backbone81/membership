@@ -84,7 +84,7 @@ var _ = Describe("Scheduler", func() {
 			)
 			Expect(myScheduler.Startup()).To(Succeed())
 
-			// Shutdown after IndirectPing but before EndOfProtocolPeriod
+			// Shutdown after IndirectPing but before ListRequestObserved
 			time.Sleep(myScheduler.Config().ProtocolPeriod - 1*time.Millisecond)
 			Expect(myScheduler.Shutdown()).To(Succeed())
 			synctest.Wait()

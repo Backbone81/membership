@@ -30,6 +30,12 @@ with improvements from
   gossip messages waiting to be disseminated. With more messages in the queue a higher direct ping member count can
   help with disseminating those messages faster.
 - Faulty members are dropped after they have been propagated often enough through the full memberlist sync.
+- Network messages are always encrypted with AES-256 in GCM mode. All members need to use the same encryption key.
+  A single key can be set for encryption, while multiple keys can be set for decryption. This allows for encryption
+  key rotation without having to bring down all members at the same time. You should rotate the encryption key every
+  2^24.5 (23,726,566) (https://www.rfc-editor.org/rfc/rfc8446.html#section-5.5) to 
+  2^32 (4,294,967,296) (https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-38d.pdf) encryption
+  operations to stay safe. This is a property of the 96 bits of nonce used.
 
 ## Mechanic
 
@@ -67,8 +73,6 @@ for debugging purposes.
 
 ### More Advanced Topics
 
-- Add encryption and support multiple encryption keys for key rollover. The first key is always used for encryption, all
-  keys are used for decryption.
 - Investigate how we can increase the suspicion timeout when we are under high CPU load. High CPU load can be detected
   by the scheduler as the times between direct pings, indirect pings and end of protocol are either significant shorter
   than expected or even overshot immediately.
@@ -78,6 +82,7 @@ for debugging purposes.
   under the assumption that the bootstrap members are always there. If bootstrap members are ephemeral, this should be
   disabled.
 - Replace the roundtriptime.Tracker sort implementation with a quick select implementation for faster results.
+- Use timeouts for the tcp transports.
 
 ### Nice to Have
 

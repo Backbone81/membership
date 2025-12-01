@@ -1,18 +1,25 @@
 package transport
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
 	"errors"
 	"fmt"
 	"net"
 	"strconv"
 	"sync"
 
+	"github.com/backbone81/membership/internal/encryption"
 	"github.com/go-logr/logr"
 
 	"github.com/backbone81/membership/internal/encoding"
 )
 
 // UDPServer provides unreliable transport for receiving data from members.
+//
+// UDPServer is safe for concurrent use by multiple goroutines.
+// As the background task is reading and processing one udp message after the other, there is no special need for
+// serialization.
 type UDPServer struct {
 	logger              logr.Logger
 	target              Target
@@ -20,16 +27,33 @@ type UDPServer struct {
 	connection          *net.UDPConn
 	waitGroup           sync.WaitGroup
 	receiveBufferLength int
+	gcms                []cipher.AEAD
+	plaintext           []byte
 }
 
 // NewUDPServer creates a new UDPServer.
-func NewUDPServer(logger logr.Logger, target Target, bindAddress string, receiveBufferLength int) *UDPServer {
+func NewUDPServer(logger logr.Logger, target Target, bindAddress string, receiveBufferLength int, keys []encryption.Key) (*UDPServer, error) {
+	var gcms []cipher.AEAD
+	for _, key := range keys {
+		aesCipher, err := aes.NewCipher(key[:])
+		if err != nil {
+			return nil, err
+		}
+
+		gcm, err := cipher.NewGCMWithRandomNonce(aesCipher)
+		if err != nil {
+			return nil, err
+		}
+		gcms = append(gcms, gcm)
+	}
 	return &UDPServer{
 		logger:              logger,
 		target:              target,
 		bindAddress:         bindAddress,
 		receiveBufferLength: receiveBufferLength,
-	}
+		gcms:                gcms,
+		plaintext:           make([]byte, 0, receiveBufferLength),
+	}, nil
 }
 
 // Startup starts the server and listens for incoming data.
@@ -99,8 +123,28 @@ func (t *UDPServer) backgroundTask() {
 		if n < 1 {
 			continue
 		}
-		if err := t.target.DispatchDatagram(buffer[:n]); err != nil {
+
+		if err := t.decryptAndDispatch(buffer[:n]); err != nil {
 			t.logger.Error(err, "Dispatching UDP message.")
 		}
 	}
+}
+
+func (t *UDPServer) decryptAndDispatch(buffer []byte) error {
+	var joinedErr error
+	for _, gcm := range t.gcms {
+		var err error
+		// Note that we are using the plaintext buffer for decrypting the buffer. In case the decryption fails, the
+		// plaintext buffer is overwritten with garbage, so we cannot directly decrypt into buffer.
+		t.plaintext, err = gcm.Open(t.plaintext[:0], nil, buffer, nil)
+		Decryptions.WithLabelValues("udp_server").Add(1)
+		if err != nil {
+			// Decryption failed. Let's try the next key.
+			joinedErr = errors.Join(joinedErr, err)
+			continue
+		}
+		return t.target.DispatchDatagram(t.plaintext)
+	}
+	joinedErr = errors.Join(joinedErr, errors.New("no encryption key could decrypt the network message"))
+	return joinedErr
 }

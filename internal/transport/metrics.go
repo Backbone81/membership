@@ -31,6 +31,20 @@ var (
 		},
 		[]string{"transport"},
 	)
+	Encryptions = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "membership_list_transport_encryptions_total",
+			Help: "Total number of encryption operations performed.",
+		},
+		[]string{"transport"},
+	)
+	Decryptions = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "membership_list_transport_decryptions_total",
+			Help: "Total number of decryption operations performed.",
+		},
+		[]string{"transport"},
+	)
 )
 
 // RegisterMetrics registers all metrics collectors with the given prometheus registerer.
@@ -40,6 +54,8 @@ func RegisterMetrics(registerer prometheus.Registerer) error {
 		TransmitErrors,
 		ReceiveBytes,
 		ReceiveErrors,
+		Encryptions,
+		Decryptions,
 	}
 	for _, metric := range metrics {
 		if err := registerer.Register(metric); err != nil {

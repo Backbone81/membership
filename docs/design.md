@@ -25,7 +25,7 @@ huge cluster can be seen as a cluster with 16,000 members. In such a situation o
 protocol step which is driven by the scheduler (executing direct pings, executing indirect pings and handling timeouts
 at the end of the protocol period) must complete in under 1 millisecond, preferably in under 500 microseconds. This
 ensures that one step of the algorithm is guaranteed to complete within a single timeslice allocated by the operating
-scheduler and is less likely to be preempted.
+system scheduler and is less likely to be preempted.
 
 While the described goal is achievable in a lot of situations, some functionality scales linear with the size of the
 cluster. This is for example the case for a full membership list sync done with some other member or the listing of

@@ -86,7 +86,7 @@ operations to stay safe. This is a property of the 96 bits of nonce used. Use th
 
 ## TODOs
 
-### More Advanced Topics
+### Important Topics
 
 - Investigate how we can increase the suspicion timeout when we are under high CPU load. High CPU load can be detected
   by the scheduler as the times between direct pings, indirect pings and end of protocol are either significant shorter
@@ -96,18 +96,12 @@ operations to stay safe. This is a property of the 96 bits of nonce used. Use th
   dropped out of our member list. Depending on a configuration, bootstrap members could be re-added regularly again
   under the assumption that the bootstrap members are always there. If bootstrap members are ephemeral, this should be
   disabled.
-- Replace the roundtriptime.Tracker sort implementation with a quick select implementation for faster results.
 - Use timeouts for the tcp transports.
+- Align code with linter
 
 ### Nice to Have
 
 - We might want to separate gossip count from suspect timeout
-- Serialize the current state on shutdown and allow that state to be re-used during startup.
-- Should the FromBuffer functions return the remaining buffer to make it easier and less error-prone to work with?
-- Make sure we provide enough context for all error returns.
-- Check if we really need to use panic anywhere.
-- The tests for messages are very repeating. Look into re-using code.
-- The message setup in the message tests are quite repetitive. We should consolidate them.
 - Introduce jitter into the scheduler to avoid spikes in network traffic.
-- Regularly log the statistical information about ping chance and time until all know about gossip
 - Do a TCP ping when the UDP ping times out for networks which do not correctly route UDP.
+- Replace the roundtriptime.Tracker sort implementation with a quick select implementation for faster results.

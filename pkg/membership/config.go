@@ -3,6 +3,7 @@ package membership
 import (
 	"time"
 
+	"github.com/backbone81/membership/internal/encryption"
 	"github.com/go-logr/logr"
 
 	"github.com/backbone81/membership/internal/encoding"
@@ -79,6 +80,13 @@ type Config struct {
 	// IndirectPingMemberCount is the number of members to request a ping of some other member which did not respond
 	// in time.
 	IndirectPingMemberCount int
+
+	// EncryptionKeys is the list of encryption keys. The first key is always used for encrypting network messages
+	// which are sent, all keys are used in order to try and decrypt network messages received. By introducing a new
+	// encryption key at the end of the list, rolling that configuration out to all members, then moving the new
+	// key from the last position to the first position, you can have a rolling key rotation without having to shut down
+	// all nodes at the same time.
+	EncryptionKeys []encryption.Key
 }
 
 var DefaultConfig = Config{

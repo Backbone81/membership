@@ -7,6 +7,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/backbone81/membership/internal/encryption"
 	"github.com/spf13/cobra"
 
 	"github.com/backbone81/membership/internal/utility"
@@ -23,6 +24,7 @@ var (
 	protocolPeriod    time.Duration
 	directPingTimeout time.Duration
 	members           []string
+	encryptionKeys    []string
 )
 
 // rootCmd represents the base command when called without any subcommands.
@@ -67,7 +69,7 @@ var rootCmd = &cobra.Command{
 			)
 		}
 
-		membershipList := membership.NewList(
+		options := []membership.Option{
 			membership.WithLogger(logger),
 			membership.WithProtocolPeriod(protocolPeriod),
 			membership.WithBootstrapMembers(resolvedBootstrapMembers),
@@ -75,7 +77,18 @@ var rootCmd = &cobra.Command{
 			membership.WithBindAddress(bindAddress),
 			membership.WithMaxDatagramLengthSend(maxDatagramLengthSend),
 			membership.WithMaxDatagramLengthReceive(maxDatagramLengthReceive),
-		)
+		}
+		for _, key := range encryptionKeys {
+			typedKey, err := encryption.ParseKeyFromHexString(key)
+			if err != nil {
+				return err
+			}
+			options = append(options, membership.WithEncryptionKey(typedKey))
+		}
+		membershipList, err := membership.NewList(options...)
+		if err != nil {
+			return err
+		}
 
 		if err := membershipList.Startup(); err != nil {
 			return err
@@ -167,5 +180,13 @@ This should be the usual round-trip time between members.`,
 		`Other known member to connect to. Should be ip:port or host:port.
 Hostname will be resolved to ip address on startup.
 Can be specified multiple times to configure several members.`,
+	)
+	rootCmd.PersistentFlags().StringArrayVar(
+		&encryptionKeys,
+		"encryption-key",
+		nil,
+		`The hex encoded encryption key to use for encrypting and decrypting network messages. Can be given
+multiple times for multiple encryption keys. The first key is always used for encryption, all keys are used in turn
+until decryption succeeds.`,
 	)
 }

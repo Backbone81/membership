@@ -1,6 +1,8 @@
 package membership
 
 import (
+	"errors"
+
 	"github.com/backbone81/membership/internal/encoding"
 	intmembership "github.com/backbone81/membership/internal/membership"
 	"github.com/backbone81/membership/internal/roundtriptime"
@@ -15,10 +17,13 @@ type List struct {
 	tcpServerTransport *inttransport.TCPServer
 }
 
-func NewList(options ...Option) *List {
+func NewList(options ...Option) (*List, error) {
 	config := DefaultConfig
 	for _, option := range options {
 		option(&config)
+	}
+	if len(config.EncryptionKeys) < 1 {
+		return nil, errors.New("encryption key missing")
 	}
 
 	// The maximum round trip time is derived from 90% of the protocol period to allow for some leeway, then divided
@@ -29,13 +34,21 @@ func NewList(options ...Option) *List {
 		roundtriptime.WithDefault(defaultRTT),
 		roundtriptime.WithMaximum(maxRTT),
 	)
+	udpClientTransport, err := inttransport.NewUDPClient(config.MaxDatagramLengthSend, config.EncryptionKeys[0])
+	if err != nil {
+		return nil, err
+	}
+	tcpClientTransport, err := inttransport.NewTCPClient(config.EncryptionKeys[0])
+	if err != nil {
+		return nil, err
+	}
 	list := intmembership.NewList(
 		intmembership.WithLogger(config.Logger),
 		intmembership.WithBootstrapMembers(config.BootstrapMembers),
 		intmembership.WithAdvertisedAddress(config.AdvertisedAddress),
 		intmembership.WithMaxDatagramLengthSend(config.MaxDatagramLengthSend),
-		intmembership.WithUDPClient(inttransport.NewUDPClient(config.MaxDatagramLengthSend)),
-		intmembership.WithTCPClient(inttransport.NewTCPClient()),
+		intmembership.WithUDPClient(udpClientTransport),
+		intmembership.WithTCPClient(tcpClientTransport),
 		intmembership.WithMemberAddedCallback(config.MemberAddedCallback),
 		intmembership.WithMemberRemovedCallback(config.MemberRemovedCallback),
 		intmembership.WithSafetyFactor(config.SafetyFactor),
@@ -44,8 +57,14 @@ func NewList(options ...Option) *List {
 		intmembership.WithIndirectPingMemberCount(config.IndirectPingMemberCount),
 		intmembership.WithRoundTripTimeTracker(rttTracker),
 	)
-	udpServerTransport := inttransport.NewUDPServer(config.Logger, list, config.BindAddress, config.MaxDatagramLengthReceive)
-	tcpServerTransport := inttransport.NewTCPServer(config.Logger, list, config.BindAddress)
+	udpServerTransport, err := inttransport.NewUDPServer(config.Logger, list, config.BindAddress, config.MaxDatagramLengthReceive, config.EncryptionKeys)
+	if err != nil {
+		return nil, err
+	}
+	tcpServerTransport, err := inttransport.NewTCPServer(config.Logger, list, config.BindAddress, config.EncryptionKeys)
+	if err != nil {
+		return nil, err
+	}
 	scheduler := intscheduler.New(
 		list,
 		intscheduler.WithLogger(config.Logger),
@@ -61,7 +80,7 @@ func NewList(options ...Option) *List {
 		tcpServerTransport: tcpServerTransport,
 		scheduler:          scheduler,
 	}
-	return &newList
+	return &newList, nil
 }
 
 func (l *List) Startup() error {

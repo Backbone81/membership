@@ -30,12 +30,7 @@ with improvements from
   gossip messages waiting to be disseminated. With more messages in the queue a higher direct ping member count can
   help with disseminating those messages faster.
 - Faulty members are dropped after they have been propagated often enough through the full memberlist sync.
-- Network messages are always encrypted with AES-256 in GCM mode. All members need to use the same encryption key.
-  A single key can be set for encryption, while multiple keys can be set for decryption. This allows for encryption
-  key rotation without having to bring down all members at the same time. You should rotate the encryption key every
-  2^24.5 (23,726,566) (https://www.rfc-editor.org/rfc/rfc8446.html#section-5.5) to 
-  2^32 (4,294,967,296) (https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-38d.pdf) encryption
-  operations to stay safe. This is a property of the 96 bits of nonce used.
+- Network messages are always encrypted with AES-256 in GCM mode.
 
 ## Mechanic
 
@@ -68,6 +63,26 @@ for debugging purposes.
 - Log level 1: Network messages sent
 - Log level 2: Network messages received
 - Log level 3: Gossip messages received
+
+## Encryption
+
+All network messages exchanged between members are encrypted with AES-256 with GCM. This allows members to operate
+over untrusted networks without leaking confidential data. All members need to have the same encryption key configured
+to be able to communicate with each other.
+
+To allow encryption key rotation without shutting down all members in the cluster, multiple encryption keys can be
+specified. The first encryption key is always used for encrypting sent messages, while all encryption keys are tried
+in order to decrypt received messages. If a new encryption key is first added as the last key to all members, it
+allows all members to decrypt messages with that key. When all members know about the new encryption key, the new key
+can be moved from the last position to the first one. This makes the key active for encryption. When all members are
+using the new encryption key, the old key can be removed.
+
+To make sure that the encryption cannot be broken, you need to rotate the encryption key after some number of encryption
+operations. Recommendations range from
+2^24.5 = 23,726,566 (https://www.rfc-editor.org/rfc/rfc8446.html#section-5.5) to
+2^32 = 4,294,967,296 (https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-38d.pdf) encryption
+operations to stay safe. This is a property of the 96 bits of nonce used. Use the metric
+`membership_list_transport_encryptions_total` to keep track of encryption operation count.
 
 ## TODOs
 

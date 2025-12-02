@@ -3,6 +3,7 @@ package membership
 import (
 	"time"
 
+	"github.com/backbone81/membership/internal/encryption"
 	"github.com/go-logr/logr"
 
 	"github.com/backbone81/membership/internal/encoding"
@@ -105,5 +106,11 @@ func WithMaxDirectPingMemberCount(memberCount int) Option {
 func WithIndirectPingMemberCount(memberCount int) Option {
 	return func(config *Config) {
 		config.IndirectPingMemberCount = memberCount
+	}
+}
+
+func WithEncryptionKey(key encryption.Key) Option {
+	return func(config *Config) {
+		config.EncryptionKeys = append(config.EncryptionKeys, key)
 	}
 }

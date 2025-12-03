@@ -5,8 +5,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/backbone81/membership/cmd/statistics/cmd/allfailuredetection"
-	"github.com/backbone81/membership/cmd/statistics/cmd/firstdetection"
 	"github.com/backbone81/membership/cmd/statistics/cmd/packetlossjoin"
 	"github.com/backbone81/membership/internal/utility"
 )
@@ -23,14 +21,6 @@ var rootCmd = &cobra.Command{
 			return err
 		}
 		defer zapLogger.Sync()
-
-		if err := firstdetection.FirstFailureDetection(logger); err != nil {
-			return err
-		}
-
-		if err := allfailuredetection.AllFailureDetection(logger); err != nil {
-			return err
-		}
 
 		if err := packetlossjoin.PacketLossJoin(logger); err != nil {
 			return err

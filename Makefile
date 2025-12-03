@@ -6,7 +6,12 @@ PACKAGE ?= ./...
 export PATH := $(CURDIR)/bin:$(PATH)
 
 .PHONY: all
-all: test
+all: build
+
+.PHONY: build
+build: prepare
+	go build ./cmd/membership
+	go build ./examples/demo
 
 .PHONY: test
 test: prepare
@@ -34,3 +39,5 @@ prepare:
 .PHONY: clean
 clean:
 	rm -rf tmp
+	rm -f demo
+	rm -f membership

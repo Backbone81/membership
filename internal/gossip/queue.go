@@ -27,9 +27,10 @@ import (
 // location where the first element of that bucket can be found. The end of the bucket is the start of the bucket which
 // comes after it. The end of bucket 3 is the start of bucket 2.
 //
-// When we iterate over the messages, we want to start with what was gossiped the least amount of time and sits in the
-// queue the longest. This means that iteration through the queue is not linear but always starts at the start of the
-// bucket and moves to the end of the bucket before jumping over to the start of the next bucket.
+// When we iterate over the messages, we want to start with what was gossiped the least amount of time. This is probably
+// bucket 0, but it could also be a higher bucket if the lower ones are empty. Within the bucket, we want to start with
+// what sits in that bucket longest. This means that iteration through the queue is not linear but always starts at the
+// start of the bucket and moves to the end of the bucket before jumping over to the start of the next bucket.
 //
 // Marking a message as having been gossiped once means moving the start of the bucket by one position. The message
 // itself stays at its place. Marking the first message F as having been transmitted will move the bucket start for

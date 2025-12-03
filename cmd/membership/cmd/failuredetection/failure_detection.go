@@ -1,4 +1,4 @@
-package firstdetection
+package failuredetection
 
 import (
 	"errors"
@@ -14,10 +14,9 @@ import (
 	"github.com/backbone81/membership/internal/utility"
 )
 
-// FirstFailureDetection measures the time in protocol periods in which a failed member is detected by any other member.
-func FirstFailureDetection(logger logr.Logger) error {
-	logger.Info("The number of protocol periods between a member failure and its first detection at some non-faulty member.")
-	for memberCount := range utility.ClusterSize(2, 8, 128) {
+// Simulate measures the time in protocol periods in which a failed member is detected by any other member.
+func Simulate(minMemberCount int, linearCutoff int, maxMemberCount int, logger logr.Logger) error {
+	for memberCount := range utility.ClusterSize(minMemberCount, linearCutoff, maxMemberCount) {
 		memoryTransport := transport.NewMemory()
 
 		lists, err := buildCluster(memberCount, memoryTransport)

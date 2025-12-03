@@ -494,10 +494,12 @@ func (l *List) adjustDirectPingMemberCount() {
 	// actual direct pings and piggybacked gossip available. That way we don't create garbage values for 0.
 	if l.directPingCount > 0 && l.directPingGossipCount > 0 {
 		averageDirectPingGossipCount := l.directPingGossipCount / l.directPingCount
-		// We need to do a ceiling division here to avoid situations where a queue size of 25 with average gossip of 10
-		// would result in 2 direct pings while we want to have 3.
-		desiredDirectPingMemberCount = (l.gossipQueue.Len() + averageDirectPingGossipCount - 1) / averageDirectPingGossipCount
-		desiredDirectPingMemberCount = max(l.config.MinDirectPingMemberCount, min(desiredDirectPingMemberCount, l.config.MaxDirectPingMemberCount))
+		if averageDirectPingGossipCount > 0 {
+			// We need to do a ceiling division here to avoid situations where a queue size of 25 with average gossip of 10
+			// would result in 2 direct pings while we want to have 3.
+			desiredDirectPingMemberCount = (l.gossipQueue.Len() + averageDirectPingGossipCount - 1) / averageDirectPingGossipCount
+			desiredDirectPingMemberCount = max(l.config.MinDirectPingMemberCount, min(desiredDirectPingMemberCount, l.config.MaxDirectPingMemberCount))
+		}
 	}
 
 	if desiredDirectPingMemberCount != l.config.DirectPingMemberCount {

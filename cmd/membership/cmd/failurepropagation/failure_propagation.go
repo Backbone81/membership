@@ -1,4 +1,4 @@
-package allfailuredetection
+package failurepropagation
 
 import (
 	"errors"
@@ -16,11 +16,10 @@ import (
 	"github.com/backbone81/membership/internal/utility"
 )
 
-// AllFailureDetection measures the time in protocol periods in which a failed member is known to all other members.
+// Simulate measures the time in protocol periods in which a failed member is known to all other members.
 // Either by ping other by gossip.
-func AllFailureDetection(logger logr.Logger) error {
-	logger.Info("The number of protocol periods between a member failure and its propagation to all non-faulty member.")
-	for memberCount := range utility.ClusterSize(2, 8, 128) {
+func Simulate(minMemberCount int, linearCutoff int, maxMemberCount int, logger logr.Logger) error {
+	for memberCount := range utility.ClusterSize(minMemberCount, linearCutoff, maxMemberCount) {
 		memoryTransport := transport.NewMemory()
 
 		lists, err := buildCluster(memberCount, memoryTransport)

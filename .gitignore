@@ -33,3 +33,7 @@ tmp/
 # Editor/IDE
 .idea/
 .vscode/
+
+# Binaries of this project.
+/membership
+/demo

@@ -84,6 +84,16 @@ operations. Recommendations range from
 operations to stay safe. This is a property of the 96 bits of nonce used. Use the metric
 `membership_list_transport_encryptions_total` to keep track of encryption operation count.
 
+A cluster of 256 members with a protocol period of 1 second will have at least 256 (members) * 2 (ping + ack) *
+60 (seconds) * 60 (minutes) * 24 (hours) = 44,236,800 encryption operations per day. Make sure to rotate the key
+accordingly, if your cluster spans untrusted networks.
+
+To create a new random encryption key, you can use the `keygen` subcommand of the `membership` cli.
+
+```shell
+go run ./cmd/membership keygen
+```
+
 ## TODOs
 
 ### Important Topics
@@ -98,6 +108,8 @@ operations to stay safe. This is a property of the 96 bits of nonce used. Use th
   disabled.
 - Use timeouts for the tcp transports.
 - Align code with linter
+- There is a bug, which causes every list request to trigger a refute about being alive with an increase in incarnation
+  number.
 
 ### Nice to Have
 

@@ -1,9 +1,34 @@
 # Membership
 
-This Go library provides a membership list for distributed processes based on the
+This Go library provides a high-performance, zero-allocation membership list for distributed processes. It is designed
+for systems that need to know all other nodes in the cluster and need timely information about a node not being
+available. The implementation is based on the
 [SWIM: Scalable Weakly-consistent Infection-style Process Group Membership Protocol](https://doi.org/10.1109/DSN.2002.1028914)
 with improvements from
 [Lifeguard: Local Health Awareness for More Accurate Failure Detection](https://doi.org/10.48550/arXiv.1707.00788).
+
+## What is a Distributed Membership List?
+
+A distributed membership list provides a list of all members alive in the cluster. The list is maintained and updated
+in a peer-to-peer process without a single point of failure. Changes to the membership list are propagated by gossip
+mechanics in an infection style way.
+
+## Use Cases
+
+- **Distributed Databases**: Maintain cluster topology and route requests to live nodes.
+- **Service Meshes**: Track healthy service instances for load balancing.
+- **Cache Clusters**: Coordinate cache invalidation across nodes.
+- **Consensus Systems**: Track participant availability before elections.
+- **Monitoring Systems**: Detect and report node failures automatically.
+
+## Why Use This Library?
+
+- **No Single Point of Failure**: Pure peer-to-peer design.
+- **Constant Network Load**: O(1) network traffic regardless of cluster size.
+- **Adaptive Timing**: Dynamic timeout adjustment based on network RTT.
+- **Encrypted by Default**: AES-256-GCM encryption on all network traffic.
+- **Custom Metrics**: Integrate with your monitoring stack for operational insights.
+- **Zero Allocations**: Engineered for minimal GC pressure and maximum throughput.
 
 ## Features
 
@@ -32,7 +57,103 @@ with improvements from
 - Faulty members are dropped after they have been propagated often enough through the full memberlist sync.
 - Network messages are always encrypted with AES-256 in GCM mode.
 
-## Mechanic
+## Quick Start
+
+Install:
+
+```shell
+go get github.com/backbone81/membership
+```
+
+```go
+package main
+
+import (
+	"context"
+	"log"
+	"net"
+	"os"
+	"os/signal"
+	"syscall"
+
+	"github.com/backbone81/membership/internal/encoding"
+	"github.com/backbone81/membership/internal/encryption"
+	"github.com/backbone81/membership/pkg/membership"
+	"github.com/go-logr/stdr"
+)
+
+func main() {
+	if err := execute(); err != nil {
+		log.Fatalln(err)
+	}
+}
+
+func execute() error {
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
+
+	logger := stdr.New(log.New(os.Stderr, "", log.LstdFlags))
+
+	bindAddress := encoding.NewAddress(net.IPv4(127, 0, 0, 1), 3000)
+	bootstrapMemberAddress := encoding.NewAddress(net.IPv4(127, 0, 0, 1), 3001)
+	membershipList, err := membership.NewList(
+		membership.WithLogger(logger),
+		membership.WithBootstrapMembers([]encoding.Address{bootstrapMemberAddress}),
+		membership.WithAdvertisedAddress(bindAddress),
+		membership.WithBindAddress(bindAddress.String()),
+		membership.WithEncryptionKey(encryption.NewRandomKey()),
+	)
+	if err != nil {
+		return err
+	}
+
+	if err := membershipList.Startup(); err != nil {
+		return err
+	}
+	<-ctx.Done()
+	if err := membershipList.Shutdown(); err != nil {
+		return err
+	}
+	return nil
+}
+```
+
+See the [examples](examples) folder for more examples.
+
+## Configuration
+
+All available [configuration options](pkg/membership/option.go) for the membership list can be seen in the source code.
+
+## CLI
+
+You can also use the CLI for running simulations or for generating random encryption keys. To install:
+
+```shell
+go install github.com/backbone81/membership/cmd/membership
+```
+
+Use the `--help` flag to get an overview of all options:
+
+```
+Command line tool supporting the membership Go library.
+
+Usage:
+  membership [command]
+
+Available Commands:
+  completion          Generate the autocompletion script for the specified shell
+  failure-detection   How long a cluster needs to detect a failed member.
+  failure-propagation How long a cluster needs to propagate a failed member.
+  help                Help about any command
+  keygen              Creates a random encryption key.
+
+Flags:
+  -h, --help   help for membership
+
+Use "membership [command] --help" for more information about a command.
+```
+
+## How It Works
 
 The library works in cycles called protocol periods. One protocol period is usually one second.
 
@@ -53,18 +174,7 @@ Situations can arise where some member might not receive a specific change and t
 other members. To tackle this issue, there is a full exchange of membership list at a low frequency. A random member
 is picked and the full membership list is requested.
 
-## Logging
-
-This library is using log levels to provide different details about its operation. The higher log levels always include
-all logs of the lower log levels. Log level 0 is intended for production use while the other log levels are intended
-for debugging purposes.
-
-- Log level 0: General status information like members added and removed
-- Log level 1: Network messages sent
-- Log level 2: Network messages received
-- Log level 3: Gossip messages received
-
-## Encryption
+## Encryption And Key Rotation
 
 All network messages exchanged between members are encrypted with AES-256 with GCM. This allows members to operate
 over untrusted networks without leaking confidential data. All members need to have the same encryption key configured
@@ -94,10 +204,32 @@ To create a new random encryption key, you can use the `keygen` subcommand of th
 go run ./cmd/membership keygen
 ```
 
+## Logging
+
+This library is using log levels to provide different details about its operation. The higher log levels always include
+all logs of the lower log levels. Log level 0 is intended for production use while the other log levels are intended
+for debugging purposes.
+
+- Log level 0: General status information like members added and removed
+- Log level 1: Network messages sent
+- Log level 2: Network messages received
+- Log level 3: Gossip messages received
+
+## Metrics
+
+Several metrics are provided to gain insights into the operation of the membership list. You can register those metrics
+with your prometheus registerer with `membership.RegisterMetrics()`.
+
+## Benchmarks
+
+All parts of this library are covered with extensive benchmarks. See [docs](docs) for details.
+
 ## TODOs
 
 ### Important Topics
 
+- Remove all references to internal packages from example code.
+- See if we can replace the zap logger with the go std logger as we already have in examples/simple.
 - Investigate how we can increase the suspicion timeout when we are under high CPU load. High CPU load can be detected
   by the scheduler as the times between direct pings, indirect pings and end of protocol are either significant shorter
   than expected or even overshot immediately.

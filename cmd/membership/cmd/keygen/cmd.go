@@ -1,4 +1,4 @@
-package cmd
+package keygen
 
 import (
 	"github.com/backbone81/membership/internal/encryption"
@@ -24,6 +24,6 @@ var keygenCmd = &cobra.Command{
 	},
 }
 
-func init() {
-	rootCmd.AddCommand(keygenCmd)
+func RegisterSubCommand(command *cobra.Command) {
+	command.AddCommand(keygenCmd)
 }

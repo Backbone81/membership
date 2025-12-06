@@ -9,12 +9,61 @@ import (
 
 	"github.com/backbone81/membership/internal/roundtriptime"
 	"github.com/go-logr/logr"
+	"github.com/spf13/cobra"
 
 	"github.com/backbone81/membership/internal/encoding"
 	"github.com/backbone81/membership/internal/membership"
 	"github.com/backbone81/membership/internal/transport"
 	"github.com/backbone81/membership/internal/utility"
 )
+
+var (
+	minMemberCount int
+	linearCutoff   int
+	maxMemberCount int
+)
+
+// failurePropagationCmd represents the allDetection command
+var failurePropagationCmd = &cobra.Command{
+	Use:   "failure-propagation",
+	Short: "How long a cluster needs to propagate a failed member.",
+	Long: `Simulates clusters of different sizes with one member failed.
+Measures the number of protocol periods until all non-faulty members know about the failed member.
+Note that this simulation does not execute the periodic full list sync which the default membership list would do.`,
+	SilenceUsage: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		logger, zapLogger, err := utility.CreateLogger(0)
+		if err != nil {
+			return err
+		}
+		defer zapLogger.Sync()
+
+		return Simulate(minMemberCount, linearCutoff, maxMemberCount, logger)
+	},
+}
+
+func RegisterSubCommand(command *cobra.Command) {
+	command.AddCommand(failurePropagationCmd)
+
+	failurePropagationCmd.PersistentFlags().IntVar(
+		&minMemberCount,
+		"min-member-count",
+		2,
+		"The minimum member count to simulate.",
+	)
+	failurePropagationCmd.PersistentFlags().IntVar(
+		&linearCutoff,
+		"linear-cutoff",
+		8,
+		"Member counts increase linear between min-member-count and linear-cutoff. After linear-cutoff, member counts are doubled.",
+	)
+	failurePropagationCmd.PersistentFlags().IntVar(
+		&maxMemberCount,
+		"max-member-count",
+		512,
+		"The maximum member count to simulate.",
+	)
+}
 
 // Simulate measures the time in protocol periods in which a failed member is known to all other members.
 // Either by ping other by gossip.
@@ -116,7 +165,7 @@ func runProtocol(logger logr.Logger, lists []*membership.List, memoryTransport *
 	}
 	slices.Sort(detected)
 	logger.Info(
-		"Member failure detected",
+		"Member failure propagated",
 		"cluster-size", memberCount,
 		"min", detected[0]+1,
 		"median", detected[len(detected)/2]+1,

@@ -7,12 +7,60 @@ import (
 
 	"github.com/backbone81/membership/internal/roundtriptime"
 	"github.com/go-logr/logr"
+	"github.com/spf13/cobra"
 
 	"github.com/backbone81/membership/internal/encoding"
 	"github.com/backbone81/membership/internal/membership"
 	"github.com/backbone81/membership/internal/transport"
 	"github.com/backbone81/membership/internal/utility"
 )
+
+var (
+	minMemberCount int
+	linearCutoff   int
+	maxMemberCount int
+)
+
+// failureDetectionCmd represents the firstdetection command
+var failureDetectionCmd = &cobra.Command{
+	Use:   "failure-detection",
+	Short: "How long a cluster needs to detect a failed member.",
+	Long: `Simulates clusters of different sizes with one member failed.
+Measures the number of protocol periods until any non-faulty member declares the failed member as faulty.`,
+	SilenceUsage: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		logger, zapLogger, err := utility.CreateLogger(0)
+		if err != nil {
+			return err
+		}
+		defer zapLogger.Sync()
+
+		return Simulate(minMemberCount, linearCutoff, maxMemberCount, logger)
+	},
+}
+
+func RegisterSubCommand(command *cobra.Command) {
+	command.AddCommand(failureDetectionCmd)
+
+	failureDetectionCmd.PersistentFlags().IntVar(
+		&minMemberCount,
+		"min-member-count",
+		2,
+		"The minimum member count to simulate.",
+	)
+	failureDetectionCmd.PersistentFlags().IntVar(
+		&linearCutoff,
+		"linear-cutoff",
+		8,
+		"Member counts increase linear between min-member-count and linear-cutoff. After linear-cutoff, member counts are doubled.",
+	)
+	failureDetectionCmd.PersistentFlags().IntVar(
+		&maxMemberCount,
+		"max-member-count",
+		512,
+		"The maximum member count to simulate.",
+	)
+}
 
 // Simulate measures the time in protocol periods in which a failed member is detected by any other member.
 func Simulate(minMemberCount int, linearCutoff int, maxMemberCount int, logger logr.Logger) error {

@@ -3,6 +3,9 @@ package cmd
 import (
 	"os"
 
+	"github.com/backbone81/membership/cmd/membership/cmd/failuredetection"
+	"github.com/backbone81/membership/cmd/membership/cmd/failurepropagation"
+	"github.com/backbone81/membership/cmd/membership/cmd/keygen"
 	"github.com/spf13/cobra"
 )
 
@@ -20,4 +23,10 @@ func Execute() {
 	if err != nil {
 		os.Exit(1)
 	}
+}
+
+func init() {
+	failuredetection.RegisterSubCommand(rootCmd)
+	failurepropagation.RegisterSubCommand(rootCmd)
+	keygen.RegisterSubCommand(rootCmd)
 }

@@ -1,8 +1,11 @@
 package keygen
 
 import (
+	"log"
+	"os"
+
 	"github.com/backbone81/membership/internal/encryption"
-	"github.com/backbone81/membership/internal/utility"
+	"github.com/go-logr/stdr"
 	"github.com/spf13/cobra"
 )
 
@@ -13,11 +16,7 @@ var keygenCmd = &cobra.Command{
 	Long:         `Creates a random encryption key.`,
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		logger, zapLogger, err := utility.CreateLogger(0)
-		if err != nil {
-			return err
-		}
-		defer zapLogger.Sync()
+		logger := stdr.New(log.New(os.Stdout, "", log.LstdFlags))
 
 		logger.Info("Random encryption key created", "key", encryption.NewRandomKey().String())
 		return nil

@@ -92,7 +92,7 @@ func execute() error {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	logger := stdr.New(log.New(os.Stderr, "", log.LstdFlags))
+	logger := stdr.New(log.New(os.Stdout, "", log.LstdFlags))
 
 	bindAddress := encoding.NewAddress(net.IPv4(127, 0, 0, 1), 3000)
 	bootstrapMemberAddress := encoding.NewAddress(net.IPv4(127, 0, 0, 1), 3001)
@@ -229,7 +229,6 @@ All parts of this library are covered with extensive benchmarks. See [docs](docs
 ### Important Topics
 
 - Remove all references to internal packages from example code.
-- See if we can replace the zap logger with the go std logger as we already have in examples/simple.
 - Investigate how we can increase the suspicion timeout when we are under high CPU load. High CPU load can be detected
   by the scheduler as the times between direct pings, indirect pings and end of protocol are either significant shorter
   than expected or even overshot immediately.

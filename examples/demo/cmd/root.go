@@ -2,15 +2,16 @@ package cmd
 
 import (
 	"context"
+	"log"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
 	"github.com/backbone81/membership/internal/encryption"
+	"github.com/go-logr/stdr"
 	"github.com/spf13/cobra"
 
-	"github.com/backbone81/membership/internal/utility"
 	"github.com/backbone81/membership/pkg/membership"
 )
 
@@ -37,11 +38,8 @@ var rootCmd = &cobra.Command{
 		ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 		defer cancel()
 
-		logger, zapLogger, err := utility.CreateLogger(verbosity)
-		if err != nil {
-			return err
-		}
-		defer zapLogger.Sync()
+		stdr.SetVerbosity(verbosity)
+		logger := stdr.New(log.New(os.Stdout, "", log.LstdFlags))
 
 		logger.Info("Application startup")
 

@@ -1,9 +1,12 @@
 package statistics
 
 import (
+	"log"
 	"math"
+	"os"
 	"time"
 
+	"github.com/go-logr/stdr"
 	"github.com/spf13/cobra"
 
 	"github.com/backbone81/membership/internal/utility"
@@ -24,11 +27,7 @@ var statisticsCmd = &cobra.Command{
 	Long:         `Some aspects of a cluster can be calculated without simulation and compared to the simulation for plausibility.`,
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		logger, zapLogger, err := utility.CreateLogger(0)
-		if err != nil {
-			return err
-		}
-		defer zapLogger.Sync()
+		logger := stdr.New(log.New(os.Stdout, "", log.LstdFlags))
 
 		logger.Info("Cluster configuration",
 			"member-count", memberCount,

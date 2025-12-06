@@ -3,10 +3,13 @@ package failuredetection
 import (
 	"errors"
 	"fmt"
+	"log"
 	"net"
+	"os"
 
 	"github.com/backbone81/membership/internal/roundtriptime"
 	"github.com/go-logr/logr"
+	"github.com/go-logr/stdr"
 	"github.com/spf13/cobra"
 
 	"github.com/backbone81/membership/internal/encoding"
@@ -29,11 +32,7 @@ var failureDetectionCmd = &cobra.Command{
 Measures the number of protocol periods until any non-faulty member declares the failed member as faulty.`,
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		logger, zapLogger, err := utility.CreateLogger(0)
-		if err != nil {
-			return err
-		}
-		defer zapLogger.Sync()
+		logger := stdr.New(log.New(os.Stdout, "", log.LstdFlags))
 
 		return Simulate(minMemberCount, linearCutoff, maxMemberCount, logger)
 	},

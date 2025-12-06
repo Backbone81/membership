@@ -1,17 +1,19 @@
 package lossyjoin
 
 import (
+	"log"
 	"math"
 	"net"
+	"os"
 
 	"github.com/backbone81/membership/internal/roundtriptime"
 	"github.com/go-logr/logr"
+	"github.com/go-logr/stdr"
 	"github.com/spf13/cobra"
 
 	"github.com/backbone81/membership/internal/encoding"
 	"github.com/backbone81/membership/internal/membership"
 	"github.com/backbone81/membership/internal/transport"
-	"github.com/backbone81/membership/internal/utility"
 )
 
 var (
@@ -27,11 +29,7 @@ var lossyJoinCmd = &cobra.Command{
 and drops some network messages. The simulation shows at what number of members the cluster stabilizes.`,
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		logger, zapLogger, err := utility.CreateLogger(0)
-		if err != nil {
-			return err
-		}
-		defer zapLogger.Sync()
+		logger := stdr.New(log.New(os.Stdout, "", log.LstdFlags))
 
 		return runProtocol(logger, transport.NewMemory(), memberCount)
 	},

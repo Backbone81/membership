@@ -24,7 +24,7 @@ func execute() error {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	logger := stdr.New(log.New(os.Stderr, "", log.LstdFlags))
+	logger := stdr.New(log.New(os.Stdout, "", log.LstdFlags))
 
 	bindAddress := encoding.NewAddress(net.IPv4(127, 0, 0, 1), 3000)
 	bootstrapMemberAddress := encoding.NewAddress(net.IPv4(127, 0, 0, 1), 3001)

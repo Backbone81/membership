@@ -3,12 +3,15 @@ package joinpropagation
 import (
 	"errors"
 	"fmt"
+	"log"
 	"math"
 	"net"
+	"os"
 	"slices"
 
 	"github.com/backbone81/membership/internal/roundtriptime"
 	"github.com/go-logr/logr"
+	"github.com/go-logr/stdr"
 	"github.com/spf13/cobra"
 
 	"github.com/backbone81/membership/internal/encoding"
@@ -32,11 +35,7 @@ Measures the number of protocol periods until all non-faulty members know about 
 Note that this simulation does not execute the periodic full list sync which the default membership list would do.`,
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		logger, zapLogger, err := utility.CreateLogger(0)
-		if err != nil {
-			return err
-		}
-		defer zapLogger.Sync()
+		logger := stdr.New(log.New(os.Stdout, "", log.LstdFlags))
 
 		return Simulate(minMemberCount, linearCutoff, maxMemberCount, logger)
 	},

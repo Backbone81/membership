@@ -12,6 +12,7 @@ all: build
 build: prepare
 	go build ./cmd/membership
 	go build ./examples/demo
+	go build ./examples/simple
 
 .PHONY: test
 test: prepare

@@ -10,8 +10,6 @@ import (
 
 	"github.com/go-logr/stdr"
 
-	"github.com/backbone81/membership/internal/encoding"
-	"github.com/backbone81/membership/internal/encryption"
 	"github.com/backbone81/membership/pkg/membership"
 )
 
@@ -27,14 +25,14 @@ func execute() error {
 
 	logger := stdr.New(log.New(os.Stdout, "", log.LstdFlags))
 
-	bindAddress := encoding.NewAddress(net.IPv4(127, 0, 0, 1), 3000)
-	bootstrapMemberAddress := encoding.NewAddress(net.IPv4(127, 0, 0, 1), 3001)
+	bindAddress := membership.NewAddress(net.IPv4(127, 0, 0, 1), 3000)
+	bootstrapMemberAddress := membership.NewAddress(net.IPv4(127, 0, 0, 1), 3001)
 	membershipList, err := membership.NewList(
 		membership.WithLogger(logger),
-		membership.WithBootstrapMembers([]encoding.Address{bootstrapMemberAddress}),
+		membership.WithBootstrapMembers([]membership.Address{bootstrapMemberAddress}),
 		membership.WithAdvertisedAddress(bindAddress),
 		membership.WithBindAddress(bindAddress.String()),
-		membership.WithEncryptionKey(encryption.NewRandomKey()),
+		membership.WithEncryptionKey(membership.NewRandomKey()),
 	)
 	if err != nil {
 		return err

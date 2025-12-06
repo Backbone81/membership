@@ -11,7 +11,6 @@ import (
 	"github.com/go-logr/stdr"
 	"github.com/spf13/cobra"
 
-	"github.com/backbone81/membership/internal/encryption"
 	"github.com/backbone81/membership/pkg/membership"
 )
 
@@ -77,7 +76,7 @@ var rootCmd = &cobra.Command{
 			membership.WithMaxDatagramLengthReceive(maxDatagramLengthReceive),
 		}
 		for _, key := range encryptionKeys {
-			typedKey, err := encryption.ParseKeyFromHexString(key)
+			typedKey, err := membership.ParseKeyFromHexString(key)
 			if err != nil {
 				return err
 			}

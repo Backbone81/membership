@@ -22,7 +22,7 @@ type Unreliable struct {
 var _ Transport = (*Unreliable)(nil)
 
 func (u *Unreliable) Send(address encoding.Address, buffer []byte) error {
-	if rand.Float64() > u.Reliability {
+	if rand.Float64() > u.Reliability { //nolint:gosec // no need for crypto/rand here
 		// We exceeded the reliability, so we drop the send and exit early.
 		return nil
 	}

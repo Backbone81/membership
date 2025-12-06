@@ -1,10 +1,10 @@
 package membership
 
 import (
-	"github.com/backbone81/membership/internal/roundtriptime"
 	"github.com/go-logr/logr"
 
 	"github.com/backbone81/membership/internal/encoding"
+	"github.com/backbone81/membership/internal/roundtriptime"
 	"github.com/backbone81/membership/internal/transport"
 )
 

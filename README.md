@@ -238,7 +238,6 @@ All parts of this library are covered with extensive benchmarks. See [docs](docs
   under the assumption that the bootstrap members are always there. If bootstrap members are ephemeral, this should be
   disabled.
 - Use timeouts for the tcp transports.
-- Align code with linter
 - There is a bug, which causes every list request to trigger a refute about being alive with an increase in incarnation
   number.
 

@@ -220,9 +220,7 @@ func (l *List) ForEach(fn func(encoding.Member) bool) {
 func (l *List) ListRequestObserved() {
 	bucketEnd := l.head
 	for i := range l.bucketStarts {
-		bucketStart := l.bucketStarts[i]
-		l.bucketStarts[i] = bucketEnd
-		bucketEnd = bucketStart
+		l.bucketStarts[i], bucketEnd = bucketEnd, l.bucketStarts[i]
 	}
 	l.cleanupTail()
 }
@@ -326,7 +324,7 @@ func (l *List) ValidateInternalState() error {
 	for i := range l.bucketStarts {
 		bucketStart := l.bucketStarts[i]
 		bucketSize := (bucketEnd - bucketStart + len(l.ring)) % len(l.ring)
-		for j := 0; j < bucketSize; j++ {
+		for j := range bucketSize {
 			index := (bucketStart + j) % len(l.ring)
 
 			// Make sure that all entries are correctly stored in the index by address

@@ -38,9 +38,9 @@ func (p *Picker) Pick(count int, members []encoding.Member, fn func(member encod
 	clear(p.pickRandomMembersSwap)
 
 	// We iterate over the number of elements we want to retrieve.
-	for i := 0; i < count; i++ {
+	for i := range count {
 		// For every element, we pick a random other element which is identical to the current element or bigger.
-		j := i + rand.Intn(len(members)-i)
+		j := i + rand.Intn(len(members)-i) //nolint:gosec // we do not need crypto/rand here
 
 		// We look up the real indexes according to what swaps we already did in the past.
 		iReal := p.pickRandomMemberIndex(i)

@@ -3,10 +3,10 @@ package membership
 import (
 	"time"
 
-	"github.com/backbone81/membership/internal/encryption"
 	"github.com/go-logr/logr"
 
 	"github.com/backbone81/membership/internal/encoding"
+	"github.com/backbone81/membership/internal/encryption"
 )
 
 type Option func(config *Config)

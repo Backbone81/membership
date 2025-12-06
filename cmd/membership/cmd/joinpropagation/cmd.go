@@ -9,13 +9,13 @@ import (
 	"os"
 	"slices"
 
-	"github.com/backbone81/membership/internal/roundtriptime"
 	"github.com/go-logr/logr"
 	"github.com/go-logr/stdr"
 	"github.com/spf13/cobra"
 
 	"github.com/backbone81/membership/internal/encoding"
 	"github.com/backbone81/membership/internal/membership"
+	"github.com/backbone81/membership/internal/roundtriptime"
 	"github.com/backbone81/membership/internal/transport"
 	"github.com/backbone81/membership/internal/utility"
 )
@@ -26,7 +26,7 @@ var (
 	maxMemberCount int
 )
 
-// joinPropagationCmd represents the allDetection command
+// joinPropagationCmd represents the allDetection command.
 var joinPropagationCmd = &cobra.Command{
 	Use:   "join-propagation",
 	Short: "How long a cluster needs to propagate a joined member.",
@@ -83,7 +83,7 @@ func Simulate(minMemberCount int, linearCutoff int, maxMemberCount int, logger l
 
 func buildCluster(memberCount int, memoryTransport *transport.Memory) ([]*membership.List, error) {
 	// Create our membership lists and make them know each other.
-	var lists []*membership.List
+	lists := make([]*membership.List, 0, memberCount)
 	for i := range memberCount {
 		address := encoding.NewAddress(net.IPv4(255, 255, 255, 255), i+1)
 		options := []membership.Option{
@@ -126,6 +126,7 @@ func buildCluster(memberCount int, memoryTransport *transport.Memory) ([]*member
 	return lists, nil
 }
 
+//nolint:gocognit,cyclop
 func runProtocol(logger logr.Logger, lists []*membership.List, memoryTransport *transport.Memory, memberCount int) error {
 	detected := make([]int, len(lists[:memberCount]))
 	for i := range detected {

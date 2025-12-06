@@ -69,6 +69,8 @@ func (s *Scheduler) Shutdown() error {
 }
 
 // protocolPeriodTask is driving the membership list algorithm.
+//
+//nolint:funlen
 func (s *Scheduler) protocolPeriodTask() {
 	s.logger.Info("Protocol period background task started")
 	defer s.logger.Info("Protocol period background task finished")

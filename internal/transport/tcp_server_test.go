@@ -5,11 +5,11 @@ import (
 	"net"
 	"time"
 
-	"github.com/backbone81/membership/internal/encoding"
-	"github.com/backbone81/membership/internal/encryption"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/backbone81/membership/internal/encoding"
+	"github.com/backbone81/membership/internal/encryption"
 	"github.com/backbone81/membership/internal/transport"
 )
 
@@ -100,8 +100,9 @@ var _ = Describe("TCPServer", func() {
 
 		listener, err := net.ListenTCP("tcp", addr)
 		Expect(err).ToNot(HaveOccurred())
-		defer listener.Close()
-		listenerAddr := listener.Addr().(*net.TCPAddr)
+		defer listener.Close() //nolint:errcheck
+		listenerAddr, ok := listener.Addr().(*net.TCPAddr)
+		Expect(ok).To(BeTrue())
 
 		client, err := transport.NewTCPClient(key1)
 		Expect(err).ToNot(HaveOccurred())
@@ -110,7 +111,7 @@ var _ = Describe("TCPServer", func() {
 
 		serverConnection, err := listener.Accept()
 		Expect(err).ToNot(HaveOccurred())
-		defer serverConnection.Close()
+		defer serverConnection.Close() //nolint:errcheck
 		buffer, err := io.ReadAll(serverConnection)
 		Expect(err).ToNot(HaveOccurred())
 
@@ -123,12 +124,12 @@ var _ = Describe("TCPServer", func() {
 
 		clientConnection, err := net.Dial("tcp", serverAddress.String())
 		Expect(err).ToNot(HaveOccurred())
-		defer clientConnection.Close()
+		defer clientConnection.Close() //nolint:errcheck
 
 		// We send one byte less than the full message.
 		Expect(clientConnection.Write(buffer[:len(buffer)-1])).Error().ToNot(HaveOccurred())
 		time.Sleep(100 * time.Millisecond)
-		clientConnection.Close()
+		Expect(clientConnection.Close()).To(Succeed())
 
 		Expect(server.Shutdown()).To(Succeed())
 		Expect(target.DataReceived).To(BeEmpty())

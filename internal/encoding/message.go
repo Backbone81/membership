@@ -28,6 +28,7 @@ type Message struct {
 	Members []Member
 }
 
+//nolint:cyclop
 func (m Message) String() string {
 	switch m.Type {
 	case MessageTypeDirectPing:
@@ -53,6 +54,7 @@ func (m Message) String() string {
 	}
 }
 
+//nolint:cyclop
 func (m Message) AppendToBuffer(buffer []byte) ([]byte, int, error) {
 	switch m.Type {
 	case MessageTypeDirectPing:

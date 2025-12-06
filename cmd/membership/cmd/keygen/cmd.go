@@ -4,12 +4,13 @@ import (
 	"log"
 	"os"
 
-	"github.com/backbone81/membership/internal/encryption"
 	"github.com/go-logr/stdr"
 	"github.com/spf13/cobra"
+
+	"github.com/backbone81/membership/internal/encryption"
 )
 
-// keygenCmd represents the keygen command
+// keygenCmd represents the keygen command.
 var keygenCmd = &cobra.Command{
 	Use:          "keygen",
 	Short:        "Creates a random encryption key.",

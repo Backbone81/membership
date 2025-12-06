@@ -1,12 +1,12 @@
 package membership
 
 import (
-	intscheduler "github.com/backbone81/membership/internal/scheduler"
-	inttransport "github.com/backbone81/membership/internal/transport"
 	"github.com/prometheus/client_golang/prometheus"
 
 	intgossip "github.com/backbone81/membership/internal/gossip"
 	intmembership "github.com/backbone81/membership/internal/membership"
+	intscheduler "github.com/backbone81/membership/internal/scheduler"
+	inttransport "github.com/backbone81/membership/internal/transport"
 )
 
 // RegisterMetrics registers all metrics collectors with the given prometheus registerer.

@@ -5,10 +5,11 @@ import (
 	"testing/synctest"
 	"time"
 
-	"github.com/backbone81/membership/internal/roundtriptime"
-	"github.com/backbone81/membership/internal/scheduler"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/backbone81/membership/internal/roundtriptime"
+	"github.com/backbone81/membership/internal/scheduler"
 )
 
 var _ = Describe("Scheduler", func() {
@@ -33,10 +34,10 @@ var _ = Describe("Scheduler", func() {
 			synctest.Wait()
 
 			// As the 60th protocol period will immediately move into the next direct ping, we have 61 direct pings here.
-			Expect(len(target.DirectPingTimes)).To(Equal(61))
-			Expect(len(target.IndirectPingTimes)).To(Equal(60))
-			Expect(len(target.EndOfProtocolPeriodTimes)).To(Equal(60))
-			Expect(len(target.RequestListTimes)).To(Equal(2))
+			Expect(target.DirectPingTimes).To(HaveLen(61))
+			Expect(target.IndirectPingTimes).To(HaveLen(60))
+			Expect(target.EndOfProtocolPeriodTimes).To(HaveLen(60))
+			Expect(target.RequestListTimes).To(HaveLen(2))
 
 			for i := range len(target.DirectPingTimes) - 1 {
 				Expect(target.IndirectPingTimes[i].Sub(target.DirectPingTimes[i])).To(Equal(target.RTT))
@@ -65,8 +66,8 @@ var _ = Describe("Scheduler", func() {
 			Expect(myScheduler.Shutdown()).To(Succeed())
 			synctest.Wait()
 
-			Expect(len(target.DirectPingTimes)).To(Equal(1))
-			Expect(len(target.IndirectPingTimes)).To(Equal(0))
+			Expect(target.DirectPingTimes).To(HaveLen(1))
+			Expect(target.IndirectPingTimes).To(BeEmpty())
 		})
 	})
 
@@ -89,9 +90,9 @@ var _ = Describe("Scheduler", func() {
 			Expect(myScheduler.Shutdown()).To(Succeed())
 			synctest.Wait()
 
-			Expect(len(target.DirectPingTimes)).To(Equal(1))
-			Expect(len(target.IndirectPingTimes)).To(Equal(1))
-			Expect(len(target.EndOfProtocolPeriodTimes)).To(Equal(0))
+			Expect(target.DirectPingTimes).To(HaveLen(1))
+			Expect(target.IndirectPingTimes).To(HaveLen(1))
+			Expect(target.EndOfProtocolPeriodTimes).To(BeEmpty())
 		})
 	})
 })

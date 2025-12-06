@@ -6,13 +6,13 @@ import (
 	"net"
 	"os"
 
-	"github.com/backbone81/membership/internal/roundtriptime"
 	"github.com/go-logr/logr"
 	"github.com/go-logr/stdr"
 	"github.com/spf13/cobra"
 
 	"github.com/backbone81/membership/internal/encoding"
 	"github.com/backbone81/membership/internal/membership"
+	"github.com/backbone81/membership/internal/roundtriptime"
 	"github.com/backbone81/membership/internal/transport"
 )
 
@@ -21,7 +21,7 @@ var (
 	networkReliability float64
 )
 
-// lossyJoinCmd represents the allDetection command
+// lossyJoinCmd represents the allDetection command.
 var lossyJoinCmd = &cobra.Command{
 	Use:   "lossy-join",
 	Short: "Joins a set of new members through a lossy network.",
@@ -52,9 +52,9 @@ func RegisterSubCommand(command *cobra.Command) {
 	)
 }
 
+//nolint:cyclop,funlen
 func runProtocol(logger logr.Logger, memoryTransport *transport.Memory, memberCount int) error {
-	var observedMinMemberCount []int
-	var lists []*membership.List
+	lists := make([]*membership.List, 0, memberCount)
 	for protocolPeriod := range 1024 {
 		if protocolPeriod < memberCount {
 			// We join one member in every protocol period until the max member count is reached.
@@ -110,7 +110,6 @@ func runProtocol(logger logr.Logger, memoryTransport *transport.Memory, memberCo
 		for _, list := range lists {
 			minMemberCount = min(minMemberCount, list.Len())
 		}
-		observedMinMemberCount = append(observedMinMemberCount, minMemberCount)
 
 		logger.Info(
 			"Cluster members",

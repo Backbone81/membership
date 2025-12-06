@@ -6,10 +6,11 @@ import (
 	"net"
 	"testing"
 
-	"github.com/backbone81/membership/internal/encoding"
-	"github.com/backbone81/membership/internal/randmember"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/backbone81/membership/internal/encoding"
+	"github.com/backbone81/membership/internal/randmember"
 )
 
 var _ = Describe("Picker", func() {
@@ -182,7 +183,7 @@ var _ = Describe("Picker", func() {
 })
 
 func BenchmarkPicker_Pick(b *testing.B) {
-	var members []encoding.Member
+	members := make([]encoding.Member, 0, 100)
 	for i := range 100 {
 		members = append(members, encoding.Member{
 			Address: encoding.NewAddress(net.IPv4(255, 255, 255, 255), i),
@@ -202,7 +203,7 @@ func BenchmarkPicker_Pick(b *testing.B) {
 }
 
 func BenchmarkPicker_PickWithout(b *testing.B) {
-	var members []encoding.Member
+	members := make([]encoding.Member, 0, 100)
 	for i := range 100 {
 		members = append(members, encoding.Member{
 			Address: encoding.NewAddress(net.IPv4(255, 255, 255, 255), i),

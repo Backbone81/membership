@@ -36,7 +36,6 @@ linters:
     - gocritic
     - gocyclo
     - godot
-    - godox
     - goheader
     - gomoddirectives
     - gomodguard
@@ -72,7 +71,6 @@ linters:
     - promlinter
     - protogetter
     - reassign
-    - recvcheck
     - rowserrcheck
     - sloglint
     - spancheck
@@ -83,7 +81,6 @@ linters:
     - testableexamples
     - testifylint
     - testpackage
-    - thelper
     - tparallel
     - unconvert
     - unparam

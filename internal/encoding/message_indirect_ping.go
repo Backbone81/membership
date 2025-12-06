@@ -68,6 +68,9 @@ func (m MessageIndirectPing) AppendToBuffer(buffer []byte) ([]byte, int, error) 
 // Returns the number of bytes read and any error which occurred.
 func (m *MessageIndirectPing) FromBuffer(buffer []byte) (int, error) {
 	messageType, messageTypeN, err := MessageTypeFromBuffer(buffer)
+	if err != nil {
+		return 0, err
+	}
 	if messageType != MessageTypeIndirectPing {
 		return 0, errors.New("invalid message type")
 	}

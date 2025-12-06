@@ -6,11 +6,11 @@ import (
 	"net"
 	"testing"
 
-	"github.com/backbone81/membership/internal/faultymember"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	"github.com/backbone81/membership/internal/encoding"
+	"github.com/backbone81/membership/internal/faultymember"
 )
 
 var _ = Describe("List", func() {
@@ -112,7 +112,7 @@ var _ = Describe("List", func() {
 		It("should clear faulty member list with multiple members", func() {
 			list := faultymember.NewList()
 
-			for i := 0; i < 10; i++ {
+			for i := range 10 {
 				list.Add(encoding.Member{
 					Address: encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1024+i),
 				})
@@ -135,7 +135,7 @@ var _ = Describe("List", func() {
 		It("should clear members distributed across buckets", func() {
 			list := faultymember.NewList()
 
-			for i := 0; i < 10; i++ {
+			for i := range 10 {
 				list.Add(encoding.Member{
 					Address: encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1024+i),
 				})
@@ -211,7 +211,7 @@ var _ = Describe("List", func() {
 
 		It("should grow ring buffer when capacity is reached", func() {
 			list := faultymember.NewList(faultymember.WithPreAllocationCount(4))
-			for i := 0; i < 3; i++ {
+			for i := range 3 {
 				list.Add(encoding.Member{
 					Address: encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1024+i),
 				})
@@ -225,7 +225,7 @@ var _ = Describe("List", func() {
 			Expect(list.Cap()).To(Equal(8))
 			Expect(list.Len()).To(Equal(4))
 
-			for i := 0; i < 4; i++ {
+			for i := range 4 {
 				Expect(GetFromListByIndex(list, i).Address.Port()).To(Equal(1024 + i))
 			}
 			Expect(list.ValidateInternalState()).To(Succeed())
@@ -237,7 +237,7 @@ var _ = Describe("List", func() {
 				faultymember.WithMaxListRequestCount(3),
 			)
 
-			for i := 0; i < 3; i++ {
+			for i := range 3 {
 				list.Add(encoding.Member{
 					Address: encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1024+i),
 				})
@@ -259,7 +259,7 @@ var _ = Describe("List", func() {
 			Expect(list.Len()).To(Equal(4))
 
 			// Verify all members accessible
-			for i := 0; i < 4; i++ {
+			for i := range 4 {
 				Expect(GetFromListByIndex(list, i).Address.Port()).To(Equal(1024 + 3 + i))
 			}
 			Expect(list.ValidateInternalState()).To(Succeed())
@@ -439,7 +439,7 @@ var _ = Describe("List", func() {
 
 		It("should handle early abort", func() {
 			list := faultymember.NewList()
-			for i := 0; i < 10; i++ {
+			for i := range 10 {
 				list.Add(encoding.Member{
 					Address: encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1024+i),
 				})
@@ -509,10 +509,10 @@ var _ = Describe("List", func() {
 			addresses = append(addresses, encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1024+i))
 		}
 		for range 100_000 {
-			switch selection := rand.Intn(100); {
+			switch selection := rand.Intn(100); { //nolint:gosec // we do not need crypto/rand here
 			case selection < 25: // 25% of the time we add a member
 				list.Add(encoding.Member{
-					Address: addresses[rand.Intn(len(addresses))],
+					Address: addresses[rand.Intn(len(addresses))], //nolint:gosec // we do not need crypto/rand here
 				})
 			case selection < 100: // 75% of the time we observe a list request
 				list.ListRequestObserved()
@@ -551,7 +551,7 @@ func BenchmarkList_Add(b *testing.B) {
 				// the ip address up and keep a port which is different from what we put in before.
 				addresses := make([]encoding.Address, b.N)
 				for i := range b.N {
-					ipBytes := encoding.Endian.AppendUint32(nil, uint32(i+1))
+					ipBytes := encoding.Endian.AppendUint32(nil, uint32(i+1)) //nolint:gosec // overflow is not an issue
 					addresses[i] = encoding.NewAddress(net.IPv4(ipBytes[0], ipBytes[1], ipBytes[2], ipBytes[3]), 512)
 				}
 				b.ResetTimer()

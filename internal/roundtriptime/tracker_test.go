@@ -161,14 +161,14 @@ var _ = Describe("Tracker", func() {
 		)
 
 		// Fill buffer with low values
-		for i := 0; i < 5; i++ {
+		for range 5 {
 			tracker.AddObserved(10 * time.Millisecond)
 		}
 		tracker.UpdateCalculated()
 		Expect(tracker.GetCalculated()).To(Equal(10 * time.Millisecond))
 
 		// Add more values (should overwrite old ones)
-		for i := 0; i < 5; i++ {
+		for range 5 {
 			tracker.AddObserved(100 * time.Millisecond)
 		}
 		tracker.UpdateCalculated()

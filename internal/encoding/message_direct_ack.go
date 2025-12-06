@@ -1,3 +1,4 @@
+//nolint:dupl
 package encoding
 
 import (
@@ -54,6 +55,9 @@ func (m MessageDirectAck) AppendToBuffer(buffer []byte) ([]byte, int, error) {
 // Returns the number of bytes read and any error which occurred.
 func (m *MessageDirectAck) FromBuffer(buffer []byte) (int, error) {
 	messageType, messageTypeN, err := MessageTypeFromBuffer(buffer)
+	if err != nil {
+		return 0, err
+	}
 	if messageType != MessageTypeDirectAck {
 		return 0, errors.New("invalid message type")
 	}

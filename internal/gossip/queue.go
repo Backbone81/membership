@@ -166,7 +166,7 @@ func (q *Queue) Add(message encoding.Message) {
 
 		entry.Message = message
 		if entry.TransmissionCount != 0 {
-			index = q.moveToFirstBucket(index)
+			_ = q.moveToFirstBucket(index)
 		}
 		MessagesOverwrittenTotal.Inc()
 		MessagesByTypeTotal.WithLabelValues(message.Type.String()).Inc()
@@ -404,9 +404,10 @@ func (q *Queue) swapElements(index1 int, index2 int) {
 	q.indexByAddress[q.ring[index2].Message.Destination] = index2
 
 	// Fix priority queue index
-	if q.priorityIndex == index1 {
+	switch q.priorityIndex {
+	case index1:
 		q.priorityIndex = index2
-	} else if q.priorityIndex == index2 {
+	case index2:
 		q.priorityIndex = index1
 	}
 }
@@ -418,7 +419,7 @@ func (q *Queue) ValidateInternalState() error {
 	for i := range q.bucketStarts {
 		bucketStart := q.bucketStarts[i]
 		bucketSize := (bucketEnd - bucketStart + len(q.ring)) % len(q.ring)
-		for j := 0; j < bucketSize; j++ {
+		for j := range bucketSize {
 			index := (bucketStart + j) % len(q.ring)
 
 			// Make sure that all entries are in the correct bucket.

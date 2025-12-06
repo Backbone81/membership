@@ -11,33 +11,40 @@ import (
 
 func ResolveAdvertiseAddress(advertiseAddress string, bindAddress string) (encoding.Address, error) {
 	if advertiseAddress != "" {
-		addr, err := net.ResolveUDPAddr("udp", advertiseAddress)
-		if err != nil {
-			return encoding.Address{}, fmt.Errorf("resolving advertise address: %w", err)
-		}
-		return encoding.NewAddress(
-			addr.IP,
-			addr.Port,
-		), nil
-	} else {
-		_, port, err := net.SplitHostPort(bindAddress)
-		if err != nil {
-			return encoding.Address{}, err
-		}
-		typedPort, err := strconv.Atoi(port)
-		if err != nil {
-			return encoding.Address{}, err
-		}
-
-		localIp, err := getLocalIPAddress()
-		if err != nil {
-			return encoding.Address{}, err
-		}
-		return encoding.NewAddress(
-			localIp,
-			typedPort,
-		), nil
+		return resolveAdvertiseAddress(advertiseAddress)
 	}
+	return resolveAdvertiseAddressFromBindAddress(bindAddress)
+}
+
+func resolveAdvertiseAddress(advertiseAddress string) (encoding.Address, error) {
+	addr, err := net.ResolveUDPAddr("udp", advertiseAddress)
+	if err != nil {
+		return encoding.Address{}, fmt.Errorf("resolving advertise address: %w", err)
+	}
+	return encoding.NewAddress(
+		addr.IP,
+		addr.Port,
+	), nil
+}
+
+func resolveAdvertiseAddressFromBindAddress(bindAddress string) (encoding.Address, error) {
+	_, port, err := net.SplitHostPort(bindAddress)
+	if err != nil {
+		return encoding.Address{}, err
+	}
+	typedPort, err := strconv.Atoi(port)
+	if err != nil {
+		return encoding.Address{}, err
+	}
+
+	localIp, err := getLocalIPAddress()
+	if err != nil {
+		return encoding.Address{}, err
+	}
+	return encoding.NewAddress(
+		localIp,
+		typedPort,
+	), nil
 }
 
 func getLocalIPAddress() (net.IP, error) {
@@ -45,9 +52,12 @@ func getLocalIPAddress() (net.IP, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer connection.Close()
+	defer connection.Close() //nolint:errcheck
 
-	localAddr := connection.LocalAddr().(*net.UDPAddr)
+	localAddr, ok := connection.LocalAddr().(*net.UDPAddr)
+	if !ok {
+		return nil, errors.New("expected net.UDPAddr to be returned by local address")
+	}
 	return localAddr.IP, nil
 }
 

@@ -4,11 +4,11 @@ import (
 	"net"
 	"time"
 
-	"github.com/backbone81/membership/internal/encoding"
-	"github.com/backbone81/membership/internal/encryption"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/backbone81/membership/internal/encoding"
+	"github.com/backbone81/membership/internal/encryption"
 	"github.com/backbone81/membership/internal/transport"
 )
 
@@ -99,8 +99,9 @@ var _ = Describe("UDPServer", func() {
 
 		listener, err := net.ListenUDP("udp", addr)
 		Expect(err).ToNot(HaveOccurred())
-		defer listener.Close()
-		listenerAddr := listener.LocalAddr().(*net.UDPAddr)
+		defer listener.Close() //nolint:errcheck
+		listenerAddr, ok := listener.LocalAddr().(*net.UDPAddr)
+		Expect(ok).To(BeTrue())
 
 		client, err := transport.NewUDPClient(512, key1)
 		Expect(err).ToNot(HaveOccurred())
@@ -120,7 +121,7 @@ var _ = Describe("UDPServer", func() {
 
 		clientConnection, err := net.Dial("udp", serverAddress.String())
 		Expect(err).ToNot(HaveOccurred())
-		defer clientConnection.Close()
+		defer clientConnection.Close() //nolint:errcheck
 
 		// We send one byte less than the full message.
 		Expect(clientConnection.Write(buffer[:n1-1])).Error().ToNot(HaveOccurred())

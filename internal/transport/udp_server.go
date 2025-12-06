@@ -9,10 +9,10 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/backbone81/membership/internal/encryption"
 	"github.com/go-logr/logr"
 
 	"github.com/backbone81/membership/internal/encoding"
+	"github.com/backbone81/membership/internal/encryption"
 )
 
 // UDPServer provides unreliable transport for receiving data from members.
@@ -33,7 +33,7 @@ type UDPServer struct {
 
 // NewUDPServer creates a new UDPServer.
 func NewUDPServer(logger logr.Logger, target Target, bindAddress string, receiveBufferLength int, keys []encryption.Key) (*UDPServer, error) {
-	var gcms []cipher.AEAD
+	var gcms []cipher.AEAD //nolint:prealloc // no need to pre-allocate here
 	for _, key := range keys {
 		aesCipher, err := aes.NewCipher(key[:])
 		if err != nil {

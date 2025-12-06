@@ -6,14 +6,14 @@ import (
 	"net"
 	"testing"
 
-	"github.com/backbone81/membership/internal/roundtriptime"
-	"github.com/backbone81/membership/internal/utility"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	"github.com/backbone81/membership/internal/encoding"
 	"github.com/backbone81/membership/internal/membership"
+	"github.com/backbone81/membership/internal/roundtriptime"
 	"github.com/backbone81/membership/internal/transport"
+	"github.com/backbone81/membership/internal/utility"
 )
 
 var _ = Describe("List", func() {
@@ -235,7 +235,7 @@ var _ = Describe("List", func() {
 			Expect(addresses).To(HaveLen(3))
 
 			// Verify sorted ascending
-			for i := 0; i < len(addresses)-1; i++ {
+			for i := range len(addresses) - 1 {
 				Expect(encoding.CompareAddress(addresses[i], addresses[i+1])).To(Equal(-1),
 					"Addresses should be sorted ascending")
 			}
@@ -304,7 +304,7 @@ var _ = Describe("List", func() {
 				return true
 			})
 
-			for i := 0; i < len(addresses)-1; i++ {
+			for i := range len(addresses) - 1 {
 				Expect(encoding.CompareAddress(addresses[i], addresses[i+1])).To(Equal(-1),
 					"Address at index %d (%v) should be less than address at index %d (%v)",
 					i, addresses[i], i+1, addresses[i+1])
@@ -400,7 +400,7 @@ var _ = Describe("List", func() {
 			Expect(list.DirectPing()).To(Succeed())
 			Expect(store.Addresses).To(BeEmpty())
 			pendingPings := debugList.GetPendingDirectPings()
-			Expect(pendingPings).To(HaveLen(0))
+			Expect(pendingPings).To(BeEmpty())
 		})
 
 		It("should send ping to single member", func() {
@@ -938,7 +938,7 @@ var _ = Describe("List", func() {
 			Expect(list.DirectPing()).To(Succeed())
 			debugList.ClearGossip()
 			Expect(list.EndOfProtocolPeriod()).To(Succeed())
-			Expect(debugList.GetMembers()).To(HaveLen(0))
+			Expect(debugList.GetMembers()).To(BeEmpty())
 			members := debugList.GetFaultyMembers()
 			Expect(members).To(HaveLen(1))
 			Expect(members[0].State).To(Equal(encoding.MemberStateFaulty))
@@ -1030,7 +1030,7 @@ var _ = Describe("List", func() {
 			debugList := membership.DebugList(list)
 
 			// Add gossip to queue
-			for i := 0; i < 30; i++ {
+			for i := range 30 {
 				debugList.GetGossip().Add(encoding.MessageAlive{
 					Destination:       encoding.NewAddress(net.IPv4(255, 255, 255, 255), i),
 					IncarnationNumber: 0,
@@ -2862,6 +2862,6 @@ func newTestList(options ...membership.Option) *membership.List {
 		membership.WithTCPClient(&transport.Discard{}),
 		membership.WithRoundTripTimeTracker(roundtriptime.NewTracker()),
 	}
-	allOptions := append(defaultOptions, options...)
-	return membership.NewList(allOptions...)
+	defaultOptions = append(defaultOptions, options...)
+	return membership.NewList(defaultOptions...)
 }

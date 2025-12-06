@@ -66,7 +66,7 @@ func (c *UDPClient) send(address encoding.Address, buffer []byte) error {
 	if err != nil {
 		return fmt.Errorf("connecting to remote host at %q: %w", address, err)
 	}
-	defer connection.Close()
+	defer connection.Close() //nolint:errcheck
 
 	n, err := connection.Write(buffer)
 	TransmitBytes.WithLabelValues("udp_client").Add(float64(n))

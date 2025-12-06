@@ -3,8 +3,9 @@ package scheduler
 import (
 	"time"
 
-	"github.com/backbone81/membership/internal/roundtriptime"
 	"github.com/go-logr/logr"
+
+	"github.com/backbone81/membership/internal/roundtriptime"
 )
 
 // Config is the configuration the scheduler is using.

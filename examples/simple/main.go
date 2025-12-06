@@ -8,10 +8,11 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/go-logr/stdr"
+
 	"github.com/backbone81/membership/internal/encoding"
 	"github.com/backbone81/membership/internal/encryption"
 	"github.com/backbone81/membership/pkg/membership"
-	"github.com/go-logr/stdr"
 )
 
 func main() {

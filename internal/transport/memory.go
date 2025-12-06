@@ -130,9 +130,7 @@ func (m *Memory) Addresses() []encoding.Address {
 	defer m.mutex.Unlock()
 
 	addresses := slices.Collect(maps.Keys(m.targets))
-	slices.SortFunc(addresses, func(a, b encoding.Address) int {
-		return encoding.CompareAddress(a, b)
-	})
+	slices.SortFunc(addresses, encoding.CompareAddress)
 	return addresses
 }
 

@@ -9,10 +9,10 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/backbone81/membership/internal/encryption"
 	"github.com/go-logr/logr"
 
 	"github.com/backbone81/membership/internal/encoding"
+	"github.com/backbone81/membership/internal/encryption"
 )
 
 // TCPServer provides reliable transport for receiving data from members.
@@ -32,7 +32,7 @@ type TCPServer struct {
 
 // NewTCPServer creates a new TCPServer transport.
 func NewTCPServer(logger logr.Logger, target Target, bindAddress string, keys []encryption.Key) (*TCPServer, error) {
-	var gcms []cipher.AEAD
+	var gcms []cipher.AEAD //nolint:prealloc // no need to pre-allocate here
 	for _, key := range keys {
 		aesCipher, err := aes.NewCipher(key[:])
 		if err != nil {

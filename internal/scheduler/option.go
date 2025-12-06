@@ -3,8 +3,9 @@ package scheduler
 import (
 	"time"
 
-	"github.com/backbone81/membership/internal/roundtriptime"
 	"github.com/go-logr/logr"
+
+	"github.com/backbone81/membership/internal/roundtriptime"
 )
 
 // Option is the function signature for all scheduler options to implement.

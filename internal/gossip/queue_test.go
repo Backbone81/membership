@@ -113,7 +113,7 @@ var _ = Describe("Queue", func() {
 		It("should clear queue with multiple messages", func() {
 			queue := gossip.NewQueue()
 
-			for i := 0; i < 10; i++ {
+			for i := range 10 {
 				queue.Add(encoding.MessageAlive{
 					Destination:       encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
 					IncarnationNumber: 0,
@@ -137,7 +137,7 @@ var _ = Describe("Queue", func() {
 		It("should clear messages distributed across buckets", func() {
 			queue := gossip.NewQueue()
 
-			for i := 0; i < 10; i++ {
+			for i := range 10 {
 				queue.Add(encoding.MessageAlive{
 					Destination:       encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
 					IncarnationNumber: 0,
@@ -193,7 +193,7 @@ var _ = Describe("Queue", func() {
 		It("should remove messages which are falling out of the active buckets", func() {
 			queue := gossip.NewQueue(gossip.WithMaxTransmissionCount(4))
 
-			for i := 0; i < 10; i++ {
+			for i := range 10 {
 				queue.Add(encoding.MessageAlive{
 					Destination:       encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
 					IncarnationNumber: 0,
@@ -288,7 +288,7 @@ var _ = Describe("Queue", func() {
 
 		It("should grow ring buffer when capacity is reached", func() {
 			queue := gossip.NewQueue(gossip.WithPreAllocationCount(4))
-			for i := 0; i < 3; i++ {
+			for i := range 3 {
 				queue.Add(encoding.MessageAlive{
 					Destination:       encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
 					IncarnationNumber: 0,
@@ -304,7 +304,7 @@ var _ = Describe("Queue", func() {
 			Expect(queue.Cap()).To(Equal(8))
 			Expect(queue.Len()).To(Equal(4))
 
-			for i := 0; i < 4; i++ {
+			for i := range 4 {
 				Expect(GetFromQueueByIndex(queue, i).Destination.Port()).To(Equal(1024 + i))
 			}
 			Expect(queue.ValidateInternalState()).To(Succeed())
@@ -316,7 +316,7 @@ var _ = Describe("Queue", func() {
 				gossip.WithMaxTransmissionCount(3),
 			)
 
-			for i := 0; i < 3; i++ {
+			for i := range 3 {
 				queue.Add(encoding.MessageAlive{
 					Destination:       encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i),
 					IncarnationNumber: 0,
@@ -340,7 +340,7 @@ var _ = Describe("Queue", func() {
 			Expect(queue.Len()).To(Equal(4))
 
 			// Verify all messages accessible
-			for i := 0; i < 4; i++ {
+			for i := range 4 {
 				Expect(GetFromQueueByIndex(queue, i).Destination.Port()).To(Equal(1024 + 3 + i))
 			}
 			Expect(queue.ValidateInternalState()).To(Succeed())
@@ -1094,14 +1094,14 @@ var _ = Describe("Queue", func() {
 			addresses = append(addresses, encoding.NewAddress(net.IPv4(1, 2, 3, 4), 1024+i))
 		}
 		for range 100_000 {
-			switch selection := rand.Intn(100); {
+			switch selection := rand.Intn(100); { //nolint:gosec // we do not need crypto/rand here
 			case selection < 25: // 25% of the time we add a message
 				queue.Add(encoding.MessageAlive{
-					Destination:       addresses[rand.Intn(len(addresses))],
-					IncarnationNumber: uint16(rand.Intn(5)),
+					Destination:       addresses[rand.Intn(len(addresses))], //nolint:gosec // we do not need crypto/rand here
+					IncarnationNumber: uint16(rand.Intn(5)),                 //nolint:gosec // we do not need crypto/rand here
 				}.ToMessage())
 			case selection < 100: // 75% of the time we mark 3 messages as transmitted
-				queue.MarkTransmitted(rand.Intn(3))
+				queue.MarkTransmitted(rand.Intn(3)) //nolint:gosec // we do not need crypto/rand here
 			}
 			Expect(queue.ValidateInternalState()).To(Succeed())
 		}
@@ -1141,7 +1141,7 @@ func BenchmarkQueue_Add(b *testing.B) {
 				// the ip address up and keep a port which is different from what we put in before.
 				addresses := make([]encoding.Address, b.N)
 				for i := range b.N {
-					ipBytes := encoding.Endian.AppendUint32(nil, uint32(i+1))
+					ipBytes := encoding.Endian.AppendUint32(nil, uint32(i+1)) //nolint:gosec // overflow is not an issue
 					addresses[i] = encoding.NewAddress(net.IPv4(ipBytes[0], ipBytes[1], ipBytes[2], ipBytes[3]), 512)
 				}
 				b.ResetTimer()

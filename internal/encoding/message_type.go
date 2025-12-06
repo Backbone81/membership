@@ -6,8 +6,7 @@ import "errors"
 type MessageType int
 
 const (
-	MessageTypeNone MessageType = iota // We start with a placeholder message type to detect missing types.
-	MessageTypeDirectPing
+	MessageTypeDirectPing MessageType = iota + 1 // We start with a placeholder message type to detect missing types.
 	MessageTypeDirectAck
 	MessageTypeIndirectPing
 	MessageTypeIndirectAck
@@ -33,6 +32,7 @@ func MessageTypeFromBuffer(buffer []byte) (MessageType, int, error) {
 	return MessageType(buffer[0]), 1, nil
 }
 
+//nolint:cyclop
 func (t MessageType) String() string {
 	switch t {
 	case MessageTypeDirectPing:

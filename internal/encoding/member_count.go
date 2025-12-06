@@ -11,7 +11,7 @@ func AppendMemberCountToBuffer(buffer []byte, memberCount int) ([]byte, int, err
 	if memberCount < 0 || math.MaxUint32 < memberCount {
 		return buffer, 0, errors.New("member count out of bounds")
 	}
-	return Endian.AppendUint32(buffer, uint32(memberCount)), 4, nil
+	return Endian.AppendUint32(buffer, uint32(memberCount)), 4, nil //nolint:gosec // already checked before
 }
 
 // MemberCountFromBuffer reads the number of members from the provided buffer.

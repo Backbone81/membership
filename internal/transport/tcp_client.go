@@ -57,7 +57,7 @@ func (c *TCPClient) send(address encoding.Address, plaintext []byte) error {
 	}
 
 	var lengthBuffer [4]byte
-	encoding.Endian.PutUint32(lengthBuffer[:], uint32(len(plaintext)))
+	encoding.Endian.PutUint32(lengthBuffer[:], uint32(len(plaintext))) //nolint:gosec // we already checked before
 	c.ciphertext = c.gcm.Seal(c.ciphertext[:0], nil, lengthBuffer[:], nil)
 	c.ciphertext = c.gcm.Seal(c.ciphertext, nil, plaintext, nil)
 	Encryptions.WithLabelValues("tcp_client").Add(2)
@@ -66,7 +66,7 @@ func (c *TCPClient) send(address encoding.Address, plaintext []byte) error {
 	if err != nil {
 		return fmt.Errorf("connecting to remote host at %q: %w", address, err)
 	}
-	defer connection.Close()
+	defer connection.Close() //nolint:errcheck
 
 	n, err := connection.Write(c.ciphertext)
 	TransmitBytes.WithLabelValues("tcp_client").Add(float64(n))

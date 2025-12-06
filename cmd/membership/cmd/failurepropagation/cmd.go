@@ -9,13 +9,13 @@ import (
 	"os"
 	"slices"
 
-	"github.com/backbone81/membership/internal/roundtriptime"
 	"github.com/go-logr/logr"
 	"github.com/go-logr/stdr"
 	"github.com/spf13/cobra"
 
 	"github.com/backbone81/membership/internal/encoding"
 	"github.com/backbone81/membership/internal/membership"
+	"github.com/backbone81/membership/internal/roundtriptime"
 	"github.com/backbone81/membership/internal/transport"
 	"github.com/backbone81/membership/internal/utility"
 )
@@ -26,7 +26,7 @@ var (
 	maxMemberCount int
 )
 
-// failurePropagationCmd represents the allDetection command
+// failurePropagationCmd represents the allDetection command.
 var failurePropagationCmd = &cobra.Command{
 	Use:   "failure-propagation",
 	Short: "How long a cluster needs to propagate a failed member.",
@@ -85,7 +85,7 @@ func buildCluster(memberCount int, memoryTransport *transport.Memory) ([]*member
 	// Create our membership lists and make them know each other. Note that we are adding one member less but
 	// still force all members to know of the last one which we do not add. This is the member we simulate to be
 	// faulty.
-	var lists []*membership.List
+	lists := make([]*membership.List, 0, memberCount)
 	for i := range memberCount - 1 {
 		address := encoding.NewAddress(net.IPv4(255, 255, 255, 255), i+1)
 		options := []membership.Option{
@@ -116,6 +116,7 @@ func buildCluster(memberCount int, memoryTransport *transport.Memory) ([]*member
 	return lists, nil
 }
 
+//nolint:gocognit,cyclop
 func runProtocol(logger logr.Logger, lists []*membership.List, memoryTransport *transport.Memory, memberCount int) error {
 	detected := make([]int, len(lists))
 	for i := range detected {

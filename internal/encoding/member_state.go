@@ -6,8 +6,7 @@ import "errors"
 type MemberState int
 
 const (
-	MemberStateNone MemberState = iota // We start with a placeholder member state to detect missing states.
-	MemberStateAlive
+	MemberStateAlive MemberState = iota + 1 // We start with a placeholder member state to detect missing states.
 	MemberStateSuspect
 	MemberStateFaulty
 )
@@ -22,7 +21,7 @@ func AppendMemberStateToBuffer(buffer []byte, memberState MemberState) ([]byte, 
 // Returns the member state, the number of bytes read and any error which occurred.
 func MemberStateFromBuffer(buffer []byte) (MemberState, int, error) {
 	if len(buffer) < 1 {
-		return MemberStateNone, 0, errors.New("member state buffer too small")
+		return 0, 0, errors.New("member state buffer too small")
 	}
 	return MemberState(buffer[0]), 1, nil
 }

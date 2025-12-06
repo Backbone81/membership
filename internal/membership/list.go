@@ -9,12 +9,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/backbone81/membership/internal/faultymember"
-	"github.com/backbone81/membership/internal/randmember"
 	"github.com/go-logr/logr"
 
 	"github.com/backbone81/membership/internal/encoding"
+	"github.com/backbone81/membership/internal/faultymember"
 	"github.com/backbone81/membership/internal/gossip"
+	"github.com/backbone81/membership/internal/randmember"
 	"github.com/backbone81/membership/internal/utility"
 )
 
@@ -617,7 +617,7 @@ func (l *List) addMember(member encoding.Member) {
 
 	// We pick a random location to insert the new member into the random indexes slice. We need to add +1 to the length
 	// of that slice to allow for appending at the end.
-	insertIndex := rand.Intn(len(l.randomIndexes) + 1)
+	insertIndex := rand.Intn(len(l.randomIndexes) + 1) //nolint:gosec // we do not need crypto/rand here
 	l.randomIndexes = slices.Insert(l.randomIndexes, insertIndex, memberIndex)
 	if insertIndex <= l.nextRandomIndex {
 		// The new member index was inserted before or at the next random index. We therefore move the next random index
@@ -679,6 +679,8 @@ func (l *List) removeMemberByIndex(index int) {
 // DispatchDatagram is the entrypoint which processes messages received by other members. The buffer provided as
 // parameter might contain any number of messages. This method will unmarshal messages and pass them on for processing
 // until the buffer is exhausted.
+//
+//nolint:gocognit,cyclop,funlen
 func (l *List) DispatchDatagram(buffer []byte) error {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()

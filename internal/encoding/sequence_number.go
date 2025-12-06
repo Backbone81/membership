@@ -7,7 +7,7 @@ import (
 // AppendSequenceNumberToBuffer appends the sequence number to the provided buffer encoded for network transfer.
 // Returns the buffer with the data appended, the number of bytes appended and any error which occurred.
 func AppendSequenceNumberToBuffer(buffer []byte, sequenceNumber uint16) ([]byte, int, error) {
-	return Endian.AppendUint16(buffer, uint16(sequenceNumber)), 2, nil
+	return Endian.AppendUint16(buffer, sequenceNumber), 2, nil
 }
 
 // SequenceNumberFromBuffer reads the sequence number from the provided buffer.

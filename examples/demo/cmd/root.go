@@ -8,10 +8,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/backbone81/membership/internal/encryption"
 	"github.com/go-logr/stdr"
 	"github.com/spf13/cobra"
 
+	"github.com/backbone81/membership/internal/encryption"
 	"github.com/backbone81/membership/pkg/membership"
 )
 
@@ -112,6 +112,7 @@ func Execute() {
 	}
 }
 
+//nolint:funlen
 func init() {
 	rootCmd.PersistentFlags().IntVarP(
 		&verbosity,

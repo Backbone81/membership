@@ -20,7 +20,7 @@ var (
 	safetyFactor       float64
 )
 
-// statisticsCmd represents the allDetection command
+// statisticsCmd represents the allDetection command.
 var statisticsCmd = &cobra.Command{
 	Use:          "statistics",
 	Short:        "Displays some analytical statistics about clusters.",

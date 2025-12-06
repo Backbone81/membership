@@ -17,6 +17,7 @@ type List struct {
 	tcpServerTransport *inttransport.TCPServer
 }
 
+//nolint:funlen
 func NewList(options ...Option) (*List, error) {
 	config := DefaultConfig
 	for _, option := range options {

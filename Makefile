@@ -33,8 +33,7 @@ prepare:
 	go mod tidy
 	go fmt $(PACKAGE)
 	go vet $(PACKAGE)
-	# Linter temporarily disabled during initial development stage.
-	# golangci-lint run --fix
+	golangci-lint run --fix
 
 .PHONY: clean
 clean:

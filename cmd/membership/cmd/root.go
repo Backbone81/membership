@@ -3,13 +3,14 @@ package cmd
 import (
 	"os"
 
+	"github.com/spf13/cobra"
+
 	"github.com/backbone81/membership/cmd/membership/cmd/failuredetection"
 	"github.com/backbone81/membership/cmd/membership/cmd/failurepropagation"
 	"github.com/backbone81/membership/cmd/membership/cmd/joinpropagation"
 	"github.com/backbone81/membership/cmd/membership/cmd/keygen"
 	"github.com/backbone81/membership/cmd/membership/cmd/lossyjoin"
 	"github.com/backbone81/membership/cmd/membership/cmd/statistics"
-	"github.com/spf13/cobra"
 )
 
 // rootCmd represents the base command when called without any subcommands.

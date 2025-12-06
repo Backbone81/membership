@@ -57,6 +57,7 @@ func NewList(options ...Option) (*List, error) {
 		intmembership.WithDirectPingMemberCount(config.DirectPingMemberCount),
 		intmembership.WithIndirectPingMemberCount(config.IndirectPingMemberCount),
 		intmembership.WithRoundTripTimeTracker(rttTracker),
+		intmembership.WithReconnectBootstrapMembers(config.ReconnectBootstrapMembers),
 	)
 	udpServerTransport, err := inttransport.NewUDPServer(config.Logger, list, config.BindAddress, config.MaxDatagramLengthReceive, config.EncryptionKeys)
 	if err != nil {

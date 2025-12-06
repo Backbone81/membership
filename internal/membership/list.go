@@ -387,6 +387,10 @@ func (l *List) EndOfProtocolPeriod() error {
 	// for that already.
 	MembersByState.WithLabelValues("alive").Set(float64(len(l.members)))
 	MembersByState.WithLabelValues("faulty").Set(float64(l.faultyMembers.Len()))
+
+	if err := l.reconnectBootstrapMembers(); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -485,6 +489,47 @@ func (l *List) markSuspectsAsFaulty() {
 		}.ToMessage())
 		l.removeMemberByIndex(i) // must always happen last to keep the member alive during this method
 	}
+}
+
+func (l *List) reconnectBootstrapMembers() error {
+	if !l.config.ReconnectBootstrapMembers {
+		return nil
+	}
+
+	var joinedErr error
+	for _, bootstrapMember := range l.config.BootstrapMembers {
+		if _, found := slices.BinarySearchFunc(
+			l.members,
+			encoding.Member{Address: bootstrapMember},
+			encoding.CompareMember,
+		); found {
+			// The bootstrap member is part of the members list. No need to re-add it.
+			continue
+		}
+		if _, found := l.faultyMembers.Get(bootstrapMember); found {
+			// The bootstrap member is part of the faulty members list. No need to re-add it.
+			continue
+		}
+
+		// The bootstrap member is not in members or faulty members. Re-add it to try to fix a network split.
+		l.logger.Info("Re-adding bootstrap member",
+			"destination", bootstrapMember,
+		)
+		l.addMember(encoding.Member{
+			Address:           bootstrapMember,
+			State:             encoding.MemberStateAlive,
+			IncarnationNumber: 0,
+		})
+
+		// We also request the full member list immediately to try and consolidate the two partitions as quickly as
+		// possible.
+		if err := l.sendWithGossip(bootstrapMember, encoding.MessageListRequest{
+			Source: l.self,
+		}.ToMessage()); err != nil {
+			joinedErr = errors.Join(joinedErr, err)
+		}
+	}
+	return joinedErr
 }
 
 func (l *List) adjustDirectPingMemberCount() {

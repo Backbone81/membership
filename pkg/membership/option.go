@@ -114,3 +114,9 @@ func WithEncryptionKey(key encryption.Key) Option {
 		config.EncryptionKeys = append(config.EncryptionKeys, key)
 	}
 }
+
+func WithReconnectBootstrapMembers(reconnect bool) Option {
+	return func(config *Config) {
+		config.ReconnectBootstrapMembers = reconnect
+	}
+}

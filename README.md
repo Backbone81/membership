@@ -56,6 +56,8 @@ mechanics in an infection style way.
   help with disseminating those messages faster.
 - Faulty members are dropped after they have been propagated often enough through the full memberlist sync.
 - Network messages are always encrypted with AES-256 in GCM mode.
+- Allows to automatically re-add the bootstrap members whenever they are dropped to allow automatic healing of network
+  segmentations.
 
 ## Quick Start
 
@@ -64,6 +66,8 @@ Install:
 ```shell
 go get github.com/backbone81/membership
 ```
+
+A minimal example to run the membership list looks like this:
 
 ```go
 package main
@@ -116,6 +120,12 @@ func execute() error {
 	return nil
 }
 ```
+
+When the membership list is up and running, you can get notified with callbacks registered by
+membership.WithMemberAddedCallback() and membership.WithMemberRemovedCallback() of members being added or removed, or
+you can iterate over all members with list.ForEach().
+
+Build your own application on top of that membership list then.
 
 See the [examples](examples) folder for more examples.
 
@@ -230,16 +240,12 @@ All parts of this library are covered with extensive benchmarks. See [docs](docs
 
 ### Important Topics
 
+- There is a bug, which causes every list request to trigger a refute about being alive with an increase in incarnation
+  number.
+- Address remaining TODOs in source code.
 - Investigate how we can increase the suspicion timeout when we are under high CPU load. High CPU load can be detected
   by the scheduler as the times between direct pings, indirect pings and end of protocol are either significant shorter
   than expected or even overshot immediately.
-- How can a member re-join when it was disconnected through a network partition from everybody else for a long time?
-  We probably need to deal with the bootstrap members in a way where we try to contact them periodically when they
-  dropped out of our member list. Depending on a configuration, bootstrap members could be re-added regularly again
-  under the assumption that the bootstrap members are always there. If bootstrap members are ephemeral, this should be
-  disabled.
-- There is a bug, which causes every list request to trigger a refute about being alive with an increase in incarnation
-  number.
 
 ### Nice to Have
 

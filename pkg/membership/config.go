@@ -87,19 +87,26 @@ type Config struct {
 	// key from the last position to the first position, you can have a rolling key rotation without having to shut down
 	// all nodes at the same time.
 	EncryptionKeys []encryption.Key
+
+	// ReconnectBootstrapMembers reports if bootstrap members are re-added to the member list whenever they drop
+	// from the membership list. This is helpful with automatically healing a network segmentation, but assumes that
+	// the bootstrap members are static. In cases where bootstrap members are ephemeral, this might lead to unnecessary
+	// adds and removes and should better be disabled.
+	ReconnectBootstrapMembers bool
 }
 
 var DefaultConfig = Config{
-	ProtocolPeriod:           scheduler.DefaultConfig.ProtocolPeriod,
-	MaxDatagramLengthSend:    intmembership.DefaultConfig.MaxDatagramLengthSend,
-	MaxDatagramLengthReceive: intmembership.DefaultConfig.MaxDatagramLengthSend,
-	BindAddress:              ":3000",
-	MaxSleepDuration:         scheduler.DefaultConfig.MaxSleepDuration,
-	ListRequestInterval:      scheduler.DefaultConfig.ListRequestInterval,
-	SafetyFactor:             intmembership.DefaultConfig.SafetyFactor,
-	ShutdownMemberCount:      intmembership.DefaultConfig.ShutdownMemberCount,
-	DirectPingMemberCount:    intmembership.DefaultConfig.DirectPingMemberCount,
-	MinDirectPingMemberCount: intmembership.DefaultConfig.MinDirectPingMemberCount,
-	MaxDirectPingMemberCount: intmembership.DefaultConfig.MaxDirectPingMemberCount,
-	IndirectPingMemberCount:  intmembership.DefaultConfig.IndirectPingMemberCount,
+	ProtocolPeriod:            scheduler.DefaultConfig.ProtocolPeriod,
+	MaxDatagramLengthSend:     intmembership.DefaultConfig.MaxDatagramLengthSend,
+	MaxDatagramLengthReceive:  intmembership.DefaultConfig.MaxDatagramLengthSend,
+	BindAddress:               ":3000",
+	MaxSleepDuration:          scheduler.DefaultConfig.MaxSleepDuration,
+	ListRequestInterval:       scheduler.DefaultConfig.ListRequestInterval,
+	SafetyFactor:              intmembership.DefaultConfig.SafetyFactor,
+	ShutdownMemberCount:       intmembership.DefaultConfig.ShutdownMemberCount,
+	DirectPingMemberCount:     intmembership.DefaultConfig.DirectPingMemberCount,
+	MinDirectPingMemberCount:  intmembership.DefaultConfig.MinDirectPingMemberCount,
+	MaxDirectPingMemberCount:  intmembership.DefaultConfig.MaxDirectPingMemberCount,
+	IndirectPingMemberCount:   intmembership.DefaultConfig.IndirectPingMemberCount,
+	ReconnectBootstrapMembers: intmembership.DefaultConfig.ReconnectBootstrapMembers,
 }

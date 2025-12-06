@@ -81,17 +81,24 @@ type Config struct {
 
 	// MemberPreAllocation is the number of members which are pre-allocated to reduce allocations later.
 	MemberPreAllocation int
+
+	// ReconnectBootstrapMembers reports if bootstrap members are re-added to the member list whenever they drop
+	// from the membership list. This is helpful with automatically healing a network segmentation, but assumes that
+	// the bootstrap members are static. In cases where bootstrap members are ephemeral, this might lead to unnecessary
+	// adds and removes and should better be disabled.
+	ReconnectBootstrapMembers bool
 }
 
 // DefaultConfig provides a default configuration which should work for most use-cases.
 var DefaultConfig = Config{
-	MaxDatagramLengthSend:    512,
-	SafetyFactor:             3,
-	ShutdownMemberCount:      3,
-	DirectPingMemberCount:    1,
-	MinDirectPingMemberCount: 1,
-	MaxDirectPingMemberCount: 16,
-	IndirectPingMemberCount:  3,
-	PendingPingPreAllocation: 16,
-	MemberPreAllocation:      128,
+	MaxDatagramLengthSend:     512,
+	SafetyFactor:              3,
+	ShutdownMemberCount:       3,
+	DirectPingMemberCount:     1,
+	MinDirectPingMemberCount:  1,
+	MaxDirectPingMemberCount:  16,
+	IndirectPingMemberCount:   3,
+	PendingPingPreAllocation:  16,
+	MemberPreAllocation:       128,
+	ReconnectBootstrapMembers: true,
 }

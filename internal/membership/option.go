@@ -119,3 +119,9 @@ func WithMemberPreAllocation(count int) Option {
 		config.MemberPreAllocation = count
 	}
 }
+
+func WithReconnectBootstrapMembers(reconnect bool) Option {
+	return func(config *Config) {
+		config.ReconnectBootstrapMembers = reconnect
+	}
+}

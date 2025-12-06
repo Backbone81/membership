@@ -845,6 +845,75 @@ var _ = Describe("List", func() {
 		})
 	})
 
+	Context("EndOfProtocolPeriod", func() {
+		It("should re-add bootstrap members after they are removed", func() {
+			var store transport.Store
+			bootstrapMembers := []encoding.Address{
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 2),
+			}
+			list := newTestList(
+				membership.WithUDPClient(&store),
+				membership.WithBootstrapMembers(bootstrapMembers),
+				membership.WithReconnectBootstrapMembers(true),
+			)
+			debugList := membership.DebugList(list)
+			Expect(list.Len()).To(Equal(2))
+			Expect(debugList.GetFaultyMembers()).To(BeEmpty())
+
+			By("Marking bootstrap members as faulty and dropping them completely")
+			debugList.SetFaultyMembers(nil)
+			debugList.SetMembers(nil)
+			Expect(list.Len()).To(Equal(0))
+			Expect(debugList.GetFaultyMembers()).To(BeEmpty())
+
+			By("End of protocol period should re-add them")
+			Expect(list.EndOfProtocolPeriod()).To(Succeed())
+			Expect(list.Len()).To(Equal(2))
+			Expect(debugList.GetFaultyMembers()).To(BeEmpty())
+			list.ForEach(func(address encoding.Address) bool {
+				Expect(bootstrapMembers).To(ContainElement(address))
+				return true
+			})
+
+			By("Verify that list request was sent")
+			Expect(store.Buffers).To(HaveLen(2))
+			var msg encoding.MessageListRequest
+			Expect(msg.FromBuffer(store.Buffers[0])).Error().ToNot(HaveOccurred())
+			Expect(msg.FromBuffer(store.Buffers[1])).Error().ToNot(HaveOccurred())
+		})
+
+		It("should not re-add bootstrap members after they are removed when disabled", func() {
+			var store transport.Store
+			bootstrapMembers := []encoding.Address{
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 1),
+				encoding.NewAddress(net.IPv4(255, 255, 255, 255), 2),
+			}
+			list := newTestList(
+				membership.WithUDPClient(&store),
+				membership.WithBootstrapMembers(bootstrapMembers),
+				membership.WithReconnectBootstrapMembers(false),
+			)
+			debugList := membership.DebugList(list)
+			Expect(list.Len()).To(Equal(2))
+			Expect(debugList.GetFaultyMembers()).To(BeEmpty())
+
+			By("Marking bootstrap members as faulty and dropping them completely")
+			debugList.SetFaultyMembers(nil)
+			debugList.SetMembers(nil)
+			Expect(list.Len()).To(Equal(0))
+			Expect(debugList.GetFaultyMembers()).To(BeEmpty())
+
+			By("End of protocol period should re-add them")
+			Expect(list.EndOfProtocolPeriod()).To(Succeed())
+			Expect(list.Len()).To(Equal(0))
+			Expect(debugList.GetFaultyMembers()).To(BeEmpty())
+
+			By("Verify that list request was sent")
+			Expect(store.Buffers).To(BeEmpty())
+		})
+	})
+
 	Context("ListRequestObserved", func() {
 		It("should do nothing when no pending pings", func() {
 			bootstrapMembers := []encoding.Address{

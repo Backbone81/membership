@@ -1,4 +1,4 @@
-package packetlossjoin
+package lossyjoin
 
 import (
 	"math"
@@ -6,6 +6,7 @@ import (
 
 	"github.com/backbone81/membership/internal/roundtriptime"
 	"github.com/go-logr/logr"
+	"github.com/spf13/cobra"
 
 	"github.com/backbone81/membership/internal/encoding"
 	"github.com/backbone81/membership/internal/membership"
@@ -13,17 +14,44 @@ import (
 	"github.com/backbone81/membership/internal/utility"
 )
 
-// PacketLossJoin measures the cluster size during member joins with an unreliable transport.
-func PacketLossJoin(logger logr.Logger) error {
-	logger.Info("The cluster size during member joins with an unreliable transport.")
-	for memberCount := range utility.ClusterSize(2, 8, 128) {
-		memoryTransport := transport.NewMemory()
+var (
+	memberCount        int
+	networkReliability float64
+)
 
-		if err := runProtocol(logger, memoryTransport, memberCount); err != nil {
+// lossyJoinCmd represents the allDetection command
+var lossyJoinCmd = &cobra.Command{
+	Use:   "lossy-join",
+	Short: "Joins a set of new members through a lossy network.",
+	Long: `Starts off with a single member and joins one new member every protocol period. The network is unreliable
+and drops some network messages. The simulation shows at what number of members the cluster stabilizes.`,
+	SilenceUsage: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		logger, zapLogger, err := utility.CreateLogger(0)
+		if err != nil {
 			return err
 		}
-	}
-	return nil
+		defer zapLogger.Sync()
+
+		return runProtocol(logger, transport.NewMemory(), memberCount)
+	},
+}
+
+func RegisterSubCommand(command *cobra.Command) {
+	command.AddCommand(lossyJoinCmd)
+
+	lossyJoinCmd.PersistentFlags().IntVar(
+		&memberCount,
+		"member-count",
+		512,
+		"The member count to simulate.",
+	)
+	lossyJoinCmd.PersistentFlags().Float64Var(
+		&networkReliability,
+		"network-reliability",
+		0.99,
+		"The probability of a network message arriving at its target as a value between 0 and 1.",
+	)
 }
 
 func runProtocol(logger logr.Logger, memoryTransport *transport.Memory, memberCount int) error {
@@ -38,11 +66,11 @@ func runProtocol(logger logr.Logger, memoryTransport *transport.Memory, memberCo
 				membership.WithAdvertisedAddress(address),
 				membership.WithUDPClient(&transport.Unreliable{
 					Transport:   memoryTransport.Client(),
-					Reliability: 0.9,
+					Reliability: networkReliability,
 				}),
 				membership.WithTCPClient(&transport.Unreliable{
 					Transport:   memoryTransport.Client(),
-					Reliability: 0.9,
+					Reliability: networkReliability,
 				}),
 				membership.WithRoundTripTimeTracker(roundtriptime.NewTracker()),
 			}
@@ -92,23 +120,6 @@ func runProtocol(logger logr.Logger, memoryTransport *transport.Memory, memberCo
 			"protocol-period", protocolPeriod+1,
 			"min-cluster-size", minMemberCount+1,
 		)
-		if hasStableTail(observedMinMemberCount) {
-			return nil
-		}
 	}
 	return nil
-}
-
-func hasStableTail(s []int) bool {
-	if len(s) < 5 {
-		return false
-	}
-
-	// We stop as soon as we have a stable state for at least 5 protocol periods.
-	for i := len(s) - 5; i < len(s); i++ {
-		if s[i] != s[len(s)-1] {
-			return false
-		}
-	}
-	return true
 }

@@ -5,7 +5,10 @@ import (
 
 	"github.com/backbone81/membership/cmd/membership/cmd/failuredetection"
 	"github.com/backbone81/membership/cmd/membership/cmd/failurepropagation"
+	"github.com/backbone81/membership/cmd/membership/cmd/joinpropagation"
 	"github.com/backbone81/membership/cmd/membership/cmd/keygen"
+	"github.com/backbone81/membership/cmd/membership/cmd/lossyjoin"
+	"github.com/backbone81/membership/cmd/membership/cmd/statistics"
 	"github.com/spf13/cobra"
 )
 
@@ -28,5 +31,8 @@ func Execute() {
 func init() {
 	failuredetection.RegisterSubCommand(rootCmd)
 	failurepropagation.RegisterSubCommand(rootCmd)
+	joinpropagation.RegisterSubCommand(rootCmd)
 	keygen.RegisterSubCommand(rootCmd)
+	lossyjoin.RegisterSubCommand(rootCmd)
+	statistics.RegisterSubCommand(rootCmd)
 }

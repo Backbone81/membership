@@ -237,7 +237,6 @@ All parts of this library are covered with extensive benchmarks. See [docs](docs
   dropped out of our member list. Depending on a configuration, bootstrap members could be re-added regularly again
   under the assumption that the bootstrap members are always there. If bootstrap members are ephemeral, this should be
   disabled.
-- Use timeouts for the tcp transports.
 - There is a bug, which causes every list request to trigger a refute about being alive with an increase in incarnation
   number.
 

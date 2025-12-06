@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"time"
 
 	"github.com/backbone81/membership/internal/encoding"
 	"github.com/backbone81/membership/internal/encryption"
@@ -17,8 +18,10 @@ import (
 // TCPClient is not safe for concurrent use by multiple goroutines. Callers must serialize access to all methods.
 // As this client is always called under the lock of the membership.List we have that serialization there.
 type TCPClient struct {
-	gcm        cipher.AEAD
-	ciphertext []byte
+	gcm          cipher.AEAD
+	ciphertext   []byte
+	dialTimeout  time.Duration
+	writeTimeout time.Duration
 }
 
 // TCPClient implements Transport.
@@ -37,8 +40,10 @@ func NewTCPClient(key encryption.Key) (*TCPClient, error) {
 	}
 
 	return &TCPClient{
-		gcm:        gcm,
-		ciphertext: make([]byte, 0, 1024),
+		gcm:          gcm,
+		ciphertext:   make([]byte, 0, 1024),
+		dialTimeout:  1 * time.Second,
+		writeTimeout: 10 * time.Second,
 	}, nil
 }
 
@@ -62,11 +67,15 @@ func (c *TCPClient) send(address encoding.Address, plaintext []byte) error {
 	c.ciphertext = c.gcm.Seal(c.ciphertext, nil, plaintext, nil)
 	Encryptions.WithLabelValues("tcp_client").Add(2)
 
-	connection, err := net.Dial("tcp", address.String())
+	connection, err := net.DialTimeout("tcp", address.String(), c.dialTimeout)
 	if err != nil {
 		return fmt.Errorf("connecting to remote host at %q: %w", address, err)
 	}
 	defer connection.Close() //nolint:errcheck
+
+	if err := connection.SetWriteDeadline(time.Now().Add(c.writeTimeout)); err != nil {
+		return fmt.Errorf("setting write deadline: %w", err)
+	}
 
 	n, err := connection.Write(c.ciphertext)
 	TransmitBytes.WithLabelValues("tcp_client").Add(float64(n))

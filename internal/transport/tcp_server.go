@@ -4,10 +4,12 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/go-logr/logr"
 
@@ -28,6 +30,8 @@ type TCPServer struct {
 	mutex   sync.Mutex
 	gcms    []cipher.AEAD
 	buffers [][]byte
+
+	readTimeout time.Duration
 }
 
 // NewTCPServer creates a new TCPServer transport.
@@ -51,6 +55,7 @@ func NewTCPServer(logger logr.Logger, target Target, bindAddress string, keys []
 		bindAddress: bindAddress,
 		gcms:        gcms,
 		buffers:     make([][]byte, 0, 16),
+		readTimeout: 10 * time.Second,
 	}, nil
 }
 
@@ -133,6 +138,9 @@ func (t *TCPServer) handleConnectionImpl(connection net.Conn) error {
 	defer t.releaseBuffer(buffer)
 
 	// First let's read the datagram length which is an uint32.
+	if err := connection.SetReadDeadline(time.Now().Add(t.readTimeout)); err != nil {
+		return fmt.Errorf("setting read deadline: %w", err)
+	}
 	n, err := io.ReadFull(connection, buffer[:4+encryption.Overhead])
 	ReceiveBytes.WithLabelValues("tcp_server").Add(float64(n))
 	if err != nil {
@@ -147,6 +155,9 @@ func (t *TCPServer) handleConnectionImpl(connection net.Conn) error {
 	// Let's read the datagram payload.
 	if len(buffer) < datagramLength+encryption.Overhead {
 		buffer = make([]byte, datagramLength+encryption.Overhead)
+	}
+	if err := connection.SetReadDeadline(time.Now().Add(t.readTimeout)); err != nil {
+		return fmt.Errorf("setting read deadline: %w", err)
 	}
 	n, err = io.ReadFull(connection, buffer[:datagramLength+encryption.Overhead])
 	ReceiveBytes.WithLabelValues("tcp_server").Add(float64(n))

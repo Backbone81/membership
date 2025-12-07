@@ -240,7 +240,6 @@ All parts of this library are covered with extensive benchmarks. See [docs](docs
 
 ### Important Topics
 
-- Address remaining TODOs in source code.
 - Investigate how we can increase the suspicion timeout when we are under high CPU load. High CPU load can be detected
   by the scheduler as the times between direct pings, indirect pings and end of protocol are either significant shorter
   than expected or even overshot immediately.

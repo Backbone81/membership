@@ -36,6 +36,7 @@ linters:
     - gocritic
     - gocyclo
     - godot
+    - godox
     - goheader
     - gomoddirectives
     - gomodguard

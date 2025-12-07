@@ -382,9 +382,6 @@ func (l *List) EndOfProtocolPeriod() error {
 	l.markSuspectsAsFaulty()
 	l.adjustDirectPingMemberCount()
 
-	// TODO: We do not account for suspect members right now, because that would require scanning the whole member
-	// list. We extend the suspect metric as soon as we have dedicated suspect member tracking (we have some other todo)
-	// for that already.
 	MembersByState.WithLabelValues("alive").Set(float64(len(l.members)))
 	MembersByState.WithLabelValues("faulty").Set(float64(l.faultyMembers.Len()))
 
@@ -457,9 +454,6 @@ func (l *List) markSuspectsAsFaulty() {
 
 	// As we are potentially removing elements from the member list, we need to iterate from the back to the front in
 	// order to not skip a member when the content changes.
-	// TODO: Iterating over all members to search for suspects is wasteful. Introduce a suspectCounters map and remove
-	// the field SuspicionPeriodCounter from the member struct. You need to update the indexes in this map when members
-	// are added or removed, and when members are declared suspect or alive.
 	for i := len(l.members) - 1; i >= 0; i-- {
 		member := &l.members[i]
 		if member.State != encoding.MemberStateSuspect {

@@ -1165,7 +1165,7 @@ var _ = Describe("List", func() {
 
 			By("Verifying increased ping count")
 			config := list.Config()
-			Expect(config.DirectPingMemberCount).To(Equal(4))
+			Expect(config.DirectPingMemberCount).To(Equal(5))
 		})
 	})
 
@@ -2685,9 +2685,8 @@ var _ = Describe("List", func() {
 			memoryTransport.AddTarget(address, newList)
 			lists = append(lists, newList)
 
-			periodCount := int(math.Ceil(utility.DisseminationPeriods(membership.DefaultConfig.SafetyFactor, len(lists))))
-			for i := range max(periodCount, 128*len(lists)) {
-				GinkgoLogr.Info("> Start of protocol period", "period", i)
+			periodCount := int(math.Ceil(utility.DisseminationPeriods(membership.DefaultConfig.SafetyFactor+1, len(lists))))
+			for i := range periodCount {
 				By("Executing direct ping")
 				for _, list := range lists {
 					Expect(list.DirectPing()).To(Succeed())

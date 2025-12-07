@@ -154,6 +154,7 @@ Available Commands:
   failure-detection   How long a cluster needs to detect a failed member.
   failure-propagation How long a cluster needs to propagate a failed member.
   help                Help about any command
+  infection           Simulates information dissemination through infection.
   join-propagation    How long a cluster needs to propagate a joined member.
   keygen              Creates a random encryption key.
   lossy-join          Joins a set of new members through a lossy network.

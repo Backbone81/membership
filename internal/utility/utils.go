@@ -61,7 +61,7 @@ func FailureDetectionFalsePositiveProbability(networkReliability float64, member
 // will double the number of periods. Small values between 2.0 and 4.0 should usually be a safe value.
 func DisseminationPeriods(safetyFactor float64, memberCount int) float64 {
 	// We add one to the member count as was done in the SWIM paper section "5. Performance Evaluation of a Prototype".
-	return safetyFactor * math.Log10(float64(memberCount+1))
+	return safetyFactor * math.Log(float64(memberCount+1))
 }
 
 // SuspicionTimeout returns the duration a suspicious member has time before it is declared as faulty.

@@ -7,6 +7,7 @@ import (
 
 	"github.com/backbone81/membership/cmd/membership/cmd/failuredetection"
 	"github.com/backbone81/membership/cmd/membership/cmd/failurepropagation"
+	"github.com/backbone81/membership/cmd/membership/cmd/infection"
 	"github.com/backbone81/membership/cmd/membership/cmd/joinpropagation"
 	"github.com/backbone81/membership/cmd/membership/cmd/keygen"
 	"github.com/backbone81/membership/cmd/membership/cmd/lossyjoin"
@@ -32,6 +33,7 @@ func Execute() {
 func init() {
 	failuredetection.RegisterSubCommand(rootCmd)
 	failurepropagation.RegisterSubCommand(rootCmd)
+	infection.RegisterSubCommand(rootCmd)
 	joinpropagation.RegisterSubCommand(rootCmd)
 	keygen.RegisterSubCommand(rootCmd)
 	lossyjoin.RegisterSubCommand(rootCmd)

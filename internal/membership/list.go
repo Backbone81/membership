@@ -95,12 +95,25 @@ type List struct {
 	// not require special ordering.
 	pendingIndirectPings []PendingIndirectPing
 
+	// randomMemberPicker provides functionality for picking unique random members.
 	randomMemberPicker *randmember.Picker
 
+	// listResponseScratchSpace is temporary space for processing list response messages. The space is re-used to reduce
+	// memory allocations.
 	listResponseScratchSpace []encoding.Member
 
-	directPingCount       int
+	// directPingCount keeps track of the number of direct pings which were executed in the current protocol period.
+	// It is used to calculate the required number of direct pings for disseminating the available gossip efficiently.
+	directPingCount int
+
+	// directPingGossipCount keeps track of the number of gossip messages attached to direct pings in the current
+	// protocol period.
+	// It is used to calculate the required number of direct pings for disseminating the available gossip efficiently.
 	directPingGossipCount int
+
+	// suspectCounters keeps track of the number of protocol periods a given member is a suspect. This helps in
+	// efficiently processing suspect members even in very large clusters.
+	suspectCounters map[encoding.Address]int
 }
 
 // NewList creates a new membership list.
@@ -146,6 +159,7 @@ func NewList(options ...Option) *List {
 		pendingDirectPingsNext:   make([]PendingDirectPing, 0, config.PendingPingPreAllocation),
 		pendingIndirectPings:     make([]PendingIndirectPing, 0, config.PendingPingPreAllocation),
 		randomMemberPicker:       randmember.NewPicker(),
+		suspectCounters:          make(map[encoding.Address]int, config.MemberPreAllocation),
 	}
 
 	// We need to gossip our own alive. Otherwise, nobody will pick us up into their own member list.
@@ -382,7 +396,8 @@ func (l *List) EndOfProtocolPeriod() error {
 	l.markSuspectsAsFaulty()
 	l.adjustDirectPingMemberCount()
 
-	MembersByState.WithLabelValues("alive").Set(float64(len(l.members)))
+	MembersByState.WithLabelValues("alive").Set(float64(len(l.members) - len(l.suspectCounters)))
+	MembersByState.WithLabelValues("suspect").Set(float64(len(l.suspectCounters)))
 	MembersByState.WithLabelValues("faulty").Set(float64(l.faultyMembers.Len()))
 
 	if err := l.reconnectBootstrapMembers(); err != nil {
@@ -429,7 +444,7 @@ func (l *List) processFailedPings() {
 
 		// We need to mark the member as suspect and gossip about it.
 		member.State = encoding.MemberStateSuspect
-		member.SuspicionPeriodCounter = 0
+		l.suspectCounters[member.Address] = 0
 		l.gossipQueue.Add(encoding.MessageSuspect{
 			Source:            l.self,
 			Destination:       member.Address,
@@ -451,21 +466,26 @@ func (l *List) processFailedPings() {
 // as faulty if they exceeded the suspicion threshold.
 func (l *List) markSuspectsAsFaulty() {
 	suspicionPeriodThreshold := l.requiredDisseminationPeriods()
+	for address, suspicionPeriodCounter := range l.suspectCounters {
+		suspicionPeriodCounter++
+		l.suspectCounters[address] = suspicionPeriodCounter
 
-	// As we are potentially removing elements from the member list, we need to iterate from the back to the front in
-	// order to not skip a member when the content changes.
-	for i := len(l.members) - 1; i >= 0; i-- {
-		member := &l.members[i]
-		if member.State != encoding.MemberStateSuspect {
-			// We are only interested in looking at suspect members.
-			continue
-		}
-		member.SuspicionPeriodCounter++
-		if member.SuspicionPeriodCounter <= suspicionPeriodThreshold {
+		if suspicionPeriodCounter <= suspicionPeriodThreshold {
 			// We are only interested in members exceeding the suspicion threshold.
 			continue
 		}
 
+		index, found := slices.BinarySearchFunc(l.members, encoding.Member{Address: address}, encoding.CompareMember)
+		if !found {
+			l.logger.Error(
+				errors.New("the suspect member could not be found - this should never happen and is a strong indication of a logic error"),
+				"Looking up the suspect member",
+			)
+			delete(l.suspectCounters, address)
+			continue
+		}
+
+		member := &l.members[index]
 		l.logger.Info(
 			"Member declared as faulty",
 			"source", l.self,
@@ -475,13 +495,14 @@ func (l *List) markSuspectsAsFaulty() {
 		MemberStateTransitionsTotal.WithLabelValues("declared_faulty").Inc()
 
 		member.State = encoding.MemberStateFaulty
+		delete(l.suspectCounters, address)
 		l.faultyMembers.Add(*member)
 		l.gossipQueue.Add(encoding.MessageFaulty{
 			Source:            l.self,
 			Destination:       member.Address,
 			IncarnationNumber: member.IncarnationNumber,
 		}.ToMessage())
-		l.removeMemberByIndex(i) // must always happen last to keep the member alive during this method
+		l.removeMemberByIndex(index) // must always happen last to keep the member alive during this method
 	}
 }
 
@@ -1066,12 +1087,12 @@ func (l *List) handleSuspectForFaultyMembers(suspect encoding.MessageSuspect) bo
 	// Move the faulty member over to the member list
 	l.faultyMembers.Remove(suspect.Destination)
 	l.addMember(encoding.Member{
-		Address:                suspect.Destination,
-		State:                  encoding.MemberStateSuspect,
-		SuspicionPeriodCounter: 0,
-		IncarnationNumber:      suspect.IncarnationNumber,
+		Address:           suspect.Destination,
+		State:             encoding.MemberStateSuspect,
+		IncarnationNumber: suspect.IncarnationNumber,
 	})
 	l.gossipQueue.Add(suspect.ToMessage())
+	l.suspectCounters[suspect.Destination] = 0
 	return true
 }
 
@@ -1100,7 +1121,7 @@ func (l *List) handleSuspectForMembers(suspect encoding.MessageSuspect) bool {
 
 	// This information is new to us, we need to make sure to gossip about it.
 	member.State = encoding.MemberStateSuspect
-	member.SuspicionPeriodCounter = 0
+	l.suspectCounters[suspect.Destination] = 0
 	l.gossipQueue.Add(suspect.ToMessage())
 	return true
 }
@@ -1108,12 +1129,12 @@ func (l *List) handleSuspectForMembers(suspect encoding.MessageSuspect) bool {
 func (l *List) handleSuspectForUnknown(suspect encoding.MessageSuspect) {
 	// We don't know about this member yet. Add it to our member list and gossip about it.
 	l.addMember(encoding.Member{
-		Address:                suspect.Destination,
-		State:                  encoding.MemberStateSuspect,
-		SuspicionPeriodCounter: 0,
-		IncarnationNumber:      suspect.IncarnationNumber,
+		Address:           suspect.Destination,
+		State:             encoding.MemberStateSuspect,
+		IncarnationNumber: suspect.IncarnationNumber,
 	})
 	l.gossipQueue.Add(suspect.ToMessage())
+	l.suspectCounters[suspect.Destination] = 0
 }
 
 func (l *List) handleAlive(alive encoding.MessageAlive) {
@@ -1214,6 +1235,7 @@ func (l *List) handleAliveForMembers(alive encoding.MessageAlive) bool {
 
 	// This information is new to us, we need to make sure to gossip about it.
 	member.State = encoding.MemberStateAlive
+	delete(l.suspectCounters, member.Address)
 	l.gossipQueue.Add(alive.ToMessage())
 	return true
 }
@@ -1316,6 +1338,7 @@ func (l *List) handleFaultyForMembers(faulty encoding.MessageFaulty) bool {
 	// Remove member from member list and put it on the faulty member list.
 	member.State = encoding.MemberStateFaulty
 	member.IncarnationNumber = faulty.IncarnationNumber
+	delete(l.suspectCounters, member.Address)
 	l.faultyMembers.Add(*member)
 	l.gossipQueue.Add(faulty.ToMessage())
 	l.removeMemberByAddress(faulty.Destination) // must always happen last to keep the member alive during this method

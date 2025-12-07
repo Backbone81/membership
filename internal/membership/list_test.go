@@ -978,17 +978,17 @@ var _ = Describe("List", func() {
 			Expect(list.EndOfProtocolPeriod()).To(Succeed())
 			members := debugList.GetMembers()
 			Expect(members[0].State).To(Equal(encoding.MemberStateSuspect))
-			Expect(members[0].SuspicionPeriodCounter).To(Equal(1))
+			Expect(debugList.GetSuspectCounter(members[0])).To(Equal(1))
 
 			By("Executing end of protocol period")
 			Expect(list.EndOfProtocolPeriod()).To(Succeed())
 			members = debugList.GetMembers()
-			Expect(members[0].SuspicionPeriodCounter).To(Equal(2))
+			Expect(debugList.GetSuspectCounter(members[0])).To(Equal(2))
 
 			By("Executing another end of protocol period")
 			Expect(list.EndOfProtocolPeriod()).To(Succeed())
 			members = debugList.GetMembers()
-			Expect(members[0].SuspicionPeriodCounter).To(Equal(3))
+			Expect(debugList.GetSuspectCounter(members[0])).To(Equal(3))
 		})
 
 		It("should mark suspect as faulty after exceeding threshold", func() {

@@ -244,12 +244,6 @@ All parts of this library are covered with extensive benchmarks. See [docs](docs
 - Investigate how we can increase the suspicion timeout when we are under high CPU load. High CPU load can be detected
   by the scheduler as the times between direct pings, indirect pings and end of protocol are either significant shorter
   than expected or even overshot immediately.
-- markSuspectsAsFaulty is iterating over all members to search for suspects which is wasteful. Introduce a
-  suspectCounters map and remove the field SuspicionPeriodCounter from the member struct. You need to update the
-  indexes in this map when members are added or removed, and when members are declared suspect or alive.
-- EndOfProtocolPeriod does not provide metrics about suspect members right now, because that would require scanning the
-  whole member list. We extend the suspect metric as soon as we have dedicated suspect member tracking through the
-  suspectCounters map.
 
 ### Nice to Have
 

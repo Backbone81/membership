@@ -11,10 +11,6 @@ type Member struct {
 	// IncarnationNumber is the incarnation the member gave about itself. It is monotonically increasing each time
 	// somebody suspects the member. Only the member itself is allowed to increase the incarnation.
 	IncarnationNumber uint16
-
-	// SuspicionPeriodCounter is the number of protocol periods the member is in a suspicion state. This is useful when
-	// deciding about declaring a member as faulty when it was under suspicion long enough.
-	SuspicionPeriodCounter int
 }
 
 // CompareMember orders members by address.

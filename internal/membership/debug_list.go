@@ -140,3 +140,14 @@ func (d *DebugListWrapper) SetConfig(config Config) {
 
 	d.config = config
 }
+
+func (d *DebugListWrapper) GetSuspectCounter(member encoding.Member) int {
+	d.mutex.Lock()
+	defer d.mutex.Unlock()
+
+	counter, ok := d.suspectCounters[member.Address]
+	if !ok {
+		return -1
+	}
+	return counter
+}

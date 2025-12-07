@@ -1523,6 +1523,21 @@ var _ = Describe("List", func() {
 			}.ToMessage()))
 		})
 
+		It("should not refute alive about self with same incarnation number", func() {
+			list := newTestList()
+			debugList := membership.DebugList(list)
+			debugList.GetGossip().Clear()
+
+			Expect(DispatchDatagram(list, encoding.MessageAlive{
+				Destination:       TestAddress,
+				IncarnationNumber: 0,
+			}.ToMessage())).To(Succeed())
+
+			Expect(debugList.GetMembers()).To(BeEmpty())
+			Expect(debugList.GetFaultyMembers()).To(BeEmpty())
+			Expect(debugList.GetGossip().Len()).To(Equal(0))
+		})
+
 		It("should invoke member added callback when adding new member", func() {
 			var addedCount int
 			list := newTestList(

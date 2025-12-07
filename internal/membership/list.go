@@ -1150,8 +1150,9 @@ func (l *List) handleAliveForSelf(alive encoding.MessageAlive) bool {
 		return false
 	}
 
-	if utility.IncarnationLessThan(alive.IncarnationNumber, l.incarnationNumber) {
-		// We have a more up-to-date state than the gossip. Nothing to do.
+	if alive.IncarnationNumber == l.incarnationNumber ||
+		utility.IncarnationLessThan(alive.IncarnationNumber, l.incarnationNumber) {
+		// We have the same or more up-to-date state than the gossip. Nothing to do.
 		return true
 	}
 

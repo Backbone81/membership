@@ -70,14 +70,14 @@ func (s *Scheduler) Shutdown() error {
 
 // protocolPeriodTask is driving the membership list algorithm.
 //
-//nolint:funlen
+
 func (s *Scheduler) protocolPeriodTask() {
 	s.logger.Info("Protocol period background task started")
 	defer s.logger.Info("Protocol period background task finished")
 
 	var lastExpectedRoundTripTime time.Duration
-	directPingAt := time.Now()
 	for {
+		startOfProtocolPeriod := time.Now()
 		s.measure("direct_ping", func() error {
 			if err := s.target.DirectPing(); err != nil {
 				s.logger.Error(err, "Scheduled direct ping.")
@@ -101,17 +101,7 @@ func (s *Scheduler) protocolPeriodTask() {
 			lastExpectedRoundTripTime = currExpectedRoundTripTime
 		}
 
-		indirectPingAt := directPingAt.Add(currExpectedRoundTripTime)
-		if time.Until(indirectPingAt) < currExpectedRoundTripTime/2 {
-			s.logger.Info(
-				"WARNING: The time between the direct ping and indirect ping is less than 50% of the expected round trip time. "+
-					"This is a strong indication that the system is overloaded. "+
-					"Members declared as suspect or faulty by this member are probably false positives.",
-				"want-duration", currExpectedRoundTripTime,
-				"got-duration", time.Until(indirectPingAt),
-			)
-		}
-		if !s.waitUntil(indirectPingAt) {
+		if !s.waitFor(currExpectedRoundTripTime) {
 			return
 		}
 		s.measure("indirect_ping", func() error {
@@ -122,8 +112,7 @@ func (s *Scheduler) protocolPeriodTask() {
 			return nil
 		})
 
-		endOfProtocolPeriodAt := directPingAt.Add(s.config.ProtocolPeriod)
-		if !s.waitUntil(endOfProtocolPeriodAt) {
+		if !s.waitFor(s.config.ProtocolPeriod - currExpectedRoundTripTime) {
 			return
 		}
 		s.measure("end_of_protocol_period", func() error {
@@ -135,29 +124,29 @@ func (s *Scheduler) protocolPeriodTask() {
 			return nil
 		})
 
-		directPingAt = directPingAt.Add(s.config.ProtocolPeriod)
+		gotProtocolPeriod := time.Since(startOfProtocolPeriod)
+		if gotProtocolPeriod > s.config.ProtocolPeriod*11/10 {
+			s.logger.Info(
+				"WARNING: The protocol period was more than 10% longer than expected. "+
+					"This is a strong indication that the system is overloaded. "+
+					"Members declared as suspect or faulty by this member are probably false positives.",
+				"want-duration", s.config.ProtocolPeriod,
+				"got-duration", gotProtocolPeriod,
+			)
+		}
 	}
 }
 
-// waitUntil will sleep until the given time is reached. It will wake up in between to check if a shutdown is in
+// waitFor will sleep until the given time is reached. It will wake up in between to check if a shutdown is in
 // progress. If a shutdown is in progress, it will return false. If the time was reached, it will return true.
 // A warning will be logged when the timestamp is already in the past. This is usually an indication for an overloaded
 // system.
-func (s *Scheduler) waitUntil(timestamp time.Time) bool {
+func (s *Scheduler) waitFor(timeout time.Duration) bool {
 	if s.shutdownInProgress() {
 		return false
 	}
 
-	if timestamp.Before(time.Now()) {
-		s.logger.Info(
-			"WARNING: The scheduled time within the protocol period has already passed. "+
-				"This is a strong indication that the system is overloaded. "+
-				"Members declared as suspect or faulty by this member are probably false positives.",
-			"want-time", timestamp,
-			"got-time", time.Now(),
-		)
-		return true
-	}
+	timestamp := time.Now().Add(timeout)
 
 	now := time.Now()
 	for now.Before(timestamp) {

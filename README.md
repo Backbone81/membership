@@ -239,14 +239,6 @@ All parts of this library are covered with extensive benchmarks. See [docs](docs
 
 ## TODOs
 
-### Important Topics
-
-- Investigate how we can increase the suspicion timeout when we are under high CPU load. High CPU load can be detected
-  by the scheduler as the times between direct pings, indirect pings and end of protocol are either significant shorter
-  than expected or even overshot immediately.
-
-### Nice to Have
-
 - We might want to separate gossip count from suspect timeout
 - Introduce jitter into the scheduler to avoid spikes in network traffic.
 - Do a TCP ping when the UDP ping times out for networks which do not correctly route UDP.
